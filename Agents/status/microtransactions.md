@@ -29,7 +29,7 @@ Part of [Status](../Status.md); what to build next in this area is in
   effect's stats on that skill, Righteous Fire's ring and buff visuals, restyled at once while it burns, and the
   projectile and explosion of projectile skills such as Fireball).
   A worn pet also loots (`Game.Item`'s `PetLoot.cs`, added 2026-11-08 at the user's request — the Chinese client's own
-  pickup pet, which the international client has not): every 0.4 s it takes up to three ground items within 40 cells of
+  pickup pet, which the international client has not): every 0.4 s it takes up to three ground items within 80 cells of
   the player, nearest first, into the main inventory. Only stacks (`MaxStack > 1`: currency, fragments, essences, cards,
   scarabs) and gold (`PickUpGold`, so it goes to the stash's gold); equipment, gems and quest items are left alone. The
   item goes through the same take/add/save and the same 0x2bd + 0x00bf pair as the player's own stacking pickup, with no

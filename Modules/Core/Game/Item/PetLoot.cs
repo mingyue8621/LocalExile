@@ -4,13 +4,13 @@ using GameServer.Core.Protocol.Login;
 
 static partial class Game
 {
-    // 捡物宠物（装扮里 Pet 槽那两只，见 CosmeticsModule.SpawnPets）：每 0.4 秒把玩家周围 40 格内的堆叠物收进主背包。
+    // 捡物宠物（装扮里 Pet 槽那两只，见 CosmeticsModule.SpawnPets）：每 0.4 秒把玩家周围 80 格内的堆叠物收进主背包。
     //   只捡能堆叠的（MaxStack > 1）：通货、碎片、精华、命运卡、圣甲虫这些；装备、宝石、任务物品一律不碰。
     //   金币另走 PickUpGold（进仓库的金库，和玩家自己捡一样）。
     //   一次最多 3 件，由近到远；背包放不下就留在原地，下一轮再试，不会凭空消失。
     // 落库与封包和玩家自己点拾取（PickUpGroundItem 的堆叠分支）完全同一条路径：Ground.Take → AddStacked → 保存，
     // 再发 0x2bd 移除物件、0x00bf 背包变更。不走路、不播玩家动作，所以看起来就是宠物在身边把东西收了。
-    const double PetLootRange = 40;
+    const double PetLootRange = 80;
     const int PetLootIntervalMs = 400;
     const int PetLootPerTick = 3;
 
