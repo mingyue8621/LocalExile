@@ -296,12 +296,11 @@ static partial class Game
         void AddMonsterLocked()
         {
             MonsterEmerge.AddLocked(conn, id, new SpawnedMonster($"{variety.Name}@{level}", conn.NewMonsterWalk(id, x, y, walkSpeed, bodySize, rarity == MonsterRarity.Unique),
-                // MinAgroRange/MaxAgroRange read as cells, halved: a Vaal archer notices the player at 52–68 cells, half
-                // its row's 105–135, which as plain cells was four screens and as world units (9.6–12.4 cells) shorter
-                // than the range it shoots at. At least 3 cells, or a row with a small range would never wake up. The
-                // chase goes on for the row's own number of cells (SpawnedMonster.ChaseRange), so a monster that
-                // noticed the player follows them as far as the game's data says.
-                (int)Math.Max(3, Math.Round(variety.AggroRange / 2.0)),
+                // MinAgroRange/MaxAgroRange read as cells, scaled to the 60–100 cell notice range the player asked for
+                // (three quarters of the row, a Vaal archer's 105–135 becoming 79–100 and a Raised Zombie's 45 the floor
+                // of 60). The chase goes on for the row's own number of cells (SpawnedMonster.ChaseRange) and a ranged
+                // skill's reach is unchanged (half the row), so only how far a monster notices the player moved.
+                (int)Math.Clamp(Math.Round(variety.AggroRange * 0.75), 60, 100),
                 Math.Max(2, variety.ObjectSize + 1), life, (int)Math.Max(3, variety.AggroRange))
             {
                 Attack = skill is null ? null : attack, Hostile = !friendly, Variety = variety, Level = level, Rarity = rarity,

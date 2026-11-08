@@ -97,11 +97,12 @@ Part of [Status](../Status.md); what to build next in this area is in
   keeps the row's number as a cell count (6): the chase's walk-up stops `Range - 1` cells short of the player, where
   the converted 0.55 would park the monster inside them (roadmap).
   A give-up beyond the variety's own aggro row in cells — `SpawnedMonster.ChaseRange`, read unconverted as the game's
-  data (a Vaal archer's 105–135), not the half the monster notices the player within (52–68) — ends the client's chase
-  action with S→C 0x1ac before its Move (GGG's server does the same: 925 of 1166 live give-ups carried one, 3.29
-  capture; a predictive client needs it, a lockstep one ignores it — [07](../docs/protocol/07-latency-visibility-movement.md)
+  data (a Vaal archer's 105–135), not the 60–100 cells it notices the player within — ends the client's chase action
+  with S→C 0x1ac before its Move (GGG's server does the same: 925 of 1166 live give-ups carried one, 3.29 capture; a
+  predictive client needs it, a lockstep one ignores it — [07](../docs/protocol/07-latency-visibility-movement.md)
   §11). Twice the aggro range gave up 24 cells out once that range was converted to cells, so a monster stopped
-  following a player who simply walked away (live 2026-11-08).
+  following a player who simply walked away (live 2026-11-08). The notice range itself is the player's call: three
+  quarters of the row, clamped to 60–100 cells (`Math.Clamp(variety.AggroRange * 0.75, 60, 100)`).
   Attack busy time covers the full attack duration; pending swing and stage generations prevent duplicate work.
   Three native AI-enable controls issued one chase each after 43, 38 and 50 ms.
   Four deliberate turns produced four chase orders at 249 ms intervals without duplicate orders between turns.
