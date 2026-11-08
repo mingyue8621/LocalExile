@@ -98,6 +98,14 @@ Part of [Status](../Status.md); what to build next in this area is in
   Act 2/3 quest log at "Quest Complete".
   Multi-item hand-ins take every item in one click (Eramir's amulets, Hargan's busts, Siosa's pages, Fairgraves' plum
   and decanter).
+- **The Vaal Oversoul comes back when The Ancient Pyramid is entered again (2026-11-08).** `On.Spawns` created it only
+  in the moment the altar's use set `a2q8-PlacedApex`, so leaving the area before the kill lost the boss for good: the
+  altar stands transitioned from then on (`QuestObjectTransitioned`), its use rule has no flag left to set, so
+  `UseQuestObject` stops at "nothing to do" and never reaches the spawn. Entering the area now puts it back
+  (`QuestEngine.RespawnQuestSpawns`, reading `Quests.SpawnsOf`): a spawn whose object already stands in its used state
+  and whose kill flags are all unset is created at that object's own cell, unless a living monster of the variety is
+  already there. The Vaal Oversoul (Ancient Pyramid, the Dark Altar with the Apex on it) is the only `On.Spawns` rule in
+  the campaign, so no other area changes. Not checked with the real client yet.
   The Library's candle opens the hidden door for the instance only.
   The two exits the layout disables and a quest gates (The Upper Sceptre of God → The Aqueduct, The Library → The
   Archives) are created (`scripts/re/exits --quests`: `gated` at seed 1 and three other seeds).

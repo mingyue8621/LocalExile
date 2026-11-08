@@ -331,7 +331,8 @@ static partial class Game
         lock (conn.QuestNpcs) conn.QuestNpcs.AddRange([.. QuestNpcCandidates(remote, conn, placed), .. AppearedBefore(conn)]);
         await UpdateQuestNpcs(remote, stream, ciphers, conn, "entering the area");
         var nearSpawns = QuestsOf(conn).NearSpawns(area);
-        if (chests.Count + near.Count + blockers.Count + questObjects.Count + nearSpawns.Count == 0) return;
+        var spawns = QuestsOf(conn).SpawnsOf(area);
+        if (chests.Count + near.Count + blockers.Count + questObjects.Count + nearSpawns.Count + spawns.Count == 0) return;
         lock (conn.Monsters)
         {
             conn.QuestNear = [.. near.SelectMany(r => placed.Of(r.ObjectType).Select(o => (r, o.X, o.Y)))];
@@ -357,6 +358,39 @@ static partial class Game
             var at = placed.Of(rule.ObjectType);
             if (at.Count == 0) Console.WriteLine($"[gateway] {remote} quest object {rule.ObjectType}: no room or tile places it");
             foreach (var o in at) await CreateQuestObject(remote, stream, ciphers, conn, rule, o);
+        }
+        await RespawnQuestSpawns(remote, stream, ciphers, conn, area, spawns);
+    }
+
+    // A monster a quest object brings (Quests.SpawnRule: On.Spawns) is permanent once its object stands in the used
+    // state. The Vaal Oversoul is the only one: the altar on The Ancient Pyramid keeps the Apex on it (a2q8-PlacedApex),
+    // so a use made once must not be lost by leaving the area before the kill - the use path only spawns it in the
+    // moment the flag is set, which a used altar never repeats.
+    static async Task RespawnQuestSpawns(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
+        string area, IReadOnlyList<Quests.SpawnRule> spawns)
+    {
+        foreach (var spawn in spawns)
+        {
+            if (Monsters.Find(spawn.Variety) is not { Supported: true } variety || variety.Id != spawn.Variety) continue;
+            if (QuestsOf(conn).OnMonsterKilled(area, spawn.Variety).Any(f => ClientHasQuestFlag(conn, f))) continue;
+            var rule = QuestsOf(conn).Objects(area).FirstOrDefault(o => o.ObjectType == spawn.ObjectType);
+            if (rule is null || !QuestObjectTransitioned(conn, rule)) continue;
+            (int X, int Y) cell;
+            lock (conn.QuestObjects)
+            {
+                var found = conn.QuestObjects.Values.FirstOrDefault(q => q.Rule.ObjectType == spawn.ObjectType);
+                if (found.Rule is null) continue;
+                cell = (found.At.X, found.At.Y);
+            }
+            bool alive;
+            lock (conn.Monsters)
+                alive = conn.Monsters.Values.Any(m => m.Variety?.Id == spawn.Variety && !m.Dead && m.Life > 0);
+            if (alive) continue;
+            byte level = (byte)Math.Clamp(Packs.For(area)?.AreaLevel ?? 1, 1, 100);
+            var (x, y) = conn.Layout.Walkable is { } walks && !walks(cell.X, cell.Y) ? conn.Layout.Near(cell) : cell;
+            Console.WriteLine($"[gateway] {remote} {spawn.ObjectType.Split('/')[^1]} was already used: " +
+                $"{variety.Name} appears again at ({x}, {y})");
+            await SpawnMonster(remote, stream, ciphers, conn, variety, level, MonsterRarity.Unique, x, y);
         }
     }
 

@@ -421,6 +421,11 @@ static partial class Quests
         public IReadOnlyList<string> SpawnsOnUse(string areaId, string objectType) =>
             [.. In<SpawnRule>(areaId).Where(r => r.ObjectType == objectType).Select(r => r.Variety)];
 
+        /// <summary>The monsters this area's quest objects bring, with the object that brings them: entering the area
+        /// again puts one back when its object already stands in its used state but the monster was never killed
+        /// (The Ancient Pyramid's altar keeps the Apex, so a use made once must not be lost).</summary>
+        public IReadOnlyList<SpawnRule> SpawnsOf(string areaId) => In<SpawnRule>(areaId);
+
         /// <summary>The flags set when the area's last hostile monster dies, for a character with these flags.</summary>
         public IReadOnlyList<string> OnCleared(string areaId, Func<string, bool> has) =>
             [.. In<ClearedRule>(areaId).Where(r => (r.After is null || has(r.After))).SelectMany(r => r.Flags).Distinct()];
@@ -562,6 +567,7 @@ static partial class Quests
     public static IReadOnlyList<ObjectRule> Objects(string areaId) => Everything.Objects(areaId);
     public static IReadOnlyList<string> HandsIn(string npcId, string option, int row = -1) => Everything.HandsIn(npcId, option, row);
     public static IReadOnlyList<string> SpawnsOnUse(string areaId, string objectType) => Everything.SpawnsOnUse(areaId, objectType);
+    public static IReadOnlyList<SpawnRule> SpawnsOf(string areaId) => Everything.SpawnsOf(areaId);
     public static IReadOnlyList<string> OnCleared(string areaId, Func<string, bool> has) => Everything.OnCleared(areaId, has);
     public static bool WatchesClear(string areaId) => Everything.WatchesClear(areaId);
     public static ThresholdRule? ThresholdOf(string areaId, string varietyId) => Everything.ThresholdOf(areaId, varietyId);
