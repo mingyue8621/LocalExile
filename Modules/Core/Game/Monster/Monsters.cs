@@ -169,17 +169,16 @@ static partial class Game
         bool spell = effect >= 0 && catalog.EffectStats(effect, level)
             .Any(s => s.Item1 == StatKeys.CastingSpell && s.Item2 != 0);
         bool castTime = spell || effect >= 0 && catalog.IsSpell(effect);
-        // A ranged attack reaches the larger of its variety's MaximumAttackDistance and its aggro range: the monster
-        // walks up to that before it shoots, as GGG's do, and a bowman's MaximumAttackDistance is far below the
-        // distance it notices the player from (a Vaal archer's 58 against 105–135), so a shot at that range alone left
-        // it staring at a player six cells off. Both rows are in world units, a cell being 250/23 (WorldUnits): that
-        // archer's reach is 12.4 cells, its aggro 9.6–12.4; read as cells, the same rows had it shooting from 58 cells
-        // — most of a screen — and noticing the player from four screens away. A melee attack keeps the row's number as
-        // a cell count for now: the chase's walk-up stops `Range - 1` cells short of the player (the player's size), so
-        // its 6 units as 0.55 cells would park the monster inside them; see the roadmap.
+        // A ranged attack reaches half the larger of its variety's MaximumAttackDistance and aggro row, read as cells:
+        // the same rule as the notice range above (a Vaal archer's max(58, 135) / 2 ≈ 67 cells), so a ranged monster
+        // shoots as far as it notices, as the game's do. Dividing by a cell's 250/23 world units instead gave that
+        // archer 12.4 cells, and it stood and watched a player six cells off (live 2026-11-08); as plain cells the row
+        // had it shooting from 58 and noticing from four screens away. A melee attack keeps the row's number as a cell
+        // count: the chase's walk-up stops `Range - 1` cells short of the player (the player's size), so its 6 units
+        // as 0.55 cells would park the monster inside them; see the roadmap.
         double reachUnits = summon is not null || rangedAttack && !kingActor
             ? Math.Max(variety.AttackRange, variety.AggroRange) : 0;
-        double reach = reachUnits > 0 ? reachUnits / WorldUnits.PerCell : variety.AttackRange;
+        double reach = reachUnits > 0 ? reachUnits / 2 : variety.AttackRange;
         double swing = !kingActor && effect >= 0 && catalog.IsSpell(effect) && catalog.CastTimeMs(effect) > 0
             ? catalog.CastTimeMs(effect) / 1000.0 : variety.AttackMs / 1000.0;
         // The King's two forms carry the official MeleeAtAnimationSpeedUnique ids (0x4001 humanoid, 0x4000 treant);

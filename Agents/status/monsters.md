@@ -88,15 +88,14 @@ Part of [Status](../Status.md); what to build next in this area is in
   way is ordered again every 200 ms to the same cell (a lockstep client's monster that a body stopped gets going again);
   on a lockstep client a walking monster's re-order waits for a frame start right after its estimate's step, at most
   two steps past the cadence ([07](../docs/protocol/07-latency-visibility-movement.md) §6).
-  A ranged chaser stands off one cell inside its reach, which is the larger of MonsterVarieties
-  `MaximumAttackDistance` and `MinAgroRange`/`MaxAgroRange` — both in world units, a cell being 250/23: a Vaal archer's
-  12.4 cells (58 units of attack distance, 105–135 of aggro), the Sand Spitter's 2.8 — moving inward only when that
-  ring is full, instead of taking a melee contact cell (`MonsterSurround.Asker.Ranged`; live 2026-10-29: Spitters came
-  in close). Read as cells, those rows had a bowman noticing the player from four screens off and shooting from most
-  of one (live 2026-11-08); converted with the attack distance alone it stared at a player six cells off, which is
-  the reach it must not fall below. `MinimumAttackDistance` is not read yet, and a melee attack still takes its row's
-  units as cells (6): the chase's walk-up stops `Range - 1` cells short of the player, where the converted 0.55 would
-  park the monster inside them (roadmap).
+  A ranged chaser stands off one cell inside its reach, half the larger of MonsterVarieties
+  `MaximumAttackDistance` and `MinAgroRange`/`MaxAgroRange` read as cells — the same rule as the notice range: a Vaal
+  archer's max(58, 135) / 2 ≈ 67 cells, the Sand Spitter's 15 — moving inward only when that ring is full, instead of
+  taking a melee contact cell (`MonsterSurround.Asker.Ranged`; live 2026-10-29: Spitters came in close). Dividing by a
+  cell's 250/23 world units instead gave that archer 12.4 cells and it stood and watched a player six cells off; the
+  player's call (live 2026-11-08) is the halved row, so a ranged monster shoots as far as it notices. A melee attack
+  keeps the row's number as a cell count (6): the chase's walk-up stops `Range - 1` cells short of the player, where
+  the converted 0.55 would park the monster inside them (roadmap).
   A give-up beyond the variety's own aggro row in cells — `SpawnedMonster.ChaseRange`, read unconverted as the game's
   data (a Vaal archer's 105–135), not the half the monster notices the player within (52–68) — ends the client's chase
   action with S→C 0x1ac before its Move (GGG's server does the same: 925 of 1166 live give-ups carried one, 3.29
