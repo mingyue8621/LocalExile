@@ -1,61 +1,54 @@
-# Status: Microtransactions and cosmetics
+# 状态：时装与微交易
 
-Part of [Status](../Status.md); what to build next in this area is in
-[Roadmap](../Roadmap.md).
+属于 [状态索引](../Status.md)；这个区域接下来要做什么见 [路线图](../Roadmap.md)。
 
-## Works (verified with the real client)
+## 已实现（已用真实客户端验证）
 
-- Shop portal effects as game data (dev): `/cosmetic list [filter]`, `/cosmetic portal <name, number or part of a
-  name>` (`CosmeticCatalog.Matches`: an ambiguous piece lists the matching effects with their numbers instead of
-  applying the first), `/cosmetic off`.
-  A portal cosmetic is the portal's own 0x008f variation (+0x26, a `MicrotransactionPortalVariations` row), so the
-  client draws the shop effect in place of the base portal — also for portals already standing, which are listed again
-  — with no second object, store or balance (seen live 2026-10-21: the Black Hole effect replaces the base portal
-  visual on all six portals — its flat disc is the real art, and the client keeps each rig's own orientation, ignoring
-  the object's rotation and the portal type; `/portal_rotation` is the dev knob for a rig that does come out
-  misoriented); the choice is saved per character (`PortalCosmetic` in the save, verified to survive a relog).
-  Code: `Cosmetics.cs`, `InstanceMapDevice.Portal`, Gateway (`ResendMapPortals`, `/cosmetic`).
-  Docs: [21](../docs/protocol/21-hideouts.md) §5.
-- Microtransactions: every account owns every cosmetic the client can show (the 7721 `MtxTypes` rows with an
-  `MtxTypeGameSpecific` row); the Microtransactions panel (N), the store's ALREADY OWNED marks and the Cosmetics tab
-  (K) load (C→S 0x1f2 → S→C 0x1f4, hideout and guild lists empty via 0x1f5 / 0x1f4);
-  a pick in the Cosmetics tab (C→S 0x1f9) is saved per character and worn (S→C 0x1f3, also on every area entry);
-  in the world: equipment skins, weapon effects, attachments and character effects on the model (Inventories component
-  references), footprints and apparitions through the stats, portals (the map device's), cursors and flask skins.
-  Verified live 2026-10-23.
-  Built, awaiting live verification: pets (spawned beside the player, following it, not blocking; picking up stacks
-  near the player — see below; not yet their idle-relaxed animations, e.g. the Goblin Troupe's song), the portrait
-  (character panel and selection screen), skill effects (the Cosmetics tab's skill slots, picked with C→S 0x1fa, the
-  effect's stats on that skill, Righteous Fire's ring and buff visuals, restyled at once while it burns, and the
-  projectile and explosion of projectile skills such as Fireball).
-  A worn pet also loots (`Game.Item`'s `PetLoot.cs`, added 2026-11-08 at the user's request — the Chinese client's own
-  pickup pet, which the international client has not): every 0.4 s it takes up to three ground items within 80 cells of
-  the player, nearest first, into the main inventory. Only stacks (`MaxStack > 1`: currency, fragments, essences, cards,
-  scarabs) and gold (`PickUpGold`, so it goes to the stash's gold); equipment, gems and quest items are left alone. The
-  item goes through the same take/add/save and the same 0x2bd + 0x00bf pair as the player's own stacking pickup, with no
-  walk and no player action, so the client simply sees the item move into the bag; a full inventory leaves it on the
-  ground for the next pass. `RunPetLoot` starts with `SpawnPets` (area entry and a pet pick) and ends with the connection.
-  Portrait frames (the Social Frame slot): a pick is saved and applies at the next login, as the client's own chat line
-  says; the character list shows it at once. Verified live 2026-10-31: the client loaded the `SupporterIconFrame` art at
-  selection and in game, and another player's client in a party; the frame stayed as it was through area changes until
-  the next login, and emptying the slot went back to the default.
-  Code: `InstanceMicrotransactions.cs`, `Microtransactions.cs` (`MtxCatalog`, `CosmeticEffects`), Gateway
-  (`AnswerMtxRequest`, `PickCosmetic`, `Looks`, `CosmeticStats`), `CharacterSaves.Cosmetics`, `PetObject`,
-  `SpawnPets`, `RunPetFollow`, `SkillSlots`.
-  Docs: [23](../docs/protocol/23-microtransactions.md).
+- 商城传送门效果作为游戏数据（开发用）：`/cosmetic list [filter]`、`/cosmetic portal <名称、编号或名称的一部分>`
+  （`CosmeticCatalog.Matches`：输入不明确时会列出所有匹配效果及其编号，而不是直接套用第一个）、`/cosmetic off`。
+  传送门时装就是传送门自身的 0x008f 变体（+0x26，一行 `MicrotransactionPortalVariations`），因此客户端会用商城效果
+  顶替基础传送门的显示——对已经立着的传送门同样生效（会重新下发一遍）——不需要额外对象、仓库或余额
+  （2026-10-21 实测：黑洞效果把六个传送门的基础外观全换掉了——它那个平盘就是真实美术；客户端保留每套骨架自身的
+  朝向，会忽略对象的旋转和传送门类型，`/portal_rotation` 是针对确实朝向不对的骨架的开发用旋钮）。
+  选择按角色保存（存档里的 `PortalCosmetic`，已验证重登后仍然保留）。
+  代码：`Cosmetics.cs`、`InstanceMapDevice.Portal`、Gateway（`ResendMapPortals`、`/cosmetic`）。
+  文档：[21](../docs/protocol/21-hideouts.md) §5。
+- 微交易：每个账号拥有客户端能展示的全部外观（7721 条带 `MtxTypeGameSpecific` 行的 `MtxTypes` 记录）；
+  微交易面板（N）、商城的「ALREADY OWNED」标记和外观页签（K）都能加载（C→S 0x1f2 → S→C 0x1f4，
+  藏身处与公会列表通过 0x1f5 / 0x1f4 返回空）；在外观页签里的选择（C→S 0x1f9）按角色保存并立即穿上
+  （S→C 0x1f3，进入每个区域时也会重发）。
+  世界内可用的有：装备皮肤、武器特效、挂件与角色特效（走 Inventories 组件引用）、足迹与幻影（走属性）、
+  传送门（地图装置那个）、光标与药剂皮肤。2026-10-23 实测。
+  已实现、待实机验证的有：宠物（生成在玩家身边、跟随玩家、不挡路；拾取玩家附近的堆叠物——见下；
+  尚未做它们的待机放松动画，例如哥布林剧团的合唱）、头像（角色面板与选人界面）、技能特效
+  （外观页签里的技能槽，用 C→S 0x1fa 选择，把效果属性挂到该技能上，正义之火的环与增益视觉、
+  燃烧中被改外观会立刻生效，以及火球这类投射物技能的弹药与爆炸）。
+  穿戴中的宠物也会捡东西（`Game.Item` 下的 `PetLoot.cs`，2026-11-08 按用户要求加入——国服客户端自带的拾取宠物，
+  国际服没有）：每 0.4 秒，把玩家周围 80 格内最多三件地面物品（由近到远）收进主背包。
+  只捡可堆叠的（`MaxStack > 1`：通货、碎片、精华、命运卡、圣甲虫）与金币（走 `PickUpGold`，所以进仓库的金库）；
+  装备、宝石和任务物品不碰。物品走的是与玩家自己点拾取完全相同的一套取件/入包/保存，以及同样的 0x2bd + 0x00bf
+  两个报文，不走路、不播玩家动作，所以客户端只看到物品进了包；背包满时留在地上，下一轮再试。
+  `RunPetLoot` 随 `SpawnPets` 启动（进入区域和更换宠物时），随连接结束。
+  头像框（社交框槽位）：选择会被保存，并在下次登录时生效，正如客户端自己的聊天提示所说；角色列表会立刻显示。
+  2026-10-31 实测：客户端在选人界面和游戏内都能加载 `SupporterIconFrame` 美术，组队中另一名玩家的客户端也能看到；
+  换区域时头像框保持不变，直到下次登录；清空槽位则回到默认。
+  代码：`InstanceMicrotransactions.cs`、`Microtransactions.cs`（`MtxCatalog`、`CosmeticEffects`）、Gateway
+  （`AnswerMtxRequest`、`PickCosmetic`、`Looks`、`CosmeticStats`）、`CharacterSaves.Cosmetics`、`PetObject`、
+  `SpawnPets`、`RunPetFollow`、`SkillSlots`。
+  文档：[23](../docs/protocol/23-microtransactions.md)。
 
-## Partly working
+## 部分实现
 
-- Cosmetics skill target lifetime and request validation (issue [#306](https://github.com/Wrathen/LocalExile/issues/306)).
-  Key reuse across gem replacements and acceptance of stale/incompatible picks are reproduced in Gateway tests.
-  Targets now retain keys only while unchanged; replacements and reappearances get fresh connection-local keys.
-  Queued 0x1f3 refreshes sample current targets inside the send gate, with matching binding logs.
-  0x1fa validates the current target and effect eligibility before changing the per-gem, per-slot saved choice.
-  Automated coverage includes configured/cleared A → B → A, removal/reappearance, queueing, multiple skills,
-  primary/totem slots, and preservation of Righteous Fire's saved art input.
-  The reported native picker mismatch still needs user verification; packet tests do not establish a UI fix.
-  Protocol evidence, limits and client acceptance steps: [23](../docs/protocol/23-microtransactions.md) §4.
+- 外观技能的目标生命周期与请求校验（issue [#306](https://github.com/Wrathen/LocalExile/issues/306)）。
+  换宝石时复用旧 key、以及接受过期/不兼容选择的问题，已在 Gateway 测试里复现。
+  现在目标只在未变化期间保留 key；替换和重新出现会拿到新的、连接内唯一的 key。
+  排队的 0x1f3 刷新会在发送闸门内重新采样当前目标，并打对应的绑定日志。
+  0x1fa 在改动「按宝石、按槽位」保存的选择之前，会先校验当前目标与效果是否可用。
+  自动化覆盖包括：已配置/已清空的 A → B → A、移除后重新出现、排队、多技能、主手/图腾槽位，
+  以及正义之火已保存的美术输入保持不变。
+  报告中提到的原生选择器不匹配仍需用户验证；报文测试不能证明界面已修好。
+  协议证据、限制与客户端侧的验收步骤见：[23](../docs/protocol/23-microtransactions.md) §4。
 
-## Not working yet
+## 尚未实现
 
-Nothing yet.
+暂无。

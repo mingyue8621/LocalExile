@@ -1,29 +1,27 @@
-# Roadmap: Stash
+# 路线图：仓库
 
-Part of the [Roadmap](../Roadmap.md); what already works in this area is in
-[status/stash.md](../status/stash.md).
-Items keep the Roadmap's priority groups, and are in rough priority order within each group.
+属于 [路线图索引](../Roadmap.md)；这个区域已经能用的功能见 [status/stash.md](../status/stash.md)。
+条目沿用路线图的优先级分组，同一组内大致按优先级排列。
 
-## 1. Quality of life
+## 1. 体验优化
 
-Delve slot bounds, empty resonator socket layouts and stackable migration are implemented;
-verify the corrected fossil/resonator presentation in the real client (18-stash.md).
+夺宝格子边界、空共振器孔位布局与可堆叠迁移都已实现；
+需要在真实客户端里核对修正后的化石/共振器显示（18-stash.md）。
 
-### Stash: tab settings and the other special tabs
+### 仓库：页签设置与其他特殊页签
 
-- **Known:** the stash opens on the last tab, tabs load and items move by click and Ctrl + click
-  ([18](../docs/protocol/18-stash.md)); special tabs hold only their own items, the currency, essence and fragment
-  tabs each item in its slot, and affinities (0xd3) are saved (18 §7).
-  Currency stack limits follow the extracted table; lifeforce merging to 50 000 is verified in the real client.
-  Switching to a loaded tab sends nothing to the server.
-- **Start:** check live that the affinity window closes on S→C 0x136;
-  tab rename / colour (0xd2), order (0xcc) and folders (0xd1); the regular map tab
-  (MapStashSpecialSubStashGroup / MapStashUniqueMapInfo). Unique collection categories and `/item_tab` filling
-  are implemented; unique Heist contract generation and catalogue entries absent from the native collection remain
-  unsupported. The divination and gem tabs show items (18 §7).
-- **Done when:** tab settings are kept and every special tab takes its items as the real one does.
+- **已知：** 仓库会打开在上次使用的页签，页签能加载，物品能靠点击与 Ctrl + 点击移动
+  （[18](../docs/protocol/18-stash.md)）；特殊页签只放自己的物品，通货、精华、碎片页签每个物品进自己的格子，
+  亲和关系（0xd3）会被保存（18 §7）。
+  通货堆叠上限跟随解包出的表格；生命之力合并到 50 000 已在真实客户端验证。
+  切换到已加载的页签时不会向服务端发送任何内容。
+- **入手：** 实机核对亲和窗口是否在 S→C 0x136 关闭；
+  页签重命名/颜色（0xd2）、顺序（0xcc）与文件夹（0xd1）；普通地图页签
+  （MapStashSpecialSubStashGroup / MapStashUniqueMapInfo）。传奇收藏分类与 `/item_tab` 填充已实现；
+  传奇夺宝契约生成、以及原生收藏里不存在的目录条目仍不支持。占卜与宝石页签能显示物品（18 §7）。
+- **完成标准：** 页签设置被保留，且每个特殊页签都像真实版本那样收纳物品。
 
-### Special-tab crafting follow-up
+### 特殊页签制作后续
 
-Lifeforce limits and Delve equipment cells are implemented ([18](../docs/protocol/18-stash.md)).
-Currency-tab limits now follow the extracted item data instead of the u16 wire maximum.
+生命之力上限与夺宝装备格已实现（[18](../docs/protocol/18-stash.md)）。
+通货页签上限现在跟随解包出的物品数据，而不是报文的 u16 上限。
