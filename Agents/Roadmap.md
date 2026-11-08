@@ -1,36 +1,34 @@
-# Roadmap
+# 路线图
 
-What to build next, for anyone (person or agent) who wants to help. What already works is in [Status.md](Status.md).
+接下来要做什么，给任何想帮忙的人（或智能体）。已经能用的功能见 [Status.md](Status.md)。
 
-The roadmap is split into one file per area, the same areas as the status (see the table in
-[Status.md](Status.md)), so that pull requests in different areas don't edit the same lines:
+路线图与状态一样按区域拆成各自独立的文件（对应 [Status.md](Status.md) 里的表格），这样不同区域的 PR 不会改到同样的行：
 
-- [Setup, tooling and tests](roadmap/setup-and-tooling.md)
-- [World, movement and the network](roadmap/world.md)
-- [Monsters](roadmap/monsters.md)
-- [Quests](roadmap/quests.md)
-- [NPCs, shops and chat](roadmap/npcs-and-chat.md)
-- [Items, currency and crafting](roadmap/items-and-crafting.md)
-- [Stash](roadmap/stash.md)
-- [Hideouts, crafting stations and maps](roadmap/hideouts-and-maps.md)
-- [Skills, auras, stats and combat](roadmap/skills-and-combat.md)
-- [Gems](roadmap/gems.md)
-- [Experience and the passive tree](roadmap/progression.md)
+- [环境搭建、工具与测试](roadmap/setup-and-tooling.md)
+- [世界、移动与网络](roadmap/world.md)
+- [怪物](roadmap/monsters.md)
+- [任务](roadmap/quests.md)
+- [NPC、商店与聊天](roadmap/npcs-and-chat.md)
+- [物品、通货与制作](roadmap/items-and-crafting.md)
+- [仓库](roadmap/stash.md)
+- [藏身处、制作台与地图](roadmap/hideouts-and-maps.md)
+- [技能、光环、属性与战斗](roadmap/skills-and-combat.md)
+- [宝石](roadmap/gems.md)
+- [经验与天赋树](roadmap/progression.md)
 
-Each file keeps the priority groups (1. Quality of life, 2. The world, 3. Gameplay, 4. Server design, 5. Project) of
-its items, and items are in rough priority order within each group.
-"Known" says what is already found; "Start" says where to look.
+每个文件里的条目都保留原来的优先级分组（1. 体验优化、2. 世界、3. 玩法、4. 服务端设计、5. 项目），同一组内大致按优先级排列。
+「Known」（已知）写的是已经查清的部分；「Start」（入手）写的是该从哪里开始看。
 
-## How to pick up an item
+## 如何认领一个条目
 
-1. Open a GitHub issue named after the item (or comment on an existing one) so two people don't do the same work.
-2. Read the docs the item links to. Most items start with reverse engineering: find how the client reads a message,
-   then send it from the server. [docs/re/tooling.md](docs/re/tooling.md) has the workflow and recipes.
-3. Verify with the real client through `.\scripts\dev\live.ps1`, and check the logs in `logs\`. Add tests for any
-   message layout you implement (see `tests/GameServer.Core.Tests`).
-4. In the same pull request: note what the code cannot tell in `docs/protocol/` (new message ids, layouts, client
-   addresses in [address-index.md](docs/protocol/address-index.md)), keep it short, move the item to its area's file in
-   `status/` as one line, and remove or update it in its area's file in `roadmap/`.
+1. 在 GitHub 上开一个以该条目命名的 issue（或在已有的 issue 下留言），避免两个人重复做同一件事。
+2. 先读条目里链接的文档。大多数条目都从逆向开始：先弄清客户端怎么读这条消息，再由服务端发出去。
+   工作流和现成套路见 [docs/re/tooling.md](docs/re/tooling.md)。
+3. 用真实客户端通过 `.\scripts\dev\live.ps1` 验证，并检查 `logs\` 里的日志。
+   凡是你实现的报文布局，都要补测试（见 `tests/GameServer.Core.Tests`）。
+4. 在同一个 PR 里：把代码本身说明不了的东西写进 `docs/protocol/`（新的消息 id、布局、客户端地址记到
+   [address-index.md](docs/protocol/address-index.md)），保持简短；把该条目以一行移进它所属区域在 `status/` 下的文件，
+   并在 `roadmap/` 下对应区域的文件里删掉或更新它。
 
-The editing rules in [Status.md](Status.md) ("Editing the status") apply to the roadmap files too: put an item in its
-area's file and group, edit an item instead of adding a note about it, and start each sentence on a new line.
+[Status.md](Status.md) 里「如何维护这份状态」一节的编辑规则同样适用于路线图文件：条目放进它所属区域的文件和分组，
+改动条目而不是给它加备注，每句话另起一行。
