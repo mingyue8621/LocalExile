@@ -68,6 +68,25 @@ static partial class Game
     internal static void ReconcileOwnAuras(ClientState conn, bool validateSkills = false)
     {
         EnsureOwnAuraPools(conn);
+        // A Vaal aura ends on its own, so this runs every tick, outside the reprice gate below: that gate only
+        // opens while the stats are dirty or a skill changed, and a running Vaal aura is neither.
+        if (conn.Auras.Count > 0)
+        {
+            double clock = conn.Clock.Elapsed.TotalSeconds;
+            var ended = conn.Auras.Values.Where(a => a.Until is double until && clock >= until).ToArray();
+            foreach (var aura in ended)
+            {
+                conn.Auras.Remove(aura.SkillId);
+                EndReservationRuntimeLocked(conn, aura);
+                conn.AuraStatsDirty = true;
+                Console.WriteLine($"[gateway] {aura.Name}: Vaal aura ended");
+            }
+            if (ended.Length > 0)
+            {
+                conn.Pools = PoolsFor(conn, conn.Pools.Level);
+                conn.ApplyMovementSpeed();
+            }
+        }
         // Revalidate the source skill as well as the restriction before queued activation/entry adds.
         // Dirty runtime or presented instances are owned by this lifecycle; pure unpresented pool inputs are not adds.
         if (conn.Auras.Count > 0 && (validateSkills || conn.AuraStatsDirty || conn.PresentedAuras.Count > 0))
@@ -79,6 +98,8 @@ static partial class Game
             foreach (var aura in gone) { conn.Auras.Remove(aura.SkillId); EndReservationRuntimeLocked(conn, aura); }
             foreach (var aura in conn.Auras.Values.ToArray())
             {
+                // A Vaal aura reserves nothing and has no skill to reprice; its end is checked above.
+                if (VaalAuraCatalog.IsVaal(aura.EffectId)) continue;
                 var reservation = SupportedReservation(conn, aura.SkillId);
                 if (reservation is null)
                 {

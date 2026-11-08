@@ -752,6 +752,10 @@ static partial class Game
         // A link gem (Soul Link …) links its target at the end of its cast; it has no upfront cost, only its cost over time.
         if (gem.Name is not null && LinkSkills.Buffs.ContainsKey(SkillsFor(conn).EffectId(gem.Effect) ?? ""))
             return await CastLink(remote, stream, ciphers, conn, skillId, gem.Effect, targetId, Current);
+        // A Vaal aura: ExecuteVaalUse above already spent its souls, so this only puts the buff on for the
+        // skill's own duration and marks when it ends (VaalAuraCatalog).
+        if (gem.Name is not null && VaalAuraCatalog.Supported(SkillsFor(conn).EffectId(gem.Effect)) is { } vaalAura)
+            return await CastVaalAura(remote, stream, ciphers, conn, skillId, gem.Effect, gem.Name, vaalAura);
         if (gem.Name is not null && PlacedKind(SupportedSkill(conn, skillId)) is { Trap: false, Mine: false }
             && SupportedReservation(conn, skillId) is { } reservation)
         {
@@ -977,6 +981,8 @@ static partial class Game
         }
         AuraCatalog.Aura? ended = null;
         AuraCatalog.Aura? started = null;
+        // The cell a banner's ground effect is planted on, read under the lock.
+        (int X, int Y) bannerAt = default;
         lock (conn.Monsters)
         {
             // Locked commit backstop: a source may have changed after dispatch/cooldown preflight.
@@ -1016,7 +1022,11 @@ static partial class Game
                     AuraCatalog.BuffRow(effectId, stance), reservation.Flat, reservation.Percent, level, quality,
                     SourceBuff: OwnAuraRestriction.IsAura(SupportedSkill(conn, skillId).Stats) ? conn.NextBuff++ : null,
                     SupportEffectPct: supportEffect, AffectsSelf: affectsSelf, Stance: stance,
-                    ReservesLife: context.Life, ReservationEfficiencyPct: context.Efficiency);
+                    ReservesLife: context.Life, ReservationEfficiencyPct: context.Efficiency,
+                    // A banner plants its own ground effect where the player stands (AuraCatalog.BannerAo).
+                    BannerObject: AuraCatalog.BannerAo(effectId) is null ? 0 : conn.NextObjectId++);
+                if (aura.BannerObject != 0)
+                    bannerAt = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
                 conn.Auras[skillId] = aura;
                 if (!ReservationBudgetFits(conn))
                 {
@@ -1033,8 +1043,54 @@ static partial class Game
             CharacterSaves.SetAuraActive(CharacterName(conn), effectId, started is not null);
         }
 
+        // A planted banner shows its flag on the ground (EffectObject) until it is picked up again.
+        if (started is { BannerObject: > 0 } planted && AuraCatalog.BannerAo(planted.EffectId) is { } bannerAo)
+        {
+            await Send(remote, stream, ciphers, InstanceEntities.CreateObject(planted.BannerObject,
+                InstanceEntities.ObjectTypeHash(EffectObject.TypePath),
+                new EffectObject(bannerAt.X, bannerAt.Y, bannerAo).Blob()),
+                $"0x02b9 banner 0x{planted.BannerObject:x} at ({bannerAt.X}, {bannerAt.Y})");
+            await Send(remote, stream, ciphers, InstanceProtocol.EnterWakeZone(planted.BannerObject), null);
+        }
+        if (ended is { BannerObject: > 0 } picked)
+            await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(picked.BannerObject),
+                $"0x2bb banner 0x{picked.BannerObject:x} removed");
         await SendOwnAuraChanges(remote, stream, ciphers, conn);
         await SendCharacterStats(remote, stream, ciphers, conn, started is not null ? $"aura {name} on" : $"aura {ended!.Name} off");
+        await SendPlayerMana(remote, stream, ciphers, conn,
+            $"0x01b1 player mana {conn.PlayerMana}/{conn.Pools.Mana}, {ReservedMana(conn)} reserved");
+        return true;
+    }
+
+    /// <summary>The shortest a Vaal aura lasts when its skill carries no base_skill_effect_duration.</summary>
+    const double VaalAuraFallbackSeconds = 4;
+
+    // A Vaal aura (VaalAuraCatalog): the use has already paid its souls, so this only starts the buff for the skill's
+    // own base_skill_effect_duration (skill_effect_duration_+% included) and marks when it ends. It reserves nothing and
+    // is not a toggle: ReconcileOwnAuras ends it at Until and skips the reservation reprice for it, and a second use
+    // while it runs only refreshes the end, as the game's own does.
+    internal static async Task<bool> CastVaalAura(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
+        ushort skillId, int effect, string name, VaalAuraCatalog.Definition definition)
+    {
+        double seconds;
+        lock (conn.Monsters)
+        {
+            if (conn.Closed || conn.LeavingArea || conn.PlayerLife == 0 || InTown(conn)) return false;
+            var gem = SupportedSkill(conn, skillId);
+            var stats = SupportedStats(conn, skillId);
+            int Get(string n) => Stats.Key(n) is uint k ? stats.GetValueOrDefault(k) : 0;
+            double duration = SkillDurationModifiers.Seconds(Get("base_skill_effect_duration"), Get, Get);
+            seconds = duration > 0 ? duration : VaalAuraFallbackSeconds;
+            double now = conn.Clock.Elapsed.TotalSeconds;
+            conn.Auras[skillId] = new AuraCatalog.Aura(skillId, effect, SkillsFor(conn).EffectId(effect) ?? name, name,
+                conn.NextBuff++, definition.BuffRow, 0, 0, gem.Level, gem.Quality, Until: now + seconds);
+            conn.AuraStatsDirty = true;
+            conn.Pools = PoolsFor(conn, conn.Pools.Level);
+            conn.ApplyMovementSpeed();
+        }
+        Console.WriteLine($"[gateway] {remote} skill 0x{skillId:x4} {name}: Vaal aura on for {seconds:0.##} s");
+        await SendOwnAuraChanges(remote, stream, ciphers, conn);
+        await SendCharacterStats(remote, stream, ciphers, conn, $"vaal aura {name} on");
         await SendPlayerMana(remote, stream, ciphers, conn,
             $"0x01b1 player mana {conn.PlayerMana}/{conn.Pools.Mana}, {ReservedMana(conn)} reserved");
         return true;

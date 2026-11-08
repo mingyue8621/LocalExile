@@ -10,7 +10,13 @@ static class AuraCatalog
     public sealed record Aura(ushort SkillId, int Effect, string EffectId, string Name, ushort Buff, ushort BuffRow,
         int ManaFlat, int ManaPercent, int Level = 1, int Quality = 0, ushort? SourceBuff = null,
         int SupportEffectPct = 0, bool AffectsSelf = true, string? Stance = null, int? ExternalEffectPct = null,
-        bool ReservesLife = false, int ReservationEfficiencyPct = 0);
+        bool ReservesLife = false, int ReservationEfficiencyPct = 0,
+        // A Vaal aura's own end: the game second it stops (VaalAuraCatalog). Null for a reservation aura, which lasts
+        // until it is switched off or its skill leaves the character.
+        double? Until = null,
+        // A planted banner's ground effect (AuraCatalog.BannerAo): created when the banner goes up and removed when it
+        // is picked up, so the client draws the flag where it was planted.
+        uint BannerObject = 0);
 
     // The source supplies the ground art; the received buff supplies the HUD icon and active-skill association.
     // Distinct ids let both survive area restoration and end together without counting the aura's bonuses twice.
@@ -79,6 +85,9 @@ static class AuraCatalog
         ["HeraldOfPurity"] = 1173,
         ["HeraldOfAgony"] = 1177,
         ["SummonSkitterbots"] = 1390,
+        // The planted banners: War 1221 (war_banner_physical_damage_+%_final_with_melee_skills and accuracy_rating_+%),
+        // Defiance 1864 armour_evasion_banner_buff_aura, Dread 1222 puresteel_banner_buff_aura.
+        ["WarBanner"] = 1221, ["DefianceBanner"] = 1864, ["DreadBanner"] = 1222,
         ["TemporalRift"] = 1915,
     };
 
@@ -96,6 +105,17 @@ static class AuraCatalog
         IsStance(effectId) && stance == "Sand" ? FleshAndStoneSandRow : BuffRow(effectId);
 
     public static bool IsStance(string effectId) => Family(effectId) is "BloodAndSand" or "FleshAndStone";
+
+    /// <summary>The ground effect a planted banner shows (the MiscObjects BannerGround rows under
+    /// Metadata/Effects/Spells/banner), or null for a skill that is not a banner. The object stays until the banner is
+    /// picked up.</summary>
+    public static string? BannerAo(string effectId) => Family(effectId) switch
+    {
+        "WarBanner" => "Metadata/Effects/Spells/banner/WarBannerGround",
+        "DreadBanner" => "Metadata/Effects/Spells/banner/DreadBannerGround",
+        "DefianceBanner" => "Metadata/Effects/Spells/banner/ArmourEvasionBannerGround",
+        _ => null,
+    };
     public static bool Shared(string id) => Family(id) is "PurityOfElements" or "PurityOfFire" or "PurityOfIce"
         or "PurityOfLightning" or "Clarity" or "Vitality" or "Precision" or "Haste" or "Determination" or "Grace"
         or "Discipline" or "Anger" or "Hatred" or "Wrath" or "Zealotry" or "Malevolence" or "Envy";
