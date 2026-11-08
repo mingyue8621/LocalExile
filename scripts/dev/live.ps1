@@ -76,7 +76,9 @@ function Report-Wait([string]$what, [datetime]$since, [string]$log) {
     if ($seconds -lt $script:nextReport) { return }
     $script:nextReport = $seconds + 10
     $last = $null
-    if (Test-Path $log) { try { $last = Get-Content $log -Tail 1 -ErrorAction Stop } catch { } }
+    # The servers' logs are UTF-8; Windows PowerShell 5.1 reads a file as ANSI without this, which turned the line into
+    # mojibake in the launcher's output (live 2026-11-08: a Gateway line's Chinese read back as 宸茬瓨鍦ㄥ€掑笅).
+    if (Test-Path $log) { try { $last = Get-Content $log -Tail 1 -Encoding UTF8 -ErrorAction Stop } catch { } }
     if ($last -and $last.Length -gt 100) { $last = $last.Substring(0, 100) + '...' }
     Step "  still waiting for $what ($seconds s)$(if ($last) { ": $last" })"
 }
