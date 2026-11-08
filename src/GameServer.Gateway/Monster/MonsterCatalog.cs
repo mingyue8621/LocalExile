@@ -130,8 +130,17 @@ sealed class MonsterCatalog(string folder = "data")
         var row = t.Levels[level - 1];
         double d = (type.Minion ? row.MinionDamage : row.Damage) * v.DamageMultiplier / 100.0 * (type.IgnoresAttackSpeed ? 1 : v.AttackMs / 1000.0);
         double spread = (type.DamageSpread > 0 ? type.DamageSpread : 20) / 100.0;
-        return (Math.Max(1, (int)Math.Round(d * (1 - spread))), Math.Max(1, (int)Math.Round(d * (1 + spread))));
+        // A hit's ceiling: HitCapFactor × the level's own Damage. The data's DamageMultiplier and attack time belong to the
+        // game's own skill rows, which carry a damage effectiveness the tables here do not have; applied raw to a slow
+        // variety with a large multiplier, one swing erases a whole early character. The Vaal Oversoul (IncaShadowMonster)
+        // is 1595% at 4.005 s: 1913 at level 23, up to 2614 with the unique rarity's own factor, against ~650 life.
+        double mid = Math.Min(d, row.Damage * HitCapFactor);
+        return (Math.Max(1, (int)Math.Round(mid * (1 - spread))), Math.Max(1, (int)Math.Round(mid * (1 + spread))));
     }
+
+    /// <summary>How many times the level's own DefaultMonsterStats Damage one hit may reach; see
+    /// <see cref="BaseDamage(Variety, byte)"/>. Ordinary varieties sit around 1–2×, a boss's slam a little above.</summary>
+    public const int HitCapFactor = 8;
 
     /// <summary>The rarity's damage and attack speed (its monster mods MonsterMagic5/Rare5/Unique5
     /// monster_rarity_damage_+%_final 30/50/70, and MonsterMagic9/Rare9/Unique8

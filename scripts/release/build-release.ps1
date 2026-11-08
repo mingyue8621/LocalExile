@@ -65,7 +65,7 @@ Check-Exit 'dotnet build'
 
 # One shared folder, one runtime: the servers and the extraction tools. The tools find Tools\ooz above their own folder.
 $app = Join-Path $package 'app'
-foreach ($project in 'src\GameServer.Patch', 'src\GameServer.Auth', 'src\GameServer.Gateway',
+foreach ($project in 'src\GameServer.Patch', 'src\GameServer.Auth', 'src\GameServer.Gateway', 'src\GameServer.Chat',
     'Tools\PoEDataExtractor', 'scripts\re\atlas', 'scripts\re\passive-graphs', 'scripts\re\game-pack', 'scripts\re\ggdump') {
     Step "publishing $project ..."
     dotnet publish $project.Replace('\', [IO.Path]::DirectorySeparatorChar) @properties -r $runtime --self-contained true -o $app

@@ -16,6 +16,9 @@ static class StashCatalog
         [DelveHub] = new(355, 295, MathF.PI),
         // The Sarn Encampment (1_3_town): placed live with /stash_place 295 423 28 (2026-11-04).
         [SarnEncampment] = new(295, 423, 28 * MathF.PI / 180),
+        // The Forest Encampment (1_2_town): the room's own Stash doodad (chest_v01_01.ao, room cell 186 191, angle 1.130),
+        // turned into the area grid with the room's placement (R270, origin 0 92).
+        [ForestEncampment] = new(191, 296, 1.130f),
         // Act 6 Lioneye's Watch: positions confirmed in game by the user.
         [LioneyesWatchAct6] = new(329, 408, 0),
         // The Menagerie (Menagerie_Hub): placed live with /stash_place 455 480 0 (2026-10-30).
@@ -43,6 +46,8 @@ static class StashCatalog
         ChayulaHub => new(-6, 8, 0),
         AreaLayouts.LioneyesWatch => new(317, 270, 0),
         SarnEncampment => new(285, 418, 28 * MathF.PI / 180),
+        // Its own guild stash doodad in the room (guildstash_v01_01.ao, room cell 180 206, angle 2.296).
+        ForestEncampment => new(206, 302, 2.296f),
         LioneyesWatchAct6 => new(318, 408, 0),
         _ => null,
     };
@@ -52,6 +57,9 @@ static class StashCatalog
 
     /// <summary>HASH16 of the Sarn Encampment (WorldAreas 1_3_town).</summary>
     public const ushort SarnEncampment = 0x0431;
+
+    /// <summary>HASH16 of the Forest Encampment, Act 2's town (WorldAreas 1_2_town).</summary>
+    public const ushort ForestEncampment = 0x2233;
 
     /// <summary>HASH16 of the Azurite Mine Encampment (WorldAreas Delve_Hub).</summary>
     public const ushort DelveHub = 0x8b9b;

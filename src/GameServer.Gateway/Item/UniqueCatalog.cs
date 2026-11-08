@@ -85,8 +85,17 @@ sealed class UniqueCatalog(ItemCatalog items, string folder = "data")
         ["Tear of Purity|Metadata/Items/Amulets/Amulet5"] = ["LevelRequirementOverrideUnique__5"],
     };
 
-    readonly Lazy<Dictionary<string, UniqueName>> _names = new(() => LoadNames(folder));
+    /// <summary>Socket layouts a unique fixes for itself instead of the base's own roll (3.29, poewiki item cards):
+    /// Tabula Rasa is six white sockets in one link, Skin of the Loyal six linked sockets of their own colours, and Actum
+    /// takes no socket at all. Every other unique keeps the ordinary two linked sockets a dropped item gets.</summary>
+    static readonly Dictionary<string, (int Count, bool White, bool Linked)> SocketOverrides = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Tabula Rasa|Metadata/Items/Armours/BodyArmours/BodyInt1"] = (6, true, true),
+        ["Skin of the Loyal|Metadata/Items/Armours/BodyArmours/BodyInt1"] = (6, false, true),
+        ["Actum|Metadata/Items/Weapons/OneHandWeapons/OneHandAxes/OneHandAxe19"] = (0, false, false),
+    };
 
+    readonly Lazy<Dictionary<string, UniqueName>> _names = new(() => LoadNames(folder));
     public IReadOnlyList<Definition> All => GameDataCatalog.Uniques;
 
     /// <summary>Creatable collection entries include the named-map catalogue as well as equipment and jewels.</summary>
@@ -126,12 +135,26 @@ sealed class UniqueCatalog(ItemCatalog items, string folder = "data")
     {
         if (items.Find(definition.BaseTypeId) is not { Supported: true } type) return null;
         if (!_names.Value.TryGetValue(NameKey(definition.Name), out var unique)) return null;
+        // Every socketable base gets sockets like any dropped item (two, linked); a unique that fixes its own layout
+        // replaces them. Creating without sockets left every unique wearing nothing to put a gem in.
+        var (sockets, links) = items.DefaultSockets(type, definition.ItemLevel, random: random);
+        if (SocketOverrides.TryGetValue($"{NameKey(definition.Name)}|{definition.BaseTypeId}", out var layout))
+        {
+            var requirements = items.Requirements(type);
+            sockets = Enumerable.Range(0, layout.Count)
+                .Select(_ => new ItemSocket(layout.White
+                    ? SocketColour.White
+                    : SocketColours.Roll(requirements, definition.ItemLevel, 0, random)))
+                .ToArray();
+            links = layout.Linked && layout.Count > 1 ? [(byte)layout.Count] : null;
+        }
         var item = ItemCatalog.Create(type) with
         {
             ItemLevel = definition.ItemLevel, Rarity = ItemRarity.Unique, Identified = true,
             Corrupted = definition.Corrupted, Mirrored = definition.Mirrored, Influences = definition.Influences,
             FracturedCount = definition.Fractured,
             NameWords = [unique.Word], VisualIdentity = unique.VisualIdentity,
+            Sockets = sockets, Links = links,
         };
         var mods = item.Mods.ToList();
         if (definition.Name.Equals("That Which Was Taken", StringComparison.Ordinal))
