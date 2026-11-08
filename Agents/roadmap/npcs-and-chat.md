@@ -1,35 +1,34 @@
-# Roadmap: NPCs, shops and chat
+# 路线图：NPC、商店与聊天
 
-Part of the [Roadmap](../Roadmap.md); what already works in this area is in
-[status/npcs-and-chat.md](../status/npcs-and-chat.md).
-Items keep the Roadmap's priority groups, and are in rough priority order within each group.
+属于 [路线图索引](../Roadmap.md)；这个区域已经能用的功能见 [status/npcs-and-chat.md](../status/npcs-and-chat.md)。
+条目沿用路线图的优先级分组，同一组内大致按优先级排列。
 
-## 2. The world
+## 2. 世界
 
-### Social follow-ups
+### 社交相关后续
 
-- **Known:** friends can be added, accepted and removed through the native Social UI.
-  Relations are account-level and persisted; see [28](../docs/protocol/28-player-trade.md) §6.
-- **Start:** friend notes, ignore lists and status editing; verify presence across separate Gateway processes.
-- **Done when:** these remaining Social-panel actions persist and update the native UI for both accounts.
+- **已知：** 好友可以通过原生社交界面添加、接受与删除。
+  关系是账号级的并且会持久化；见 [28](../docs/protocol/28-player-trade.md) §6。
+- **入手：** 好友备注、屏蔽列表与状态编辑；在多个独立的 Gateway 进程之间核对在线状态。
+- **完成标准：** 社交面板里剩下的这些操作会持久化，并在两个账号的原生界面上正确更新。
 
-### NPCs: dialogue options, shops and the other towns
+### NPC：对话选项、商店与其他城镇
 
-- **Known:** NPC objects, every campaign town's NPCs and the dialogue window (S→C 0x84, C→S 0x85) work
-  ([17](../docs/protocol/17-npcs.md)).
-  The client picks the NPCTalk row itself (`0x141e7d430`).
-  Dialogue quest flags and the class gem choices in reward offers 0 and 8 are implemented and live-checked.
-- **Start:** the remaining quest reward offers and offer 8's magic-armour choices.
-  NPCDialogueWindow's option handler is `0x1407253a0` / `0x140720d10`.
-  Ordinary shops now persist generated assortments and partial rotation; map Kirac's native refresh button.
-  Measure generation weights and progression transitions against the documented local assumptions.
-  Common vendor recipes and transactional quoted settlement are implemented.
-  Verify quote/acceptance in the real client; complete special league/unique recipes and audit all affix sale prices.
-  See [vendor recipes](../docs/protocol/24-vendor-recipes.md) for the remaining scope.
-  The opt-in development Nessa catalogue retains legacy MapWorlds and unique map identities.
-  Complete unique modifiers and unique-area routing remain separate follow-up work.
-  Nessa now stocks generic Map (Tier N) keys, the tier-17 Nightmare Map, an Originator Maps tab and separate unique
-  map identities. Complete unique modifiers and unique-area routing remain separate follow-up work.
-  Quest-stage variants of town NPCs (Dialla withered, Innocence in Bannon's place, Lilly in town) and the league NPCs
-  of the town rooms (`TownNpcs`, [17](../docs/protocol/17-npcs.md) §2).
-- **Done when:** talk options play their text, Nessa and Tarkleigh trade, and town NPCs follow quest progress.
+- **已知：** NPC 对象、各剧情城镇的 NPC 以及对话窗口（S→C 0x84、C→S 0x85）都可用
+  （[17](../docs/protocol/17-npcs.md)）。
+  客户端自己会选择 NPCTalk 行（`0x141e7d430`）。
+  对话的任务标记与奖励报价 0 和 8 里的职业宝石选项已实现并实机核对。
+- **入手：** 其余任务奖励报价，以及报价 8 里的魔法护甲选项。
+  NPCDialogueWindow 的选项处理函数是 `0x1407253a0` / `0x140720d10`。
+  普通商店现在会保留生成的货品与部分轮换；需要逆向 Kirac 的原生刷新按钮。
+  对照文档化的本地假设，测量生成权重与进度切换。
+  常见商人配方与事务化的报价结算已实现。
+  在真实客户端里核对报价/接受；补齐特殊的赛季/传奇配方，并复核全部词缀售价。
+  其余范围见 [商人配方](../docs/protocol/24-vendor-recipes.md)。
+  选用的开发用 Nessa 目录保留了旧的 MapWorlds 与传奇地图标识。
+  完整传奇词缀与传奇区域路由仍是各自独立的后续工作。
+  Nessa 现在会卖通用地图（Tier N）钥匙、17 阶梦魇地图、创始者地图页签，以及独立的传奇地图标识。
+  完整传奇词缀与传奇区域路由仍是各自独立的后续工作。
+  城镇 NPC 的任务阶段变体（枯萎的 Dialla、取代 Bannon 的 Innocence、进城后的 Lilly）以及城镇房间里的赛季 NPC
+  （`TownNpcs`、[17](../docs/protocol/17-npcs.md) §2）。
+- **完成标准：** 对话选项能播放其文本，Nessa 与 Tarkleigh 能交易，城镇 NPC 会跟随任务进度变化。
