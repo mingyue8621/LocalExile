@@ -169,17 +169,16 @@ static partial class Game
         bool spell = effect >= 0 && catalog.EffectStats(effect, level)
             .Any(s => s.Item1 == StatKeys.CastingSpell && s.Item2 != 0);
         bool castTime = spell || effect >= 0 && catalog.IsSpell(effect);
-        // A ranged attack reaches its variety's MaximumAttackDistance (a Sand Spitter's 30): the monster walks up to that
-        // before it shoots, as GGG's do. A ranged spell (the Maven's and the Nucleus' barrages) and a summoner keep the
-        // aggro range they were given with the map affixes; the attack distance of such a variety is its melee fallback.
-        // These rows are in world units, a cell being 250/23 (WorldUnits): a Vaal archer's 58 is 5.3 cells and aggro's
-        // 105–135 is 9.6–12.4, and read as cells they had a bowman shooting from 58 cells off — most of a screen — and
-        // noticing the player from four screens away. A melee attack keeps the row's number as a cell count for now:
-        // the chase's walk-up stops `Range - 1` cells short of the player (the player's size), so its 6 units as 0.55
-        // cells would park the monster inside them; see the roadmap.
+        // A ranged attack reaches the larger of its variety's MaximumAttackDistance and its aggro range: the monster
+        // walks up to that before it shoots, as GGG's do, and a bowman's MaximumAttackDistance is far below the
+        // distance it notices the player from (a Vaal archer's 58 against 105–135), so a shot at that range alone left
+        // it staring at a player six cells off. Both rows are in world units, a cell being 250/23 (WorldUnits): that
+        // archer's reach is 12.4 cells, its aggro 9.6–12.4; read as cells, the same rows had it shooting from 58 cells
+        // — most of a screen — and noticing the player from four screens away. A melee attack keeps the row's number as
+        // a cell count for now: the chase's walk-up stops `Range - 1` cells short of the player (the player's size), so
+        // its 6 units as 0.55 cells would park the monster inside them; see the roadmap.
         double reachUnits = summon is not null || rangedAttack && !kingActor
-            ? castTime ? Math.Max(variety.AttackRange, variety.AggroRange) : variety.AttackRange
-            : 0;
+            ? Math.Max(variety.AttackRange, variety.AggroRange) : 0;
         double reach = reachUnits > 0 ? reachUnits / WorldUnits.PerCell : variety.AttackRange;
         double swing = !kingActor && effect >= 0 && catalog.IsSpell(effect) && catalog.CastTimeMs(effect) > 0
             ? catalog.CastTimeMs(effect) / 1000.0 : variety.AttackMs / 1000.0;
