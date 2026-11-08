@@ -161,6 +161,8 @@ static class CosmeticsFeature
             lock (conn.Pets) conn.Pets[id] = new SpawnedPet(conn.NewWalk(x, y, conn.Walk.Speed), worn.Slot == 18 ? 1 : -1);
         }
         if (!conn.PetFollowRunning) { conn.PetFollowRunning = true; _ = RunPetFollow(remote, stream, ciphers, conn); }
+        // The worn pet also picks up stacks near the player (PetLoot.cs); without a pet nothing runs.
+        if (!conn.PetLootRunning) { conn.PetLootRunning = true; _ = RunPetLoot(remote, stream, ciphers, conn); }
     }
 
     // Where a pet stands by the player: PetDistance cells to the player's side (side +1 or −1, the two Pet slots), on the

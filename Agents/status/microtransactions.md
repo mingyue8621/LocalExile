@@ -23,11 +23,18 @@ Part of [Status](../Status.md); what to build next in this area is in
   in the world: equipment skins, weapon effects, attachments and character effects on the model (Inventories component
   references), footprints and apparitions through the stats, portals (the map device's), cursors and flask skins.
   Verified live 2026-10-23.
-  Built, awaiting live verification: pets (spawned beside the player, following it, not blocking;
-  not yet their idle-relaxed animations, e.g. the Goblin Troupe's song), the portrait (character panel and selection
-  screen), skill effects (the Cosmetics tab's skill slots, picked with C→S 0x1fa, the effect's stats on that skill,
-  Righteous Fire's ring and buff visuals, restyled at once while it burns, and the projectile and explosion of
-  projectile skills such as Fireball).
+  Built, awaiting live verification: pets (spawned beside the player, following it, not blocking; picking up stacks
+  near the player — see below; not yet their idle-relaxed animations, e.g. the Goblin Troupe's song), the portrait
+  (character panel and selection screen), skill effects (the Cosmetics tab's skill slots, picked with C→S 0x1fa, the
+  effect's stats on that skill, Righteous Fire's ring and buff visuals, restyled at once while it burns, and the
+  projectile and explosion of projectile skills such as Fireball).
+  A worn pet also loots (`Game.Item`'s `PetLoot.cs`, added 2026-11-08 at the user's request — the Chinese client's own
+  pickup pet, which the international client has not): every 0.4 s it takes up to three ground items within 40 cells of
+  the player, nearest first, into the main inventory. Only stacks (`MaxStack > 1`: currency, fragments, essences, cards,
+  scarabs) and gold (`PickUpGold`, so it goes to the stash's gold); equipment, gems and quest items are left alone. The
+  item goes through the same take/add/save and the same 0x2bd + 0x00bf pair as the player's own stacking pickup, with no
+  walk and no player action, so the client simply sees the item move into the bag; a full inventory leaves it on the
+  ground for the next pass. `RunPetLoot` starts with `SpawnPets` (area entry and a pet pick) and ends with the connection.
   Portrait frames (the Social Frame slot): a pick is saved and applies at the next login, as the client's own chat line
   says; the character list shows it at once. Verified live 2026-10-31: the client loaded the `SupporterIconFrame` art at
   selection and in game, and another player's client in a party; the frame stayed as it was through area changes until

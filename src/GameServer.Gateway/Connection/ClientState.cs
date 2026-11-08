@@ -628,6 +628,8 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
     /// <summary>The worn pets by object id (SpawnPets), replaced when a Pet slot changes; RunPetFollow walks them.</summary>
     public readonly Dictionary<uint, SpawnedPet> Pets = [];
     public bool PetFollowRunning;
+    /// <summary>The pet's pickup loop (RunPetLoot) has been started for this connection.</summary>
+    public bool PetLootRunning;
     /// <summary>How map portals are turned around the vertical axis (degrees; Positioned rotation). Dev: /portal_rotation,
     /// which rebuilds the portals that already stand.</summary>
     public float PortalRotationDegrees;
