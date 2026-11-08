@@ -239,6 +239,13 @@ static partial class Game
             bowHand = true;
         }
         var cosmeticSlots = CosmeticEffects.CosmeticOnlySlots.ToDictionary(s => s, VisibleItem.Empty);
+        // The item each hand slot holds, so a cosmetic can be checked against the class it fits (CosmeticEffects
+        // .FitsItem): a bow skin cannot dress a sceptre, and worn anyway it has no art for it.
+        var mainHeld = HandType(conn, PlayerInventories.Weapon1);
+        var offHeld = HandType(conn, PlayerInventories.Offhand1);
+        ItemCatalog.BaseType? HeldItem(byte slot) => bowHand
+            ? slot switch { 0 or 1 => mainHeld, 7 => offHeld, _ => null }
+            : slot switch { 0 => mainHeld, 1 => offHeld, _ => null };
         foreach (var worn in WornCosmetics(conn))
         {
             if (MtxEffects.SlotOf(worn.Slot) is not { ModelSlot: byte model } slot) continue;
@@ -255,12 +262,14 @@ static partial class Game
             // arrow and an off-hand one dressed the bow (reported live 2026-11-08: "the weapon's and off-hand's looks are
             // in the wrong place"). Only the two hand slots move; every other cosmetic slot is the same either way.
             byte target = bowHand ? model switch { 0 => (byte)1, 1 => (byte)7, _ => model } : model;
+            if (HeldItem(target) is { } held && !MtxEffects.FitsItem(worn.MtxTypeHash, held)) continue;
             int at = looks.FindIndex(l => l.Slot == target);
             if (at < 0 || looks[at].VisualIdentity == 0) continue;   // nothing equipped there to dress
-            // Most cosmetics have no model of their own (their ItemVisualIdentity row is the currency orb placeholder,
-            // Microtransactions.cs), so the hash alone is what dresses the item and the client draws the skin itself:
-            // the item keeps its own art here instead of the placeholder, which is what had a weapon skin hanging at
-            // the character's feet (live 2026-11-08).
+            // The skin's own art is the reference the client draws: its ItemVisualIdentity row answers that art with the
+            // held model for the item's class (the weapon-skin rows carry one .ao per class group, the shield rows their
+            // Held .ao), so this is what makes a skin appear at all — the hash alone draws nothing (live 2026-11-08). The
+            // hash always goes with it, tiers and the client's cosmetic lookup needing it, and an item outside the skin's
+            // classes was left off above.
             if (slot.IsWeaponEffect)
                 looks[at] = looks[at] with { EffectVisual = fx?.WeaponEffect ?? 0, EffectHash = worn.MtxTypeHash };
             else

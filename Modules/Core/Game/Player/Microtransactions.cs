@@ -99,6 +99,13 @@ sealed class CosmeticEffects(string folder = "data")
         /// <summary>A portrait frame's variation (MicrotransactionSocialFrameVariations <c>Index</c>), 0 otherwise: the
         /// client draws <c>Art/2DArt/UIImages/Common/MTX/SupporterIconFrame{Frame}</c> around the portrait.</summary>
         public ushort Frame { get; init; }
+
+        /// <summary>The item classes and base types the cosmetic fits (ItemisedVisualEffect <c>ItemClasses</c> /
+        /// <c>BaseItemTypes</c>), empty for anything. 627 of the 629 weapon and off-hand cosmetics limit them — 93 fit a
+        /// shield alone, 33 a bow, 16 only two-handers, 11 a quiver, 15 staves — and one worn off its class has no art
+        /// for the item it is on.</summary>
+        public IReadOnlyList<int> ItemClasses { get; init; } = [];
+        public IReadOnlyList<int> BaseItemTypes { get; init; } = [];
     }
 
     public sealed record SkillRestriction(int SlotType, IReadOnlyList<int> Gems, IReadOnlyList<int> Classes);
@@ -109,6 +116,14 @@ sealed class CosmeticEffects(string folder = "data")
         Of(hash)?.Skill is { } skill && skill.SlotType == slotType
         && (skill.Gems.Count == 0 || skill.Gems.Contains(gem.Row))
         && (skill.Classes.Count == 0 || skill.Classes.Contains(gem.ClassRow));
+
+    /// <summary>Whether a cosmetic may dress this item at all: its row lists the item classes and base types it fits,
+    /// and an empty list fits anything. A skin worn on an item outside its lists has no art for it (the row's own
+    /// ItemVisualIdentity is the placeholder orb), so it is left off rather than drawn as that placeholder.</summary>
+    public bool FitsItem(uint hash, ItemCatalog.BaseType item) =>
+        Of(hash) is not { } fx
+        || ((fx.ItemClasses.Count == 0 || fx.ItemClasses.Contains(item.ClassRow))
+            && (fx.BaseItemTypes.Count == 0 || fx.BaseItemTypes.Contains(item.Row)));
 
     /// <summary>A Cosmetics tab slot: its name and the model slot it dresses (null: none).</summary>
     public sealed record Slot(string Name, byte? ModelSlot)
@@ -137,11 +152,6 @@ sealed class CosmeticEffects(string folder = "data")
         var identities = Hash16s(Path.Combine(dir, "ItemVisualIdentity.json"));
         var weaponEffects = Hash16s(Path.Combine(dir, "ItemVisualEffect.json"));
         if (gameSpecific is null || identities is null || weaponEffects is null) return (effects, slots);
-        // A cosmetic's own ItemVisualIdentity row usually carries no model: 3046 of the 3214 rows a cosmetic names have
-        // the currency orb as their AOFile. Sent as an entry's art, that drew a currency orb where the item belongs
-        // (live 2026-11-08: a weapon skin "hangs at the character's feet"). Those cosmetics name only their MTX hash, so
-        // the client draws the skin itself; the 168 alternate-art rows keep their real model.
-        var placeholders = PlaceholderVisuals(Path.Combine(dir, "ItemVisualIdentity.json"));
         var skillEffects = Rows(Path.Combine(dir, "MtxTypeGameSpecific.json"))
             .Where(r => Ints(r, "__col4").Contains(27)).Select(r => r.GetProperty("HASH32").GetUInt32()).ToHashSet();
 
@@ -149,7 +159,6 @@ sealed class CosmeticEffects(string folder = "data")
         {
             if (Int(row, "Mtx") is not int mtx || mtx < 0 || mtx >= gameSpecific.Count || gameSpecific[mtx] is not uint hash) continue;
             ushort visual = Int(row, "VisualIdentity") is int vi && vi >= 0 && vi < identities.Count ? identities[vi] : (ushort)0;
-            if (placeholders?.Contains(visual) == true) visual = 0;
             ushort effect = Int(row, "VisualEffect") is int ve && ve >= 0 && ve < weaponEffects.Count ? weaponEffects[ve] : (ushort)0;
             var stats = new List<(uint, int)>();
             if (row.TryGetProperty("Stats", out var keys) && keys.ValueKind == JsonValueKind.Array
@@ -158,6 +167,7 @@ sealed class CosmeticEffects(string folder = "data")
                     if (key.TryGetInt32(out int stat) && value.TryGetInt32(out int v)) stats.Add(((uint)stat + 1, v));
             effects.TryAdd(hash, new Effect(visual, effect, stats)
             {
+                ItemClasses = Ints(row, "ItemClasses"), BaseItemTypes = Ints(row, "BaseItemTypes"),
                 Skill = skillEffects.Contains(hash) && Ints(row, "__col8").Contains(27)
                     && Int(row, "EffectSlotType") is int slotType
                     ? new(slotType, Ints(row, "BaseItemTypes"), Ints(row, "ItemClasses")) : null,
@@ -226,21 +236,6 @@ sealed class CosmeticEffects(string folder = "data")
     static List<ushort>? Hash16s(string path) => File.Exists(path)
         ? [.. Rows(path).Select(r => Int(r, "HASH16") is int h ? (ushort)h : (ushort)0)]
         : null;
-
-    /// <summary>The HASH16s of the ItemVisualIdentity rows that carry no model of their own: an empty AOFile, or the
-    /// currency orb every cosmetic's row names instead of art.</summary>
-    static HashSet<ushort>? PlaceholderVisuals(string path)
-    {
-        if (!File.Exists(path)) return null;
-        var set = new HashSet<ushort>();
-        foreach (var row in Rows(path))
-        {
-            string art = row.TryGetProperty("AOFile", out var a) ? a.GetString() ?? "" : "";
-            if ((art.Length == 0 || art == "Metadata/Items/Currency/CurrencyOrb.ao") && Int(row, "HASH16") is int h and > 0)
-                set.Add((ushort)h);
-        }
-        return set;
-    }
 
     static List<JsonElement> Rows(string path)
     {
