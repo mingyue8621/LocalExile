@@ -9,16 +9,18 @@ static class StashCatalog
 
     static readonly Dictionary<ushort, Placement> Towns = new()
     {
-        // Lioneye's Watch: placed live with /stash_place 327 270 0 (2026-10-30).
-        [AreaLayouts.LioneyesWatch] = new(327, 270, 0),
+        // Lioneye's Watch (1_1_town): its room's own chest_v01_01.ao at room 134 313, angle 1.853, through the
+        // room's placement (beach_town_unique_normal.arm, R270, origin 0 0).
+        [AreaLayouts.LioneyesWatch] = new(313, 279, 0.281924f),
         // The Azurite Mine Encampment (Delve_Hub): placed live with /stash_place 355 295 180 (2026-10-30). It also gets
         // the guild stash (Program.SpawnTownStash), at TownGuildStashes.
         [DelveHub] = new(355, 295, MathF.PI),
-        // The Sarn Encampment (1_3_town): placed live with /stash_place 295 423 28 (2026-11-04).
-        [SarnEncampment] = new(295, 423, 28 * MathF.PI / 180),
+        // The Sarn Encampment (1_3_town): chest_v01_01.ao at room 224 353, angle 0.406 (city_town.arm, I,
+        // origin 69 69).
+        [SarnEncampment] = new(293, 422, 0.405527f),
         // The Forest Encampment (1_2_town): the room's own Stash doodad (chest_v01_01.ao, room cell 186 191, angle 1.130),
         // turned into the area grid with the room's placement (R270, origin 0 92).
-        [ForestEncampment] = new(191, 296, 1.130f),
+        [ForestEncampment] = new(191, 296, 5.842389f),
         // Highgate (1_4_town): its own chest_v01_01.ao at room 238 201, angle 0.225, through the room's placement
         // (R270, origin 0 0). Highgate's room is the same file in Act 9 with other doodad cells.
         [Highgate] = new(201, 520, 4.937389f),
@@ -32,8 +34,9 @@ static class StashCatalog
         [HighgateAct9] = new(199, 521, 5.072389f),
         // The Oriath Docks (2_10_town): chest_v01_01.ao at room 532 296, angle -0.800 (I, origin 0 0).
         [OriathDocks] = new(532, 296, 5.483185f),
-        // Act 6 Lioneye's Watch: positions confirmed in game by the user.
-        [LioneyesWatchAct6] = new(329, 408, 0),
+        // Act 6 Lioneye's Watch (2_6_town): the same lines as Act 1's room, in part2_beach_town.arm (552 wide,
+        // R270, origin 0 0).
+        [LioneyesWatchAct6] = new(313, 417, 0.281924f),
         // The Menagerie (Menagerie_Hub): placed live with /stash_place 455 480 0 (2026-10-30).
         [MenagerieHub] = new(455, 480, 0),
         // The Forbidden Sanctum (SanctumFoyer_Fellshrine): by the waypoint (126, 149), to be placed live with /stash_place.
@@ -46,9 +49,9 @@ static class StashCatalog
         [ChayulaHub] = new(6, 8, 0),
     };
 
-    /// <summary>A town's guild stash where it has a place of its own (else next to the stash), placed live with
-    /// /guild_stash_place (2026-10-30): the Mine Encampment 344 295 180, Lioneye's Watch 317 270 0, the Menagerie 440 480 0;
-    /// the Sarn Encampment 285 418 28 (2026-11-04).</summary>
+    /// <summary>A town's guild stash where it has a place of its own (else next to the stash). The campaign towns take
+    /// their room's own guildstash_v01_01.ao line, as the stash does; the Mine Encampment 344 295 180 and the
+    /// Menagerie 440 480 0 have no such line and were placed live with /guild_stash_place (2026-10-30).</summary>
     public static Placement? GuildIn(ushort areaHash) => areaHash switch
     {
         DelveHub => new(344, 295, MathF.PI),
@@ -57,10 +60,10 @@ static class StashCatalog
         Kingsmarch => new(-6, 6, 0),
         HeistHub => new(-6, 8, 0),
         ChayulaHub => new(-6, 8, 0),
-        AreaLayouts.LioneyesWatch => new(317, 270, 0),
-        SarnEncampment => new(285, 418, 28 * MathF.PI / 180),
+        AreaLayouts.LioneyesWatch => new(324, 278, 6.022399f),
+        SarnEncampment => new(303, 428, 0.749202f),
         // Its own guild stash doodad in the room (guildstash_v01_01.ao, room cell 180 206, angle 2.296).
-        ForestEncampment => new(206, 302, 2.296f),
+        ForestEncampment => new(206, 302, 0.725204f),
         // The other campaign towns: each room's own guildstash_v01_01.ao line, through the same placement.
         Highgate => new(217, 484, 3.940389f),
         OverseersTower => new(336, 347, 4.760185f),
@@ -68,7 +71,7 @@ static class StashCatalog
         SarnEncampmentAct8 => new(303, 428, 0.749f),
         HighgateAct9 => new(217, 484, 3.940389f),
         OriathDocks => new(542, 276, 3.141185f),
-        LioneyesWatchAct6 => new(318, 408, 0),
+        LioneyesWatchAct6 => new(324, 416, 6.022399f),
         _ => null,
     };
 
