@@ -19,6 +19,19 @@ static class StashCatalog
         // The Forest Encampment (1_2_town): the room's own Stash doodad (chest_v01_01.ao, room cell 186 191, angle 1.130),
         // turned into the area grid with the room's placement (R270, origin 0 92).
         [ForestEncampment] = new(191, 296, 1.130f),
+        // Highgate (1_4_town): its own chest_v01_01.ao at room 238 201, angle 0.225, through the room's placement
+        // (R270, origin 0 0). Highgate's room is the same file in Act 9 with other doodad cells.
+        [Highgate] = new(201, 520, 4.937389f),
+        // The Overseer's Tower (1_5_town): chest_v01_01.ao at room 200 199, angle -1.102 (I, origin 138 138).
+        [OverseersTower] = new(338, 337, 5.181185f),
+        // The Bridge Encampment (2_7_town): chest_v01_01.ao at room 164 425, angle -0.446 (I, origin 437 207).
+        [BridgeEncampment] = new(601, 632, 5.837185f),
+        // Act 8's Sarn Encampment (2_8_town): chest_v01_01.ao at room 225 353, angle 0.398 (I, origin 69 69).
+        [SarnEncampmentAct8] = new(294, 422, 0.398f),
+        // Act 9's Highgate (2_9_town): chest_v01_01.ao at room 237 199, angle 0.360 (R270, origin 0 0).
+        [HighgateAct9] = new(199, 521, 5.072389f),
+        // The Oriath Docks (2_10_town): chest_v01_01.ao at room 532 296, angle -0.800 (I, origin 0 0).
+        [OriathDocks] = new(532, 296, 5.483185f),
         // Act 6 Lioneye's Watch: positions confirmed in game by the user.
         [LioneyesWatchAct6] = new(329, 408, 0),
         // The Menagerie (Menagerie_Hub): placed live with /stash_place 455 480 0 (2026-10-30).
@@ -48,6 +61,13 @@ static class StashCatalog
         SarnEncampment => new(285, 418, 28 * MathF.PI / 180),
         // Its own guild stash doodad in the room (guildstash_v01_01.ao, room cell 180 206, angle 2.296).
         ForestEncampment => new(206, 302, 2.296f),
+        // The other campaign towns: each room's own guildstash_v01_01.ao line, through the same placement.
+        Highgate => new(217, 484, 3.940389f),
+        OverseersTower => new(336, 347, 4.760185f),
+        BridgeEncampment => new(610, 622, 5.300185f),
+        SarnEncampmentAct8 => new(303, 428, 0.749f),
+        HighgateAct9 => new(217, 484, 3.940389f),
+        OriathDocks => new(542, 276, 3.141185f),
         LioneyesWatchAct6 => new(318, 408, 0),
         _ => null,
     };
@@ -60,6 +80,24 @@ static class StashCatalog
 
     /// <summary>HASH16 of the Forest Encampment, Act 2's town (WorldAreas 1_2_town).</summary>
     public const ushort ForestEncampment = 0x2233;
+
+    /// <summary>HASH16 of Highgate, Act 4's town (WorldAreas 1_4_town).</summary>
+    public const ushort Highgate = 0xb63e;
+
+    /// <summary>HASH16 of the Overseer's Tower, Act 5's town (WorldAreas 1_5_town).</summary>
+    public const ushort OverseersTower = 0xbeab;
+
+    /// <summary>HASH16 of the Bridge Encampment, Act 7's town (WorldAreas 2_7_town).</summary>
+    public const ushort BridgeEncampment = 0x2a6d;
+
+    /// <summary>HASH16 of Act 8's Sarn Encampment (WorldAreas 2_8_town).</summary>
+    public const ushort SarnEncampmentAct8 = 0x0334;
+
+    /// <summary>HASH16 of Act 9's Highgate (WorldAreas 2_9_town).</summary>
+    public const ushort HighgateAct9 = 0x23f3;
+
+    /// <summary>HASH16 of the Oriath Docks, Act 10's town (WorldAreas 2_10_town).</summary>
+    public const ushort OriathDocks = 0x95b0;
 
     /// <summary>HASH16 of the Azurite Mine Encampment (WorldAreas Delve_Hub).</summary>
     public const ushort DelveHub = 0x8b9b;
