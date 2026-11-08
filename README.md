@@ -5,8 +5,8 @@
 一个本地运行的《流放之路》**3.29.3c** 客户端服务端，完全从零写起。它用 C#（.NET 10）从零实现客户端所需的网络协议，
 你可以在自己机器上对着跑在 127.0.0.1 的服务端游玩。
 
-流放之路3293b客户端
-链接: https://pan.baidu.com/s/1fwade5rl2KMadeFzIWEunw 提取码: rawm 
+# 客户端
+链接: https://pan.baidu.com/s/1fwade5rl2KMadeFzIWEunw 提取码: rawm
 解压后用客户端的game.exe更新到官方最新版本
 
 然后用服务端LocalExile.exe启动
@@ -17,7 +17,7 @@
 
 从 [Releases](https://github.com/LocalExile/LocalExile/releases) 下载 zip，解压，运行 `LocalExile.exe`。
 你需要自己有一份独立的《流放之路》3.29.3c 客户端，除此之外不需要安装别的东西。
-**始终用 `LocalExile.exe` 启动游戏**：用其他方式启动可能会让客户端更新，从而破坏整套环境。
+**始终使用 `LocalExile.exe` 启动游戏**：用其他方式启动可能会导致客户端更新，从而破坏整个环境。
 
 想要图形启动器？[Waypoint](https://github.com/LocalExile/Waypoint) 是面向 LocalExile 的 Windows 工作台：
 它能下载发布包（或配置源码工作区）、启停服务端与客户端，并管理 mod、备份和账号。它是独立项目，并且用安全的方式启动游戏。
@@ -43,7 +43,7 @@ https://github.com/user-attachments/assets/ebb49e70-93aa-464f-a6cd-c6c130dd8c5a
 ## 已实现的功能
 
 这里只是概览；每个模块的完整清单（已实现、部分实现、尚未实现）见 [Agents/Status.md](Agents/Status.md)。
-「（部分）」表示该功能可用，但还不完整，或者尚未用真实客户端从头到尾验证过。
+“（部分）”表示该功能可用，但还不完整，或者尚未用真实客户端从头到尾验证过。
 
 - **登录与角色：** 客户端自带的登录、账号与记住密码；全部职业；在标准（Standard）、硬核（Hardcore）、无情
   （Ruthless）、独狼（SSF）、Allflame 及其变体赛季中创建角色；删除角色；退回角色选择界面；角色、物品与技能栏均可保存。
