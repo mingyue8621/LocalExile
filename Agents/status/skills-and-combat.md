@@ -1504,7 +1504,16 @@ This is a research baseline, not new live skill acceptance or complete native/se
   wand bolt's declares one) is invisible. The data loaders turn their feature off
   with one warning on an unreadable file instead of faulting the pump, and monster ACT pools come from the root block
   only (a nested stance's entries had replaced them for 191 varieties; review 2026-10-30). Weapon-projectile monsters
-  (`monster_projectile_weapon`, SkillID 0) still hit instantly with no shot; see the roadmap.
+  (`monster_projectile_weapon`, `monster_snipe`, `monster_puncture`, and a bow- or wand-armed monster's polymorphic
+  attack) now fly a server object of their own (`SkillCatalog.WeaponProjectile`): the art is the skill's
+  `arrow_projectile_variation` row of ProjectilesArtVariations' `default_ranged` family (the Vaal archers' 32/33/34 are
+  LightningArrowRearOrigin, BurningArrowRearOrigin and IceArrowRearOrigin, the rows their weapon art names too),
+  DefaultArrow without one, and a wand skill's WandProjectile; the row's speed is scaled by `base_projectile_speed_+%`
+  (a Knitted Horror's 200 %, a Kaom archer's 100 %). A monster whose skill names neither an arrow nor a bolt (a thrown
+  rock, a spectral weapon: 480 ranged-attack effects) still hits instantly, and a spell's projectile is the separate
+  MonsterProjectileSpell adapter; both are on the roadmap. Not verified live yet: the arrows' flight, their release at
+  the Melee pool's contact (the Vaal guards have no rig data, so the halfway release) and whether the elemental
+  arrow .ao files animate without clip data (`data/projectile-clips.json` lacks the arrow rows).
   Wand main-hand variation follows each class ACT pool and the native input-seeded selector; sixteen actual ground
   inputs covered all four Witch clips with matching selection and an object input also matched (historical LocalExile
   evidence on the earlier flight loop; the runtime path still needs a native recheck). Complete off-hand timing/damage

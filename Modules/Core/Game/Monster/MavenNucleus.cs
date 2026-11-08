@@ -82,7 +82,10 @@ static partial class Game
                 || skills.IsProjectile(effect) && !skills.IsMelee(effect)
                 || skills.IsSpell(effect) && !skills.IsMelee(effect));
 
-        public static SkillCatalog.MonsterProjectileInfo? Shot(SkillCatalog skills, int effect)
+        /// <summary>The monster's shot: its skill's own projectile (a mortar, MonsterMortar), the Maven's named art, or a
+        /// weapon projectile (<paramref name="rangedWeapon"/>: the variety carries a bow or a wand) — the server flies
+        /// these, because a predictive client draws none of them itself.</summary>
+        public static SkillCatalog.MonsterProjectileInfo? Shot(SkillCatalog skills, int effect, bool rangedWeapon = false)
         {
             if (skills.MonsterProjectile(effect) is { } mortar) return mortar;
             return skills.EffectId(effect) switch
@@ -91,7 +94,7 @@ static partial class Game
                 "MavenBrainProjectileBlastMPS" => Named("MavenBrainProjectileBlast", 750),
                 "MavenBrainLargeProjectileBarrageMPS" => Named("MavenBrainLargeProjectileBarrage", 300),
                 "MavenBrainSmallProjectileBarrage" => Named("MavenBrainSmallProjectileBarrage", 750),
-                _ => null,
+                _ => skills.WeaponProjectile(effect, rangedWeapon),
             };
         }
 

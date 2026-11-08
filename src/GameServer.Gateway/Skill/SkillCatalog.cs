@@ -965,6 +965,85 @@ sealed class SkillCatalog(string folder = "data", bool hardMode = false)
         return result;
     });
 
+    /// <summary>Projectiles.dat rows by row index: the Id the client creates an object of, its speed in world units per
+    /// second and its collision radius in cells.</summary>
+    private readonly Lazy<List<(string Id, int Speed, int Radius)>> _projectileRows = new(() =>
+    {
+        string path = Path.Combine(folder, "tables", "Projectiles.json");
+        if (!File.Exists(path)) return [];
+        using var d = GameTables.Open(path);
+        return [.. d.RootElement.EnumerateArray().Select(r => (
+            Id: r.TryGetProperty("Id", out var id) && id.ValueKind == JsonValueKind.String ? id.GetString() ?? "" : "",
+            Speed: r.TryGetProperty("ProjectileSpeed", out var s) && s.ValueKind == JsonValueKind.Number ? s.GetInt32() : 0,
+            Radius: r.TryGetProperty("CollisionRadius", out var c) && c.ValueKind == JsonValueKind.Number ? c.GetInt32() : 1))];
+    });
+
+    // The arrow family, variant → its row, and the wand bolt: indexed on the first ranged monster's spawn (a field
+    // initializer may not read this class's own fields, so they are not Lazys).
+    private Dictionary<int, (string Id, int Speed, int Radius)>? _arrowArts;
+    private (string Id, int Speed, int Radius)? _wandProjectile;
+    private bool _projectilesIndexed;
+    private readonly object _projectilesIndexLock = new();
+
+    private void IndexProjectiles()
+    {
+        if (_projectilesIndexed) return;
+        lock (_projectilesIndexLock)
+        {
+            if (_projectilesIndexed) return;
+            var rows = _projectileRows.Value;
+            var arrows = new Dictionary<int, (string Id, int Speed, int Radius)>();
+            string path = Path.Combine(folder, "tables", "ProjectilesArtVariations.json");
+            if (File.Exists(path))
+            {
+                using var d = GameTables.Open(path);
+                foreach (var r in d.RootElement.EnumerateArray())
+                {
+                    if (!r.TryGetProperty("Id", out var id) || id.ValueKind != JsonValueKind.String
+                        || id.GetString() != "default_ranged"
+                        || !r.TryGetProperty("Variant", out var v) || v.ValueKind != JsonValueKind.Number
+                        || !v.TryGetInt32(out int variant)
+                        || !r.TryGetProperty("Projectiles", out var list) || list.ValueKind != JsonValueKind.Array) continue;
+                    foreach (var p in list.EnumerateArray())
+                    {
+                        if (p.ValueKind != JsonValueKind.Number) continue;
+                        int index = p.GetInt32();
+                        if (index < 0 || index >= rows.Count || rows[index].Id.Length == 0 || rows[index].Speed <= 0) continue;
+                        arrows.TryAdd(variant, rows[index]);
+                        break;
+                    }
+                }
+            }
+            _arrowArts = arrows;
+            _wandProjectile = rows.FirstOrDefault(r => r.Id == "Metadata/Projectiles/WandProjectile") is { Id.Length: > 0 } wand
+                ? wand : null;
+            _projectilesIndexed = true;
+        }
+    }
+
+    /// <summary>A weapon projectile attack's shot: <c>monster_projectile_weapon</c> and its kin (IsRangedAttack), or a bow-
+    /// or wand-armed monster's polymorphic attack (<paramref name="rangedWeapon"/>; the Vaal archers' effect is the
+    /// generic <c>melee</c> row with skill_can_fire_arrows). The art is the <c>arrow_projectile_variation</c> row of the
+    /// default_ranged family (32–34 the Vaal archers' LightningArrowRearOrigin, BurningArrowRearOrigin and
+    /// IceArrowRearOrigin), DefaultArrow without one (a Knitted Horror's bone arrow is not mapped yet), and a wand
+    /// skill's WandProjectile; the speed is that row's scaled by <c>base_projectile_speed_+%</c> (the Horror's 200 %, a
+    /// Kaom archer's 100 %). Null when the skill fires neither an arrow nor a bolt: a thrown rock keeps its instant
+    /// contact, and a spell's projectile is a separate adapter (MonsterProjectileSpell).</summary>
+    public MonsterProjectileInfo? WeaponProjectile(int effectRow, bool rangedWeapon)
+    {
+        if (!IsRangedAttack(effectRow) && !(rangedWeapon && IsAttack(effectRow))) return null;
+        var stats = EffectStats(effectRow, 1);
+        int Get(string name) => _stats.Key(name) is uint key ? stats.FirstOrDefault(s => s.Item1 == key).Item2 : 0;
+        bool arrows = Get("skill_can_fire_arrows") != 0, wands = Get("skill_can_fire_wand_projectiles") != 0;
+        if (!arrows && !wands && !rangedWeapon) return null;
+        IndexProjectiles();
+        (string Id, int Speed, int Radius)? art = wands && !arrows ? _wandProjectile
+            : _arrowArts!.TryGetValue(Get("arrow_projectile_variation"), out var arrow) ? arrow : null;
+        if (art is not { } shot) return null;
+        return new(shot.Id, Math.Max(1, shot.Speed * (100 + Get("base_projectile_speed_+%")) / 100), Lobbed: false,
+            Math.Max(1, shot.Radius));
+    }
+
     private readonly Lazy<Dictionary<int, MonsterProjectileInfo>> _monsterProjectiles = new(() =>
     {
         string TablePath(string name) => Path.Combine(folder, "tables", name + ".json");

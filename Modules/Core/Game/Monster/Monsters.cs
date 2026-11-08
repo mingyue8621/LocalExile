@@ -154,8 +154,10 @@ static partial class Game
         // A mortar skill's projectile (Sand Spitter): the shot flies and lands its hit; other ranged skills keep the
         // instant contact until their projectile is known (SkillCatalog.MonsterProjectile). Its release time and point
         // come from the clip the client plays for it (MonsterReleaseFor). MavenProjectile and the Nucleus barrages are
-        // monster_projectile_spell rows (not mortars): MavenNucleus.Shot names their Projectiles.dat art.
-        var projectile = rangedAttack ? MavenNucleus.Shot(catalog, effect) : null;
+        // monster_projectile_spell rows (not mortars): MavenNucleus.Shot names their Projectiles.dat art. A bow- or
+        // wand-armed monster's attack is a weapon projectile (SkillCatalog.WeaponProjectile: the Vaal archers' elemental
+        // arrows), which the server flies itself: a predictive client draws no arrow of its own.
+        var projectile = rangedAttack ? MavenNucleus.Shot(catalog, effect, variety.RangedWeapon) : null;
         // A summoning skill (the Immolator's) brings its monsters whenever the player is within its aggro range, at its
         // own cast time; it deals no hit.
         var summon = variety.GrantedEffects is [int summonEffect, ..] ? catalog.MonsterSummon(summonEffect, level) : null;

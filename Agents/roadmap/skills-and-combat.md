@@ -529,11 +529,17 @@ remaining native checks are recorded in [the port record](../docs/dev/issue75-po
   Earlier native packet/collision controls need retesting on the new path; actor positions still use integer walk
   estimates and shared projectile radii; Gateway actor radii are zero, making area coverage center-based even
   for large monsters. Calibrate combat body geometry against the available movement `ObjectSize` data.
-  Monster projectiles beyond mortars: `monster_projectile_weapon`, `monster_snipe` and `monster_puncture` skills
-  (109 varieties' first effect) take their projectile from the monster's weapon art (MonsterVarieties
-  `Weapon1_ItemVisualIdentityKeys`, e.g. `SkeletonArrow1`), a link the server does not read yet, so those monsters
-  still hit instantly at half the attack time with no visible shot. Monster spell projectiles
-  (`MonsterProjectileSpell`) are a separate adapter. The mortar splash radius is a development default and
+  Monster projectiles beyond mortars: weapon projectile attacks (`monster_projectile_weapon`, `monster_snipe`,
+  `monster_puncture`, and a bow- or wand-armed monster's polymorphic attack) fly a server object
+  (`SkillCatalog.WeaponProjectile`, status), its art from the skill's `arrow_projectile_variation` in
+  ProjectilesArtVariations' `default_ranged` family. Open: the varieties whose skill names no variation and no arrow flag
+  (`monster_projectile_variation` is a per-skill-family index, not one the server can resolve yet: the same value 12 is a
+  MassSkeleton bone arrow and an Essence daemon's chaos shot), so a Knitted Horror still shoots DefaultArrow;
+  MonsterVarieties `Weapon1_ItemVisualIdentityKeys` → ItemVisualIdentity `AOFile2` was the other candidate link
+  (`SkeletonArrow1`'s is a quiver model, not a projectile, so it is not used); the 480 ranged-attack effects that name
+  neither an arrow nor a bolt (a thrown rock, a spectral weapon) still hit instantly; and `MonsterProjectileSpell`
+  (361 effects, 360 with `monster_projectile_variation`) is a separate adapter, so a caster's fireball is still
+  invisible. The mortar splash radius is a development default and
   `projectile_spread_radius` (3) is not modelled. Mortars release at their clip's contact keyframe and point
   (`data/monster-contacts.json`); melee swings still land at half the attack time although the same pools carry
   `Melee` keyframes. Open: whether the client seeds a monster action's clip choice from the 0xffff sequence (the
