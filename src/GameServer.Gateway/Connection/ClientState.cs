@@ -74,8 +74,8 @@ sealed record MonsterAttack(ushort SkillId, double Seconds, double Range, Damage
     /// target and waits there until S→C 0x1ac starts the swing (07 §5). Anything else plays where it stands.</summary>
     public IReadOnlyList<(uint, int)> SkillStats() => InPlace ? InPlaceSkillStats() : Stats();
 
-    /// <summary>An attack's <see cref="Stats"/> or a cast's duration, plus skill_is_non_pathing: the action starts at once
-    /// where the actor stands (the Melee action's begin, 0x141938830). Only on the skill: on the monster's Stats component
+    /// <summary>An attack's <see cref="Stats"/> or a spell's cast time, plus skill_is_non_pathing: the action starts at once
+    /// where the actor stands (the Melee action's begin, 0x14193df80). Only on the skill: on the monster's Stats component
     /// it also stops its Move action from pathing (live 2026-10-17: the monsters stood still).</summary>
     public IReadOnlyList<(uint, int)> InPlaceSkillStats() => [.. CastTime ? SpellStats() : Stats(), (StatKeys.SkillIsNonPathing, 1)];
 
@@ -161,8 +161,10 @@ sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange, int s
     public bool FetishGrace;
     /// <summary>Pending life thresholds and immunity owned by an encounter controller.</summary>
     public LifePhaseGate? LifePhases;
+    /// <summary>An encounter's own entrance: hits do nothing until its script clears it (Izaro rising on his elevator).</summary>
+    public bool EntranceGrace;
     // No damage, ailments, impale or hit reaction while a scripted grace runs.
-    public bool Invulnerable => KingGrace || RitualGrace || FetishGrace || LifePhases?.Active == true;
+    public bool Invulnerable => KingGrace || RitualGrace || FetishGrace || EntranceGrace || LifePhases?.Active == true;
     // What it is, for the experience and items its death gives (null for monsters made without a variety).
     public MonsterCatalog.Variety? Variety { get; init; }
     // Its known TakeHit clip lengths supply HitReaction's recovery duration. Native Actor TakeHit selects the actual
@@ -371,6 +373,17 @@ sealed record RighteousFireState(ushort Buff, ushort SelfAura, uint? Ring, ushor
     public readonly Dictionary<uint, ushort> Auras = [];
     /// <summary>The worn skill effect's righteous_fire_aura visual (BuffVisuals row; null: the row's own), on the enemies too.</summary>
     public ushort? AuraVisual { get; init; }
+}
+
+// A running Bladefall of Trarthus (BladefallVolleys): its two buff instances (skill_cost_over_time, righteous_blades),
+// the skill, the game time of its next volley and the mana it spends per minute (mana_spent_per_minute, as set on the
+// player). Blades: the ground blades still standing, oldest first, with the game time each falls quiet and goes.
+sealed record BladefallTrarthusState(ushort CostBuff, ushort BladesBuff, ushort Skill)
+{
+    public double NextVolley;
+    public int ManaPerMinute;
+    public bool Ended;
+    public readonly Queue<(uint Id, double Landed, double Gone)> Blades = new();
 }
 
 // The last instance list shown (0xae); 0xaf picks a row of it.
@@ -594,7 +607,7 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
             () => Blockers, sight: l.Sight) { FrameOf = LockstepFrameOf };
     }
     public bool PlayerSent;
-    // Server frames ended so far (0x2b5).
+    // Server frames ended so far (0x2b7).
     public long ServerFrame;
     public byte[] Carry = [];
     /// <summary>Reads in a row that framed nothing (ClientInbox.UnframedRun).</summary>
@@ -621,8 +634,8 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
     public float PortalRotationRadians => PortalRotationDegrees * MathF.PI / 180f;
     public long Ticks;
     public volatile PendingTransfer? PendingTransfer;
-    /// <summary>The 0x29c preview request (Hinekora's Lock): its key, the currency/target it names and the computed
-    /// preview answered by 0x29f. The next 0x71 on that target commits exactly this item.</summary>
+    /// <summary>The 0x29d preview request (Hinekora's Lock): its key, the currency/target it names and the computed
+    /// preview answered by 0x2a0. The next 0x71 on that target commits exactly this item.</summary>
     public (ushort Key, uint InventoryId, uint CurrencyId, uint TargetInventoryId, uint TargetId, uint Seed, Item? Preview)? ForesightRequest;
     public ChooserList? Chooser;
     public ChatCommands? Commands;
@@ -638,13 +651,13 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
     uint ownNextObjectId = 0x3000;
     // Every 0x1ab action on this connection gets a fresh sequence. The official server increments it per action (the
     // King's first actions are 0x8011, 0x8012, …); reusing 0xffff for several actors left the client's channel object
-    // without a current action and crashed StartChannelling (0xc0000005 at 0x19e0daf, live 2026-10-31).
+    // without a current action and crashed StartChannelling (0xc0000005 at 0x19e37bf, live 2026-10-31).
     int _nextActionSequence = 0x8000;
     public ushort NextActionSequence() => (ushort)Interlocked.Increment(ref _nextActionSequence);
     // The flags of a server order to a monster (0x1ab → action +0x122; ActionStarted adds 0x80 with a target id). GGG's
     // are 0: none of 56 175 monster orders in four lockstep recordings carries 0x400 or 0x8. On a monster the client reads
-    // 0x400 only in the offer (0x141e8cf10: a Move without it is refused while a non-Move action waits queued at +0x1c0)
-    // and 0x8 nowhere (it is the client's own auto_equip bit on its requests, 0x14011e950). A predictive client keeps
+    // 0x400 only in the offer (0x141e937b0: a Move without it is refused while a non-Move action waits queued at +0x1c0)
+    // and 0x8 nowhere (it is the client's own auto_equip bit on its requests, 0x14011ecb0). A predictive client keeps
     // 0x0408, the form it has always had.
     public ushort MonsterOrderFlags => LockstepClient ? (ushort)0 : (ushort)0x0408;
     // Room server objects a quest keeps in the area until its flag is set (The Twilight Strand's force wall), by id.
@@ -779,6 +792,7 @@ sealed partial class ClientState(AreaLayout layout, uint ticket, uint seed)
     public bool Immune;
     public readonly GracePeriod EntryProtection = new();
     public RighteousFireState? RighteousFire;
+    public BladefallTrarthusState? BladefallTrarthus;
     /// <summary>The hands' part of the player model last sent (Program.HandsKey): null until the area's first model.</summary>
     public string? ModelHands;
     /// <summary>The flasks recovering life and mana (C→S 0x70), applied by the player tick.</summary>
