@@ -40,6 +40,13 @@ keeps the gem at the last level the character meets, and the server stops the ex
 threshold (`SkillCatalog.MaxLevelAt`, `GainGemExperience`; §"Requirements" below) — the client does not stall it, it
 derives whatever the experience says (checked live 2026-10-23).
 
+**2026-11-08: the cap is the gem's own next level, not only the character's.** `CommitGemExperience` used to stop the
+experience at the character's stall alone (`SkillCatalog.MaxLevelAt`: the last level the character's level and attributes
+meet), so the experience ran past every intermediate threshold and the client levelled the gem as it crossed each one —
+gems appeared to level themselves. It now stops one point below the threshold of the level after the gem's *current* one
+(`GemType.Level`), which is the state §4 describes: the bar fills, the "+" appears, and only C→S 0x31 writes the
+threshold. A gem at the character's stall still stops there, and its "+" is answered with what the next level needs.
+
 The server gives the kills' experience to the gems (`GainGemExperience`, from `MonsterKilled` only: a quest's level and
 `/add_xp` give the gems nothing): each gem socketed in an equipped item, in either weapon set (rows 1–10, 14, 15),
 gains 10% of the player's monster experience, up to the threshold of the first level whose requirement the character
