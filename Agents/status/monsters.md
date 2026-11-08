@@ -88,9 +88,13 @@ Part of [Status](../Status.md); what to build next in this area is in
   way is ordered again every 200 ms to the same cell (a lockstep client's monster that a body stopped gets going again);
   on a lockstep client a walking monster's re-order waits for a frame start right after its estimate's step, at most
   two steps past the cadence ([07](../docs/protocol/07-latency-visibility-movement.md) §6).
-  A ranged chaser stands off one cell inside its reach (MonsterVarieties `MaximumAttackDistance`: the Sand Spitter's
-  30), moving inward only when that ring is full, instead of taking a melee contact cell (`MonsterSurround.Asker.Ranged`;
-  live 2026-10-29: Spitters came in close). `MinimumAttackDistance` is not read yet.
+  A ranged chaser stands off one cell inside its reach (MonsterVarieties `MaximumAttackDistance`, in world units: the
+  Vaal archers' 58 is 5.3 cells, the Sand Spitter's 30 is 2.8), moving inward only when that ring is full, instead of
+  taking a melee contact cell (`MonsterSurround.Asker.Ranged`; live 2026-10-29: Spitters came in close). Aggro
+  (`MinAgroRange`/`MaxAgroRange`, the same units: an archer's 105–135 is 9.6–12.4 cells) is converted the same way —
+  read as cells, a bowman noticed the player from four screens off and shot from most of one. `MinimumAttackDistance`
+  is not read yet, and a melee attack still takes its row's units as cells (6): the chase's walk-up stops `Range - 1`
+  cells short of the player, where the converted 0.55 would park the monster inside them (roadmap).
   A give-up beyond twice the aggro range ends the client's chase action with S→C 0x1ac before its Move (GGG's server
   does the same: 925 of 1166 live give-ups carried one, 3.29 capture; a predictive client needs it, a lockstep one
   ignores it — [07](../docs/protocol/07-latency-visibility-movement.md) §11).

@@ -545,7 +545,11 @@ remaining native checks are recorded in [the port record](../docs/dev/issue75-po
   `Melee` keyframes. Open: whether the client seeds a monster action's clip choice from the 0xffff sequence (the
   Spitter's attack2 would spit 75 ms earlier and 1.3 cells farther back), the grid handedness of a keyframe's lateral
   offset (not applied), MonsterVarieties `MinimumAttackDistance` (6 for the Spitter) and the minimum-range dead zone,
-  all to check live.
+  all to check live. Monster distances are world units, a cell being 250/23: aggro and a ranged skill's reach are now
+  converted (an archer's 105–135 is 9.6–12.4 cells, its 58 is 5.3), but a melee attack's 6 still reads as 6 cells,
+  because the chase's walk-up stops `Range - 1` cells short of the player and the converted 0.55 would park the
+  monster inside them: converting it needs that walk-up and `LivingCollision.PlayerSize` reworked, and the melee
+  contact's reach check with them.
 - **Live reference** ([port record](../docs/dev/ranged-monster-actions-port.md) "Live reference", 2026-10-29/30): GGG's
   server sends no object for a player's bow shot or a Sand Spitter's mortar, and the client draws both.
   A lockstep client draws its own bow shot and wand bolt from the count on its record

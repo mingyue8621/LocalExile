@@ -169,7 +169,15 @@ static partial class Game
         // A ranged attack reaches its variety's MaximumAttackDistance (a Sand Spitter's 30): the monster walks up to that
         // before it shoots, as GGG's do. A ranged spell (the Maven's and the Nucleus' barrages) and a summoner keep the
         // aggro range they were given with the map affixes; the attack distance of such a variety is its melee fallback.
-        double reach = summon is not null || rangedAttack && !kingActor && spell ? Math.Max(variety.AttackRange, variety.AggroRange) : variety.AttackRange;
+        // These rows are in world units, a cell being 250/23 (WorldUnits): a Vaal archer's 58 is 5.3 cells and aggro's
+        // 105–135 is 9.6–12.4, and read as cells they had a bowman shooting from 58 cells off — most of a screen — and
+        // noticing the player from four screens away. A melee attack keeps the row's number as a cell count for now:
+        // the chase's walk-up stops `Range - 1` cells short of the player (the player's size), so its 6 units as 0.55
+        // cells would park the monster inside them; see the roadmap.
+        double reachUnits = summon is not null || rangedAttack && !kingActor
+            ? spell ? Math.Max(variety.AttackRange, variety.AggroRange) : variety.AttackRange
+            : 0;
+        double reach = reachUnits > 0 ? reachUnits / WorldUnits.PerCell : variety.AttackRange;
         double swing = !kingActor && effect >= 0 && catalog.IsSpell(effect) && catalog.CastTimeMs(effect) > 0
             ? catalog.CastTimeMs(effect) / 1000.0 : variety.AttackMs / 1000.0;
         // The King's two forms carry the official MeleeAtAnimationSpeedUnique ids (0x4001 humanoid, 0x4000 treant);
@@ -286,7 +294,11 @@ static partial class Game
         void AddMonsterLocked()
         {
             MonsterEmerge.AddLocked(conn, id, new SpawnedMonster($"{variety.Name}@{level}", conn.NewMonsterWalk(id, x, y, walkSpeed, bodySize, rarity == MonsterRarity.Unique),
-                variety.AggroRange, Math.Max(2, variety.ObjectSize + 1), life)
+                // MinAgroRange/MaxAgroRange are world units too (105–135 for a Vaal archer, 9.6–12.4 cells; read as
+                // cells the monster noticed the player from four screens off). At least 3 cells, or a row with a small
+                // range would never wake up.
+                (int)Math.Max(3, Math.Round(variety.AggroRange / WorldUnits.PerCell)),
+                Math.Max(2, variety.ObjectSize + 1), life)
             {
                 Attack = skill is null ? null : attack, Hostile = !friendly, Variety = variety, Level = level, Rarity = rarity,
                 Scripted = !friendly && scripted,
