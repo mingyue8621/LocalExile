@@ -8,6 +8,11 @@
 Game*.exe
 PathOfExile*.exe
 
+# --- The launcher tools copied into the checkout to start it (built from G:\Waypoint) ---
+/流放之路*.exe
+/流放之路*.dll
+/流放之路*.pdb
+
 # --- Tools/: third-party programs and analysis outputs stay local; our own tools are source ---
 # Not ours: Ghidra, JDK, ooz's npm packages, the client backup, the Ghidra project (built from the client binary)
 # and Tools/re/out (decompiled client code). See Agents/docs/re/tooling.md for how to set them up.

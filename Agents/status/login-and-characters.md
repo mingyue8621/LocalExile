@@ -14,6 +14,11 @@ Part of [Status](../Status.md); what to build next in this area is in
   Code: `GameServer.Auth`, `GameServer.Core/Protocol/Login`.
   Docs: [01](../docs/protocol/01-login.md), [re/008](../docs/re/008-login-handshake.md),
   [re/009](../docs/re/009-login-messages.md).
+- Account registration without a console: `GameServer.Auth`'s `RegisterListener` (tcp/20497,
+  `Game_AUTH_REGISTER_PORT`, `Game_BIND`'s address) answers `{"op":"register","name":…,"password":…}` and
+  `{"op":"count"}` on a line each, through the same `AccountService.Register` the login screen checks against, so
+  流放之路登录器.exe can make an account on the host's machine or, once the host opens its address, on a player's.
+  Verified locally 2026-11-08 (register, NameTaken, count) against a scratch database.
 - Saving characters: items, equipment, sockets and the skill bar per character in `data/saves.db` (a new bar: the
   default attack on the left mouse button, gem skills into empty slots only, right mouse button first);
   the bar is restored with S→C 0x53 after login and area changes (binds are C→S 0x4e).

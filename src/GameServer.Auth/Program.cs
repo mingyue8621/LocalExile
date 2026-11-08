@@ -18,6 +18,8 @@ using GameServer.Storage;
 // older data/accounts.json (Game_DEV_DB) imported once. Instance keys: data/instance-secret.bin (Game_INSTANCE_SECRET),
 // shared with GameServer.Gateway. Instance control for the Gateway: 127.0.0.1:Game_AUTH_CONTROL_PORT (20495). Play sends
 // the client to the Gateway at Game_GATEWAY_HOST:Game_GATEWAY_PORT (127.0.0.1:6112, GatewayEndpoint).
+// Account registration for the launcher: Game_AUTH_REGISTER_PORT (default 20497), Game_BIND's address, a JSON line per
+// request (RegisterListener.cs) — the same Register as the dev host's "register".
 
 const string DefaultKeys = "data/login-keys.json";
 string cmd = args.Length > 0 ? args[0] : "serve";
@@ -139,6 +141,9 @@ static async Task Serve(LoginServerKeys keys)
     var directory = new InstanceDirectory(registry, accounts, towns, character =>
         CharacterHome.SelectedHideout(progress, character) is { } area && hideoutAreas.TryGetValue(area, out ushort hash) ? hash : null);
     _ = directory.ServeControlAsync(InstanceControl.Port);
+    // The launcher's own way in (流放之路登录器.exe): account registration, a JSON line per request. Its own port, so the
+    // login protocol below is untouched; the same Game_BIND, so it is local-only until the host opens it.
+    _ = RegisterListener.ServeAsync(accounts, bind);
     Console.WriteLine($"[auth] login server on tcp/{port}");
     // Game_LEAGUES: comma-separated base leagues (default Standard and those the league modules declare), each with its variants.
     Console.WriteLine($"[auth] leagues: {string.Join(", ", LeagueCatalog.Startup.All.Select(l => l.Name))}");
