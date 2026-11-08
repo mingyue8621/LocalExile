@@ -1,4 +1,4 @@
-[加入 Discord](https://discord.gg/pd2Fd5M6Hd)
+[加入 Discord](https://discord.gg/pd2Fd5M6Hd) · [更新说明](%E6%9B%B4%E6%96%B0%E8%AF%B4%E6%98%8E.md)
 
 # LocalExile
 
