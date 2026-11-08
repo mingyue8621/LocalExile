@@ -119,6 +119,18 @@ Part of [Status](../Status.md); what to build next in this area is in
 
 ## Partly working
 
+- **A hit's ceiling is 4× the level's own Damage (2026-11-08).** `MonsterCatalog.BaseDamage` caps one hit at
+  `HitCapFactor` (4) × the level's `DefaultMonsterStats.Damage`, because the tables' `DamageMultiplier` and attack
+  time belong to the game's skill rows, which carry a damage effectiveness this server does not model. Two varieties
+  needed it: the Vaal Oversoul (1595% at 4.005 s, 1913 at level 23, against an early character's ~650 life) and Kitava
+  (`Kitava1` and `KitavaFinal`, 200% at 6 s: 1345 at level 45 and 4262 at level 67, where the level's own Damage is
+  already 361). The ceiling is applied before the unique rarity's own ×1.139, so a capped Kitava blow lands at 1440
+  (1640 with the rarity) against a level-67 character's ~3200 life - just over half, with the whole 6 s swing as
+  warning. Every other campaign boss sits below 4× and keeps its damage: Dominus 2.9×, Malachai 4.0×, Avarius 4.4×,
+  the Brine King 2.4×, Shakari 3.0×, Garukhan 1.7×, Vilenta 2.0×; Arakaali's 4.8× and Piety's beast 5.8× come down
+  to the ceiling. Spell hits (`SkillCatalog.HitDamage`) read the skill's own
+  `spell_minimum/maximum_base_{type}_damage` and are not capped, since those are the client's real values.
+  Not checked with the real client yet.
 - The King in the Mists' Crux of Nothingness encounter: `An Audience With The King` alone opens the area in the map
   device; the humanoid form fights with the default attack, spell projectile, Vine Slam and Vine Cascade, spawns the three
   Mystic Fetishes as visible shrines, teleports next to them and runs the ritual server-side (the fetish is immune

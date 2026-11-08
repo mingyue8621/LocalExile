@@ -1204,16 +1204,48 @@ This is a research baseline, not new live skill acceptance or complete native/se
   ([11](../docs/protocol/11-skills.md) 13).
 - Summon/mine/trap input and cleanup work; special payloads remain partial ([11](../docs/protocol/11-skills.md) 10h).
 - Hexes/marks have limits and combat effects; reflection and special payloads remain partial (`MonsterCurses`).
-- **Totems (Rejuvenation Totem only).** The gem's use summons its totem after the 0.6 s summon, at the aimed cell:
-  a team-0 monster object with the variety's minion Life at the gem's level requirement, its duration and the limit
-  (1 plus `number_of_additional_totems_allowed`; past it the oldest dies).
+- **Totems (every effect the data gives a totem variety, 2026-11-08).** A totem skill's use summons its totem after the
+  summon time, at the aimed cell: a team-0 monster object with the variety's minion Life at the gem's level
+  requirement, its duration and the limit (1 plus `number_of_additional_totems_allowed`; past it the oldest dies).
+  Every effect the client gives a `SkillTotemVariations` row places its totem - 122 of them: siege, shrapnel and
+  artillery ballista, kinetic rain, shockwave, holy flame, searing and chilling bond, decoy, devouring, ancestral
+  protector and warchief, vaal ancestral warchief, rejuvenation and vaal rejuvenation. Before, `TotemVariety` also
+  demanded the effect be in `TotemAuras`, which listed Rejuvenation Totem alone, so a ballista's use cast the skill's
+  ordinary projectile instead and placed nothing. All 122 are totem skills, so no ordinary skill changes its cast.
+  A skill whose data carries no `base_totem_duration` (the ballistas and the melee totems; only the spell totems do)
+  keeps its totem for `PermanentTotemSeconds`, a day of game seconds, instead of a zero duration that expired it
+  before the client could draw it.
   Totems live apart from the monsters, so area hits, monster AI, loot and the instance save never see them.
   A totem dies at Life 0, at the end of its duration, when replaced or when the player dies, and leaves a second later.
-  Its aura regenerates the player's Life within its radius, with buff 172.
+  Rejuvenation Totem's aura regenerates the player's Life within its radius, with buff 172.
   `damage_removed_from_your_nearest_totem_before_life_or_es_%` moves that share of a monster or `/hit` hit, after
   mitigation, to the nearest totem's Life (Forest of Ancestors, Spirit of Kaom); covered by Gateway tests.
-  Not yet: other totem skills (their use places nothing), monsters attacking totems, placement range and server-side
-  totem collision; not yet checked with the real client ([11](../docs/protocol/11-skills.md) §10g).
+  Not yet: a totem does not fire (no ballista shot, no holy flame spray - the totem's own skill is not run), monster
+  AI does not target totems, and placement range and server-side totem collision are unmodelled; not checked with the
+  real client ([11](../docs/protocol/11-skills.md) §10g).
+- **Vaal auras (2026-11-08).** A Vaal aura's use spent its souls and then fell through to the projectile path, so
+  Vaal Clarity, Grace, Discipline, Haste, the three Impurities, Vaal Arctic Armour and Vaal Righteous Fire paid for a
+  skill that did nothing. `VaalAuraCatalog` gives each its client buff row - 158 `vaal_aura_no_mana_cost`, 159
+  `vaal_aura_dodge`, 160 `vaal_aura_energy_shield`, 161 `vaal_aura_speed`, 971/972/973
+  `fire_`/`cold_`/`lightning_impurity_buff` (the maximum resistance and its ailment immunity), 2175
+  `vaal_arctic_armour`, 1160 `vaal_righteous_fire_duration` - and `CastVaalAura` puts it on the player for the skill's
+  own `base_skill_effect_duration` (4 s when it has none), refreshing the end on a second use.
+  A Vaal aura reserves nothing and is not a toggle, so `AuraCatalog.Aura` carries a `Until`: `ReconcileOwnAuras` ends
+  it there, and that check runs every tick rather than inside the reprice gate, which only opens while the stats are
+  dirty and a running aura is not. The reprice loop skips it too, since it has no skill cost to read. Its stats come
+  from the skill's own `EffectStats` like every other aura's, so no value is written by hand.
+  Not yet: Vaal Righteous Fire's life cost over time, which needs the same tick as the ordinary Righteous Fire, and
+  no Vaal aura is checked with the real client.
+- **Planted banners (2026-11-08).** War, Defiance and Dread Banner placed nothing. They now sit in `AuraCatalog`'s buff
+  rows - War 1221 `bloodstained_banner_buff_aura` (`war_banner_physical_damage_+%_final_with_melee_skills` and
+  `accuracy_rating_+%`), Defiance 1864 `armour_evasion_banner_buff_aura`, Dread 1222
+  `puresteel_banner_buff_aura` - so the ordinary aura toggle reserves their mana, applies the buff and gives it back
+  when the banner is picked up. `AuraCatalog.BannerAo` adds the ground effect: the client's own MiscObjects
+  `BannerGround` rows (`Metadata/Effects/Spells/banner/WarBannerGround`, `DreadBannerGround`,
+  `ArmourEvasionBannerGround`), sent as an `EffectObject` where the player stands when the banner goes up and removed
+  when it is picked up.
+  Not yet: the banner's Valour stacks (each kill raises its effect, up to 50), the slow it puts on nearby enemies
+  (`banner_debuff_aura` 2484), and any check with the real client.
 - Passive self buffs (`PassiveBuffAuras`): a passive's BuffTemplates buff on the player adds its stats to the
   passives' sum and is sent with 0x1c1 after an allocation and on area entry, and taken off with 0x1c2 on a refund
   (Surfcaster's Ghost of the Deep).
@@ -1690,4 +1722,5 @@ This is a research baseline, not new live skill acceptance or complete native/se
 - Spirit of Utula's Leadership and Rakiata's Mark-specific trigger still need their own chieftain executors.
 - Effects that should be attached to bones (Righteous Fire's orbs, MiscAnimated RighteousFireOrb) are not sent;
   an effect object follows the player only by 0x1ba glides.
-  Combat auras, Heralds and banners are not implemented; only the simple auras above use buffs.
+  A banner's Valour stacks and its slow on nearby enemies are not modelled, and a totem still does not fire
+  (see the totem and banner entries under Partly working).

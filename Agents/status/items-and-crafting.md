@@ -218,6 +218,12 @@ Part of [Status](../Status.md); what to build next in this area is in
 
 ## Partly working
 
+- **Unique item sockets (2026-11-08).** `UniqueCatalog.Create` built every unique with `ItemCatalog.Create(type)` and
+  no sockets argument, so every unique body armour and weapon came out with none, while an ordinary drop of the same
+  base got `ItemCatalog.DefaultSockets`' two linked sockets. Uniques now take those two, and the three layouts the
+  game fixes are modelled: Tabula Rasa six white sockets in one link, Skin of the Loyal six linked sockets of their
+  own rolled colours, Actum none. Only a newly created item sees this - a unique already in a stash or on a character
+  keeps the sockets it was created with. Not checked with the real client yet.
 - **On-kill explosions and attribute damage reduction (implemented 2026-11-04; native behavior checked with the
   official client 2026-11-05, server live check pending):** "Enemies you Kill Explode, dealing X% of their Life as
   Physical Damage" (the Crusader body-armour prefix and the synthesis implicit) deals X% of the killed monster's

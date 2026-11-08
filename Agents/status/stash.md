@@ -5,7 +5,19 @@ Part of [Status](../Status.md); what to build next in this area is in
 
 ## Works (verified with the real client)
 
-- Act 6 Lioneye's Watch has personal and guild stashes at user-confirmed positions (329, 408) and (318, 408).
+- **Every campaign town's stash comes from its own room (2026-11-08).** The ten act towns place their Stash and
+  GuildStash from the `chest_v01_01.ao` / `guildstash_v01_01.ao` lines of the town's room, through the same placement
+  `TownNpcs` uses for the NPCs (the room's rotation code and origin cell), so no cell is measured by eye:
+  Lioneye's Watch (Act 1) 313 279 / 324 278, the Forest Encampment 191 296 / 206 302, the Sarn Encampment 293 422 /
+  303 428, Highgate (Act 4) 201 520 / 217 484, the Overseer's Tower 338 337 / 336 347, Lioneye's Watch (Act 6)
+  313 417 / 324 416, the Bridge Encampment 601 632 / 610 622, the Sarn Encampment (Act 8) 294 422 / 303 428,
+  Highgate (Act 9) 199 521 / 217 484 and the Oriath Docks 532 296 / 542 276 (stash / guild stash).
+  Before this, Acts 4, 5, 7, 8, 9 and 10 had no stash at all, and none of them had a guild stash; Acts 1, 3 and 6 sat
+  14 to 16 cells off the cells their rooms give, because those three were placed live with `/stash_place` before the
+  room data was read. The guild stash no longer asks a hand-kept list of areas - `Stash.cs` asks
+  `StashCatalog.GuildIn`, so a town added there cannot silently lose its own. The rotation is the room's angle through
+  the same placement, not the raw line angle: R270 turns it a quarter (the Forest Encampment kept its raw angles
+  until now). Not checked with the real client yet.
 - Delve stash correction: publishes the native 41 × 4 inventory bounds;
   all fossil/resonator slots retain the 5000 limit.
   Empty legacy resonators migrate to stackable types with 1–4 independent yellow/orange Delve sockets.
