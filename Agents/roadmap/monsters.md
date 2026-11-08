@@ -15,7 +15,7 @@
   命中能让怪物逃跑（[11](../docs/protocol/11-skills.md) §6）；实机核对应当确定逃跑距离，以及真实服务端是用
   Monster.ot 的 `Flee` 动作还是 Move 来驱动逃跑中的怪物。
   继承自 Life 的尸体/下沉标记与来源资格判定已为普通创建实现
-  （[状态](../status/monsters.md#partly-working)）；整体性的原生证据范围见
+  （[状态](../status/monsters.md#部分实现)）；整体性的原生证据范围见
   [04](../docs/protocol/04-player-entity.md#44-life-0x141e72890-55-bytes)。
   原生 TakeHit 恢复会在同一个恢复区间内停止移动并使普通待处理攻击失效。
   AI 决策现在使用 50 ms 游戏时间步长、100 ms 上限的重新寻路与完整时长的攻击占用期。
