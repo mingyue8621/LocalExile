@@ -111,13 +111,17 @@ sealed class Servers : IDisposable
         foreach (var output in _logs) lock (output) output.Dispose();
     }
 
-    /// <summary>"stop": every process that runs from this install, except this one.</summary>
+    /// <summary>"stop": what this install runs — its own LocalExile.exe, app\'s servers and the client — except this one.
+    /// Not everything under the folder: a tool the player keeps beside it (a launcher of their own) is not the install's
+    /// to kill, and killing it would end the tree that asked for the stop (live 2026-11-08: the console's Stop did
+    /// nothing because this process was its descendant).</summary>
     public static void StopInstall(string root, Output log)
     {
         int stopped = 0;
-        string prefix = Path.TrimEndingDirectorySeparator(root) + Path.DirectorySeparatorChar;
-        string client = Path.GetFullPath("Client") + Path.DirectorySeparatorChar;
-        foreach (var process in Process.GetProcesses())
+        string install = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
+        string app = Path.Combine(install, "app") + Path.DirectorySeparatorChar;
+        string client = Path.Combine(install, "Client") + Path.DirectorySeparatorChar;
+        string self = Path.Combine(install, "LocalExile.exe");        foreach (var process in Process.GetProcesses())
             using (process)
             {
                 string? path;
@@ -125,8 +129,9 @@ sealed class Servers : IDisposable
                 catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException) { continue; }
                 if (path is null || process.Id == Environment.ProcessId) continue;
                 // A linked client's path is outside the install: it is told by its name.
-                bool ours = path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || path.StartsWith(client, StringComparison.OrdinalIgnoreCase)
-                    || (Path.GetFileName(path).Equals("Game.patched.exe", StringComparison.OrdinalIgnoreCase) && SameFile(path, Path.Combine(client, "Game.patched.exe")));
+                bool ours = path.StartsWith(app, StringComparison.OrdinalIgnoreCase) || path.StartsWith(client, StringComparison.OrdinalIgnoreCase)
+                    || path.Equals(self, StringComparison.OrdinalIgnoreCase)
+                    || (Path.GetFileName(path).Equals("Game.patched.exe", StringComparison.OrdinalIgnoreCase) && SameFile(path, Path.Combine(install, "Client", "Game.patched.exe")));
                 if (!ours) continue;
                 process.Kill(entireProcessTree: true);
                 stopped++;

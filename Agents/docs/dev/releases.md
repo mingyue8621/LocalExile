@@ -77,9 +77,11 @@ The login list is the one client archive write, the same as `live.ps1`'s: only w
 server, with the original kept in `data/gateway_list.original.txt`. That is why copying is the default: with
 `--client-mode link` it writes to the player's only copy of 3.29.3c.
 
-`LocalExile.exe --help` lists the commands. `setup` does everything before the servers, `stop` ends this install's
-processes, `--no-client --port-base <n>` runs just the servers on other ports. It asks GitHub once per run whether a newer
-release exists and only says so (`--no-update-check` turns it off); it never downloads anything.
+`LocalExile.exe --help` lists the commands. `setup` does everything before the servers, `stop` ends what this install
+runs — its own `LocalExile.exe`, `app\`'s servers and the client, and nothing else that happens to sit in the folder
+(a launcher of one's own there is not the install's to kill, and killing it would end the very process tree that asked
+for the stop), `--no-client --port-base <n>` runs just the servers on other ports. It asks GitHub once per run whether a
+newer release exists and only says so (`--no-update-check` turns it off); it never downloads anything.
 
 ### For a GUI: `--json`
 
