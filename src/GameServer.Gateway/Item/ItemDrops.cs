@@ -391,13 +391,22 @@ sealed class ItemDrops(ItemCatalog catalog, ItemRolls? rolls = null, string fold
             }
             _uniques = index = new(all, byBase);
         }
-        if (!index.ByBase.TryGetValue(type.Id, out var candidates) || PickUnique(candidates, rng) is not { } chosen) return null;
-        if (uniques.Create(chosen, rng) is not { } created) return null;
-        created = created with { ItemLevel = (byte)Math.Clamp(itemLevel, 1, 100) };
-        // The requirement the client shows, computed the server's way (ItemModStats.LevelRequirement: the base's drop
-        // level and every mod's Mods.dat Level × 4/5), against the level of the area it would drop in.
-        var baseType = catalog.ByHash(created.TypeHash) ?? type;
-        return ItemModStats.LevelRequirement(created, baseType.DropLevel, catalog.Mods) > level ? null : created;
+        if (!index.ByBase.TryGetValue(type.Id, out var candidates)) return null;
+        // The weighted pick again among what is left when a unique is out of the area's reach, so the ones that fit keep
+        // their relative weights instead of the whole base falling back to a rare.
+        var remaining = new List<UniqueCatalog.Definition>(candidates);
+        while (remaining.Count > 0)
+        {
+            if (PickUnique(remaining, rng) is not { } chosen) return null;   // the weights' rest is no unique
+            remaining.Remove(chosen);
+            if (uniques.Create(chosen, rng) is not { } created) continue;
+            created = created with { ItemLevel = (byte)Math.Clamp(itemLevel, 1, 100) };
+            // The requirement the client shows, computed the server's way (ItemModStats.LevelRequirement: the base's drop
+            // level and every mod's Mods.dat Level × 4/5), against the level of the area it would drop in.
+            var baseType = catalog.ByHash(created.TypeHash) ?? type;
+            if (ItemModStats.LevelRequirement(created, baseType.DropLevel, catalog.Mods) <= level) return created;
+        }
+        return null;
     }
 
     /// <summary>One of a base's uniques by weight, or null. The weights are absolute: while a base's add up to less than 1
