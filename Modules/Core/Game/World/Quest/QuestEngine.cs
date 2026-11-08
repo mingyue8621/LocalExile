@@ -50,6 +50,7 @@ static partial class Game
                     $"0x00bf inventory {PlayerInventories.InventoryId(row.Key)}: quest items {string.Join(", ", row.Select(r => r.Item.Id))} removed (remove_flag set)");
             if (set.Count > 0) await SetQuestFlagsHeld(remote, stream, ciphers, conn, set, true);
             if (clear.Count > 0) await SetQuestFlagsHeld(remote, stream, ciphers, conn, clear, false);
+            await HideCollectedQuestMarkers(remote, stream, ciphers, conn);
         }
         finally { conn.QuestGate.Release(); }
     }
@@ -359,39 +360,7 @@ static partial class Game
             if (at.Count == 0) Console.WriteLine($"[gateway] {remote} quest object {rule.ObjectType}: no room or tile places it");
             foreach (var o in at) await CreateQuestObject(remote, stream, ciphers, conn, rule, o);
         }
-        await RespawnQuestSpawns(remote, stream, ciphers, conn, area, spawns);
-    }
-
-    // A monster a quest object brings (Quests.SpawnRule: On.Spawns) is permanent once its object stands in the used
-    // state. The Vaal Oversoul is the only one: the altar on The Ancient Pyramid keeps the Apex on it (a2q8-PlacedApex),
-    // so a use made once must not be lost by leaving the area before the kill - the use path only spawns it in the
-    // moment the flag is set, which a used altar never repeats.
-    static async Task RespawnQuestSpawns(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
-        string area, IReadOnlyList<Quests.SpawnRule> spawns)
-    {
-        foreach (var spawn in spawns)
-        {
-            if (Monsters.Find(spawn.Variety) is not { Supported: true } variety || variety.Id != spawn.Variety) continue;
-            if (QuestsOf(conn).OnMonsterKilled(area, spawn.Variety).Any(f => ClientHasQuestFlag(conn, f))) continue;
-            var rule = QuestsOf(conn).Objects(area).FirstOrDefault(o => o.ObjectType == spawn.ObjectType);
-            if (rule is null || !QuestObjectTransitioned(conn, rule)) continue;
-            (int X, int Y) cell;
-            lock (conn.QuestObjects)
-            {
-                var found = conn.QuestObjects.Values.FirstOrDefault(q => q.Rule.ObjectType == spawn.ObjectType);
-                if (found.Rule is null) continue;
-                cell = (found.At.X, found.At.Y);
-            }
-            bool alive;
-            lock (conn.Monsters)
-                alive = conn.Monsters.Values.Any(m => m.Variety?.Id == spawn.Variety && !m.Dead && m.Life > 0);
-            if (alive) continue;
-            byte level = (byte)Math.Clamp(Packs.For(area)?.AreaLevel ?? 1, 1, 100);
-            var (x, y) = conn.Layout.Walkable is { } walks && !walks(cell.X, cell.Y) ? conn.Layout.Near(cell) : cell;
-            Console.WriteLine($"[gateway] {remote} {spawn.ObjectType.Split('/')[^1]} was already used: " +
-                $"{variety.Name} appears again at ({x}, {y})");
-            await SpawnMonster(remote, stream, ciphers, conn, variety, level, MonsterRarity.Unique, x, y);
-        }
+        await HideCollectedQuestMarkers(remote, stream, ciphers, conn);
     }
 
     // ---- the engine's quest objects (Quests.ObjectRule) ----
@@ -588,16 +557,68 @@ static partial class Game
     // A quest chest's Positioned size (Chest.ot object_size 2, blocking).
     internal const int QuestChestSize = 1;
 
-    // A quest chest's Transitionable state: its last once opened; else 2 once it may be opened (OpensWith), 1 before.
+    // Ordinary chests start untransitioned: FireflyChestBase disables targeting in create_transitioned.
+    // Only a gated chest uses state 2 to signal that its prerequisite has unlocked it.
     internal static byte QuestChestState(ClientState conn, Quests.ChestRule rule, QuestObjectTypes.Info info, bool opened) =>
-        (byte)(opened ? info.States : rule.OpensWith is not { } flag || ClientHasQuestFlag(conn, flag) ? Math.Min(2, info.States) : 1);
+        (byte)(opened ? info.States : rule.OpensWith is { } flag && ClientHasQuestFlag(conn, flag) ? Math.Min(2, info.States) : 1);
 
     // A quest chest's 0x2bb blob: its type's components (QuestObjectTypes; a Chests.dat row without an .ot as its
     // InheritsFrom), else the Rhoa Nest's.
-    internal static byte[] QuestChestBlob(ClientState conn, Quests.ChestRule rule, GlyphQuest.Placement at, bool opened) =>
+    internal static byte[] QuestChestBlob(ClientState conn, Quests.ChestRule rule, GlyphQuest.Placement at, bool opened, bool hideMinimapIcon = false) =>
         QuestObjectTypes.Find(rule.ChestType) is { } info && QuestObject.CanSerialize(info.Components)
-            ? new QuestObject(at.X, at.Y, info.Components, at.Rotation, at.Z, at.Model, QuestChestState(conn, rule, info, opened), opened).Blob()
-            : GlyphQuest.NestBlob(at, opened);
+            ? new QuestObject(at.X, at.Y, info.Components, at.Rotation, at.Z, at.Model, QuestChestState(conn, rule, info, opened), opened)
+                { HideMinimapIcon = hideMinimapIcon }.Blob()
+            : GlyphQuest.NestBlob(at, opened, hideMinimapIcon);
+
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ClientState, HashSet<uint>> HiddenQuestMarkers = new();
+
+    internal static bool QuestMarkerCollected(ClientState conn, string itemId, IReadOnlySet<uint> carried) =>
+        ItemsFor(conn).Find(itemId) is { } type && (carried.Contains(type.Hash)
+            || type.Quest is { } quest && QuestItems.Removed(quest, f => ClientHasQuestFlag(conn, f)));
+
+    // MinimapIcon has no component-update reader. Recreate only the source object with its explicit hidden bit;
+    // keep the opened model, blockers and per-player quest state. Other party members keep their own markers.
+    internal static async Task HideCollectedQuestMarkers(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
+    {
+        List<(uint Id, Quests.ChestRule Rule, GlyphQuest.Placement At)> chests;
+        lock (conn.QuestChests) chests = [.. conn.QuestChests.Select(c => (c.Key, c.Value.Rule, c.Value.At))];
+        List<(uint Id, GlyphQuest.Nest Nest)> nests;
+        lock (conn.GlyphNests) nests = [.. conn.GlyphNests.Select(c => (c.Key, c.Value))];
+        if (chests.Count + nests.Count == 0) return;
+        var hidden = HiddenQuestMarkers.GetOrCreateValue(conn);
+        hidden.IntersectWith(chests.Select(c => c.Id).Concat(nests.Select(c => c.Id)));
+        if (chests.All(c => hidden.Contains(c.Id)) && nests.All(c => hidden.Contains(c.Id))) return;
+        HashSet<uint> carried;
+        lock (conn.Monsters) carried = [.. QuestItems.Carried(ItemsOf(conn)).Select(c => c.Item.Item.TypeHash)];
+        foreach (var (id, rule, at) in chests)
+        {
+            if (hidden.Contains(id) || !QuestMarkerCollected(conn, rule.Item, carried)) continue;
+            uint next = conn.NextObjectId++;
+            lock (conn.QuestChests) { conn.QuestChests.Remove(id); conn.QuestChests[next] = (rule, at); }
+            conn.RemoveBlocker(id);
+            conn.SetBlocker(next, at.X, at.Y, QuestChestSize);
+            await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(id), null);
+            await Send(remote, stream, ciphers, InstanceEntities.CreateObject(next, InstanceEntities.ObjectTypeHash(rule.ChestType),
+                QuestChestBlob(conn, rule, at, conn.Instance.ChestOpened(at.X, at.Y), hideMinimapIcon: true)),
+                $"0x02bb quest chest 0x{next:x}: hide collected item marker ({rule.Item})");
+            await Send(remote, stream, ciphers, InstanceProtocol.EnterWakeZone(next), null);
+            hidden.Add(next);
+        }
+        foreach (var (id, nest) in nests)
+        {
+            if (hidden.Contains(id) || !QuestMarkerCollected(conn, GlyphQuest.Glyphs[nest.Glyph], carried)) continue;
+            uint next = conn.NextObjectId++;
+            lock (conn.GlyphNests) { conn.GlyphNests.Remove(id); conn.GlyphNests[next] = nest; }
+            conn.RemoveBlocker(id);
+            conn.SetBlocker(next, nest.At.X, nest.At.Y, GlyphQuest.NestSize);
+            await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(id), null);
+            await Send(remote, stream, ciphers, InstanceEntities.CreateObject(next, InstanceEntities.ObjectTypeHash(nest.Type),
+                GlyphQuest.NestBlob(nest.At, conn.Instance.ChestOpened(nest.At.X, nest.At.Y), hideMinimapIcon: true)),
+                $"0x02bb Rhoa Nest 0x{next:x}: hide collected glyph marker");
+            await Send(remote, stream, ciphers, InstanceProtocol.EnterWakeZone(next), null);
+            hidden.Add(next);
+        }
+    }
 
     internal static async Task CreateQuestChest(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, Quests.ChestRule rule, GlyphQuest.Placement at)
     {

@@ -119,6 +119,110 @@
   Garukhan 1.7×、Vilenta 2.0×；Arakaali 的 4.8× 与 Piety 的野兽 5.8× 会被压到上限。法术命中（`SkillCatalog.HitDamage`）
   读技能自身的 `spell_minimum/maximum_base_{type}_damage`，不做封顶，因为那是客户端的真实数值。
   尚未用真实客户端核对。
+- Doedre: cauldron and effluent modes; AI tuning provisional ([Act 8](../docs/game/campaign/act8.md)).
+
+- Vaal Oversoul: campaign encounter; AI timing uncalibrated ([Act 2](../docs/game/campaign/act2.md)).
+- The King in the Mists' Crux of Nothingness encounter: `An Audience With The King` alone opens the area in the map
+  device; the humanoid form fights with the default attack, spell projectile, Vine Slam and Vine Cascade, spawns the three
+  Mystic Fetishes as visible shrines, teleports next to them and channels its `0x400e` ritual into one (the fetish is
+  immune through the whole ritual animation and becomes attackable at `call_end_01`; the King is immune throughout;
+  live 2026-11-07: three rituals, no crash), then returns to the centre (Portent Vapors stacks), summons Plagued Rats
+  and an effigy. The fetish/shrine StateMachine `active` states are not sent yet; the central `RitualPillar2` shrine
+  is created but its `active_pillars` animation is not advanced.
+  Fetish rituals are life-gated at 92/73/55% (one ritual per hit, immunity for the channel); the humanoid is
+  phase-locked at 50%, slams its staff and teleports the player into the same-area hedge maze (wisps, exit portal and
+  Branching Affliction). On the return the husk is set to the official 25% life and becomes the treant
+  (`VoodooKingBoss3`, full 25.2M life) with a 7 s emergence grace, Treant Slam, Bug Bomb, Bugrend, effigy summons and a
+  walk that follows a kiting player. The kill
+  rolls the guaranteed unique (with That Which Was Taken paired with The Light of Meaning), Hextoad/Hexpass and The
+  Endless Darkness.
+  The 2026-10-31 official 3.29.3b capture (docs, "Official 3.29.3b capture") showed the real fight differs. The
+  fetish ritual is the client's `GSVoodooKingRitual` `0x400e` channel with server-side hazards (its crash was the
+  record's missing `skill_behaviour_variation`, [king-in-the-mists](../docs/game/king-in-the-mists.md)). The fetishes are hostile and destructible (no experience or loot); the
+  central shrine object exists but its `active_pillars` animation is not advanced yet; the maze uses a room-graph route
+  with real `GuidingLightDaemonMaze_` actors plus a werewolf and spider; the treant uses Meditation/Dance/Punishment;
+  BugRend is the official `VoodooKingBugRend`/`BugRendSingle` + `BugSoulrend` with six projectiles; the emergence grace
+  is 7 s and the morph waits for the full clip. Teleport and return actions move the object at departure and end before
+  the next action, so the model is not left in a teleport/channel pose. The official bark pools are wired to their skills
+  (Vine Cascade/Thorngrip, Vine Slam/Sprout-Invasive growth-Grow, effigy/Agrik armach-Dark effigy, the two hexes, the
+  ritual line at `call_start_01`, the maze lines); the dash/strafe settle now uses a 0.1 s `0x1ba` with the
+  follow-terrain marker instead of 5000 s, which the client had silently ignored (the cause of the 2026-11-01 position
+  drift). The dash clips move 24 cells (not 19) and the strafe direction now follows the clip's own convention
+  (`move_left` = `(dy, -dx)`, `move_right` = `(-dy, dx)` relative to the player-to-King vector), with a `0x1b9`
+  facing the player before each clip so a leftover cast facing cannot skew it, and both the facing and the landing
+  cell are computed at the send gate from the player cell the action carries (a fast player dash during the 120 ms
+  action-end settle otherwise made the clip and settle disagree). The spell projectile's cast step (~12 cells toward
+  the target) is adopted on the server too, so the next dash starts from the model's cell instead of 12+ cells behind.
+  The dash/strafe action now holds 0.65 s before its settle (the client starts the 0.5 s clip late), and the previous
+  action ends 220 ms earlier, so the clip is not cut at a fraction of its move. An approach blink jump is capped at 24
+  cells instead of teleporting 34+ cells from a 50-cell gap.
+  The `0x2909` step
+  glides both sides with `0x1ba` instead of teleporting only the server. The blink-away now fires after two dashes
+  instead of waiting behind a ready strafe, and the spell projectile is checked before movement, so the King keeps
+  casting between the escapes. A re-entered kept instance puts the phase-1 humanoid back on the mapboss point before
+  the intro (it used to start on its saved cell, e.g. 45 cells south of the centre). The generic monster collision
+  estimate no longer moves either King form: it changed only the server cell without a packet, so a strafe settle near
+  a melee player was reverted and the model snapped back to the ramp start. Some backward dashes still settle with
+  20-41-cell corrections when the client cuts its move clip; the measured table is in PR #425.
+  Not yet: blood/caustic ground objects, the Ritual imprisonment/maim movement rule, the phase-trigger confirmation,
+  ground hazards, monster energy shield, Shadow Surge/Mystic Miasma damage over time, corpse items, the Unlight
+  Altar/Bloodline and the remaining native animation captures.
+  Code: `Modules/Core/Game/Monster/KingInMists.cs`, `ItemDrops.KingInMists`, `MapDevice`.
+  Docs: [king-in-the-mists](../docs/game/king-in-the-mists.md).
+- Inherited Life corpse eligibility and sinking flags flow from object-types manifest v4 through `MonsterCatalog`
+  into ordinary monster creation.
+  The combined object-types format retains the stationary collision footprints and models alongside Life data.
+  Explicit false, native defaults, missing inheritance and the Player veto have focused extraction and Core tests.
+  The ordinary corpse path requires zero Life; a life-1 boss stage remains alive, with sinking handled independently.
+  Six integrated native cases at source `dbfe717`, recorded by `53edc77`, cover ordinary alive/dead, Raised Zombie
+  false, Hillock life 1, sinking and an owned Spectral Wolf forced false by that source's separate summon runtime.
+  This branch preserves the ordinary flag math and fields; it has no independent native pass or owned-actor runtime.
+  The Core helper retains an optional owned guard; corpse identity and final-death registration remain open.
+  Deathrattle's warcry explosion is the first consumer: a dead zero-Life eligible monster explodes once and is marked
+  `SpawnedMonster.CorpseConsumed` and removed ([11](../docs/protocol/11-skills.md) section 10i).
+  Code: `MonsterLifeData.cs`, `MonsterObject`, `MonsterCatalog.cs`, `Program.Monsters.cs`, `ot_components.py`.
+  Docs: [04](../docs/protocol/04-player-entity.md#44-life-0x141e72890-55-bytes).
+- Player hits on monsters: each one records the time on the monster (`PlayerHitAt`), and the player's death clears it.
+  `enemy_life_regeneration_rate_+%_for_4_seconds_on_hit` (Devout of Ryslatha) scales a monster's regeneration for 4 s
+  after a hit.
+  Gateway coverage only; not checked with the real client.
+  Code: `Program.MonsterMods.cs`, `Program.Combat.cs`.
+  Docs: [14](../docs/protocol/14-monster-packs.md) §5, [Polytheist](../docs/game/polytheist.md).
+- Monster hits on the player: an attack that is neither evaded nor blocked records the time on the monster
+  (`HitPlayerAt`), and the player's death clears it.
+  For 4 s after it, the player's `enemies_that_hit_you_with_attack_recently_attack_speed_+%` (Devout of Gruthkul)
+  lengthens the monster's swings, and its attack stats are sent again on its Stats component.
+  Gateway coverage only; whether the client's swing animation follows those stats is not checked with the real client.
+  Code: `Program.Monsters.cs` (`MonsterSwingSeconds`, `SendAttackerSlows`), `MonsterMods.cs`.
+  Docs: [11](../docs/protocol/11-skills.md) §6, [Polytheist](../docs/game/polytheist.md).
+- Monster walk speed on the server includes the client's per-monster speed roll: Actor setup draws a uniform percent
+  in the MonsterVarieties row's range (the Goatmen ±5 %, the 7.60–8.40 band measured live for a base of 8; most rows
+  none) from a TinyMT32 state keyed by the object id and its type, and the walk estimate, swing range and contact
+  checks use that speed; equal bounds retain their fixed percent rather than defaulting to zero.
+  The range, the generator and the key order come from the decompile and pass the tests; whether the key's type word
+  is the 0x2bb type hash, and so whether the exact value matches the client's, is not checked live yet
+  (`scripts/re/frida/trace-movement.js` prints each monster's seed words, range and multiplier).
+  Code: `MonsterSpeedRoll.cs`, `AnimationVariantSelector.cs`, `MonsterCatalog.cs`, Gateway (`SpawnMonster`).
+  Docs: [07](../docs/protocol/07-latency-visibility-movement.md) §5 ("Monsters on the client").
+- Monster mods' accuracy (of the Marksman, of Precision): the monster's accuracy is raised in its swing, but only the
+  tests check it; live, the player was never evaded.
+  Code: `MonsterMods.cs`.
+  Docs: [14](../docs/protocol/14-monster-packs.md) §5.
+- Monster summoning skills: a monster whose skill brings monsters (the stat set's `alternate_minion`, a
+  SummonedSpecificMonsters row; the Labyrinth's Immolator) uses it within its aggro range, at the skill's cast time and
+  cooldown, while fewer than five of its monsters live (our cap); at the action's contact its
+  `number_of_monsters_to_summon` appear `summon_specific_monsters_in_front_offset` ahead of it, towards the player,
+  hostile, giving no experience or items when the skill says so, and not kept in the instance; the summoner plays its
+  actor's `SpellAreaOfEffect` clip (0x1d1), as the skill's own action plays nothing on the client.
+  Built for the Crematorium trial: its Immolators' skeletons checked live (2026-11-01), their opening being checked.
+  Code: `SkillCatalog.MonsterSummon`, `Program.Monsters.cs` (`MonsterSummon`), Gateway.
+  Docs: [labyrinth-trials](../docs/game/labyrinth-trials.md) ("Monsters").
+- Monster flee: a player hit with a chance to cause monsters to flee (Surfcaster's small nodes, Chance to Flee Support)
+  makes a living monster walk to a floor cell 5 m away from the player and not attack until that walk ends.
+  Magic monsters avoid half of the flees and rare and unique ones all, through their rarity's own mods.
+  Only the Gateway tests check it; the distance and the action the real server walks it with are not verified.
+  Code: `MonsterFlee.cs`, `MonsterAilments.cs`, `Program.Monsters.cs`.
+  Docs: [11](../docs/protocol/11-skills.md) §6, [Surfcaster](../docs/game/surfcaster.md).
 
 - **Spell 类型的怪物技能发施法统计而不是攻击统计（2026-11-08）。** `MonsterAttack.CastTime` 取该效果 stat set 的
   `casting_spell`，没有的话看其 ActiveSkillType 是否含 Spell。瓦尔超灵的 IncaBossRocks 是它首个授予效果、也是它一直在用的那一个，

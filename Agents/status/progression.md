@@ -64,6 +64,80 @@
   大珠宝孔里的中集群，以及集群孔里一颗 +80 生命的普通珠宝。
   代码：`Program.Items.cs`（`ClusterJewelSocketed`、`ClusterNodeBudget`、`CreateClusterJewel`、`CreateVoices`）、
   `ClusterJewelStats.cs`、Gateway（`ChangeClusterPassive`）。文档：[cluster-jewels](../docs/game/cluster-jewels.md)。
+- Experience and levels: kills within 150 cells give DefaultMonsterStats experience × the variety's multiplier ×
+  rarity (the hidden rarity mods in Mods.json) × the level penalty (safe zone, level 95+ and the effective monster
+  level above 70) × the party share (every living player within 150 cells, (level + 10)^2.71), with the gems' 10% taken
+  before the penalty (S→C 0x2bc Player experience; the client derives the level);
+  a new level sends its stats, full life and mana, the passive points and the account's level;
+  experience is saved per character; `/add_xp`.
+  Code: `Progression.cs`, Gateway (`GainExperience`, `ApplyLevel`).
+  Docs: [15](../docs/protocol/15-progression.md) §1.
+- Passive Skill Tree: S→C 0x33 (level, class, allocated nodes, passive and refund points;
+  the client counts level − 1 points), C→S 0x34 allocates a node, checked, applied to the stats (attributes, life,
+  mana, resistances and more) and saved; C→S 0x36 with flag 0 refunds a node for a saved refund point (checked,
+  mastery effects removed); using an Orb of Regret (right-click, C→S 0x58) takes one item and adds one point;
+  a Book of Skill (right-click, C→S 0x58; every quest book of that name) is used up and gives one more passive skill
+  point, both saved together; a Book of Regrets gives two refund points the same way;
+  `/passives`, `/add_refund_points`, `/reset_passives`.
+  Code: `PassiveTree.cs`, `CharacterSaves.cs`, Gateway (`ChangePassives`, `UseItem`).
+  Docs: [15](../docs/protocol/15-progression.md) §2.
+- Passive masteries: S→C 0x33 carries selected effects (`node | effect << 16`) and C→S 0x35 selects the effect HASH16;
+  a mastery node can be allocated normally and its effect selected/changed without spending another point.
+  Block Mastery's four effects are implemented: max attack block +2, max spell block +2, 20 life + 20 mana on block,
+  and +1% spell block per 5% attack block; the effects are saved with the character.
+  Fire Mastery's 1 Life regenerated per second per 1% uncapped fire resistance counts in the life regeneration
+  (positive resistance only; live 2026-11-03: 161% added 161 per second).
+  Wand Mastery's wand-only points are modelled: the extra attack projectile and accuracy equal to intelligence, each
+  only while a wand is held; the mastery's 0.5% attack life and mana leech is a generic effect that applies with any
+  weapon. Power charge on wand crit and additive spell damage to wand attacks were already applied. Spellslinger's
+  reservation efficiency has no consumer while Spellslinger itself is unimplemented.
+  Code: `PassiveTree.cs`, `CharacterSaves.cs`, Gateway (`ChangePassives`, `PassivesMessage`).
+  Docs: [15](../docs/protocol/15-progression.md) §2.
+- Passive tree jewel sockets (server and live stat check 2026-10-27; tree art check pending): the 21 ordinary large
+  sockets are the `PassiveJewels1` pane (Inventories.dat row 23, inventory id 24, 60x1). Pane cell = the
+  `PassiveJewelSlots.dat` row and its `Slot` = the `PassiveSkills.dat` row. Ordinary/magic/rare jewels can be placed,
+  swapped and picked up (0x2a/0x4a/0x28), are saved with the inventories, and their global mods apply like worn items;
+  the socket must be allocated, the item a non-cluster jewel and its level requirement met. Refunding a socket that
+  holds a jewel is refused until it is taken out; a level trim returns the jewel to the inventory.
+  Unique jewels use the same path but have no unique item catalogue/source yet.
+  The Adorned is the pilot unique jewel: `/adorned [0-1000]` creates the corrupted unique Crimson Jewel, and its effect
+  scales corrupted magic jewels in the ordinary passive sockets (live: 225% -> 240% -> 255% fire resistance with a
+  +15% jewel and The Adorned at 100%). Cluster sockets and the pre-3.25 50-150% variant are not covered.
+  Percentage attribute mods (`strength_+%`, `dexterity_+%`, `intelligence_+%`, `all_attributes_+%`) now scale the final
+  class and item attributes, so Brawn and the Emperor's jewels reach the pools and the character panel.
+  Readiness, counted per stat: 46 of the 97 stats of the 43 Global-set jewels (42 Global + The Adorned) are in game
+  and 11 more are panel only, so the set is 47% done by stats (59% counting the panel rows); the whole 185-jewel
+  catalogue is 10%. The per-jewel table is in [unique-jewels](../docs/game/unique-jewels.md).
+  Code: `PassiveTree.JewelNodeForSlot`, Gateway (`PlaceItem`, `HeldOntoItem`, `PickUpItem`, `CharacterStatSources`).
+  Docs: [15](../docs/protocol/15-progression.md) §2a, [unique-jewels](../docs/game/unique-jewels.md).
+- Cluster jewels (server and live client check 2026-10-27): `/cluster_jewel <small|medium|large> [passives] [sockets]
+  [theme] [notables…]` and `/voices [1|3|5|7]` make real items, and nesting follows the size rule (a tree socket takes any
+  size, a large jewel's sockets medium/small, a medium one's socket small). Their passives are the client's own
+  expansion ids (block base fixed per pane cell, e.g. 195..206 for cell 20); the server keeps them in the third list of
+  0x33, counts a point each, saves them with the character and restores them on login up to the socketed jewels' node
+  budget (the `Adds N Passive Skills` count per jewel, which counts the sockets; Voices' empty passives are plus its
+  sockets). `ClusterJewelLayout` reproduces the client's measured layout: the block base is `39 * ClusterIndex` for a tree socket,
+  `9 * the child's ClusterIndex + 12` for a socket of one and `6` deeper, the position is `(StartIndices[size] +
+  templateIndex) % TotalIndices`, a tree-socket large jewel keeps the full ring (a small passive gets the theme, a notable
+  its own row, a socket nothing) and a jewel in an expansion cell is compressed onto half the ring (a measured 4-passive
+  medium: smalls 208, 209, 211 and socket 212 in cell 51, 225, 228, 229 and 226 in cell 53). 20 of the 42 theme stats are
+  translated; expansion-cell shapes without a measured layout (notables) still use the count-based estimate. A small
+  cluster jewel also fits medium and large sockets now (the client pads the cell); a blue/yellow small (with a notable)
+  gets its measured graph (base 213 in cell 54: notable 213, smalls 214/215; in the large tree socket 17 the small's
+  157/161 are theme smalls and 159 its first notable, the other notable mods inert) and gives the theme per small plus
+  the first notable's row, while a Normal theme-only small drew no client graph in our test. Live full-tree check: a
+  large in tree socket 11 (base 0), a medium in its cell 21 (base 12) and a blue small in cell 24 (base 18); the small's
+  18/19 added the theme and 20 was Fettle. The chat's per-node debug line is gone; the Gateway still logs the ids and the
+  `passive jewel stats` line. The jewel's rarity follows its notables (none Normal, one or
+  two Magic, three Rare): a Magic cluster jewel with no affix makes the client draw the whole cluster as empty
+  "Nothingness" nodes.
+  Still missing: keystones, radius rules and the vendor recipe. A cluster jewel fits only a socket of its own size: the client builds the layout from the cell, so a
+  smaller jewel is padded with empty "Nothingness" nodes that grant nothing.
+  An end-to-end client check (`scripts/dev/jewel_selftest.py`) covers insert/remove with no node taken, the small and
+  notable stats of a large cluster, a medium cluster in a large one's socket, and a normal jewel with +80 life in a
+  cluster socket.
+  Code: `Program.Items.cs` (`ClusterJewelSocketed`, `ClusterNodeBudget`, `CreateClusterJewel`, `CreateVoices`),
+  `ClusterJewelStats.cs`, Gateway (`ChangeClusterPassive`). Docs: [cluster-jewels](../docs/game/cluster-jewels.md).
 
 - 永恒珠宝（军团；服务端与实机客户端核对 2026-10-29）：`/timeless <名称> [显示种子] [征服者]`
   用客户端的 `UniqueJewelAlternateTreeInRadius*` 词缀创建六颗传奇珠宝。客户端自己从这些属性画出被征服的半径；

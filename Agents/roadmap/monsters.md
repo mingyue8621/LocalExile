@@ -37,6 +37,37 @@
   请保留零生命、类型、幽魂与已驯服等限制；死亡快照还需要 Actor 的条件死亡字节。
   每个新组件都用 `scripts/re/frida/check-components.js` 核对。
 - **完成标准：** 区域里的怪物与官方游戏一致（词缀、稀有度加成、破土、Boss 血条）。
+- **Known:** spawning, levels, rarity, names, team, life, StateMachine / Transitionable types, walking, chasing and
+  melee attacks all work ([10](../docs/protocol/10-chat-and-commands.md) §5, [11](../docs/protocol/11-skills.md) §6);
+  areas are populated with their MonsterPacks and unique boss ([14](../docs/protocol/14-monster-packs.md));
+  Twilight Strand has a provisional 45-monster calibration cap; complete official population and placement rules
+  remain unresolved because the reference capture misses its opening.
+  emerge monsters rise near the player ([10](../docs/protocol/10-chat-and-commands.md) §5).
+  Act 2's Oversoul has its campaign attack set and altar/exit lifecycle; official decision weights/cooldowns still need
+  a reference capture ([status](../status/monsters.md#partly-working)).
+  Hits can make monsters flee ([11](../docs/protocol/11-skills.md) §6); a live check should settle the flee distance
+  and whether the real server walks a fleeing monster with Monster.ot's `Flee` action instead of Move.
+  Inherited Life corpse/sinking flags and the source eligibility predicate are implemented for ordinary creation
+  ([status](../status/monsters.md#partly-working)); integrated native evidence is scoped in
+  [04](../docs/protocol/04-player-entity.md#44-life-0x141e72890-55-bytes).
+  Native TakeHit recovery stops locomotion and invalidates ordinary pending attacks for the same recovery interval.
+  AI decisions now use 50 ms game-time steps with 100 ms bounded repaths and full-duration attack busy periods.
+  Historical LocalExile controls verify chase response, turning, pacing and native pause; this port awaits a rerun.
+  Automated cadence and lifecycle checks retain interruption and stage-completion guards.
+- **Start:** the systems the 74 unsupported monster mods need (auras on allies, retaliation and on-death skills, ailments and
+  curses on the player; [14](../docs/protocol/14-monster-packs.md) §5), stages of other bosses (`BossFights.cs` has Hillock's
+  and `KingInMists.cs` the two-form Ritual pinnacle), pack
+  `Grounds`, the varieties with ControlZone / BlightTower / Mercenary … components (each needs its deserializer,
+  schema.md; NPC, InteractionAction and Timer are written), the bandit lords' help-or-kill dialogue, bosses' later
+  forms (Abberath2, Shakari2, Malachai's second form, The Depraved Trinity) created by their fight, tile spawner bosses
+  (Marceus).
+  Emerge monsters: the official emerge distance and whether a pack rises together are unknown (the server's `.ais`
+  files); types whose Transitionable lists more states (SpiderBoss: 3) are still created risen.
+  Corpse consumers still need authoritative final-death registration and identity; one-use consumption exists only as
+  Deathrattle's `SpawnedMonster.CorpseConsumed` flag, with no reservation shared between consumers.
+  Preserve zero-Life, type, spectre and owned restrictions; dead snapshots also need Actor's conditional death bytes.
+  Check every new component with `scripts/re/frida/check-components.js`.
+- **Done when:** monsters in areas match the official game's (mods, rarity bonuses, emerge, boss bar).
 
 ## 4. 服务端设计
 

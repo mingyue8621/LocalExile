@@ -193,6 +193,155 @@
   而不是每单位一个世界物品（`ItemDrops.Stacked`）。
   代码：`ItemDrops.cs`、Gateway（`DropLoot`、`CommitProjectileKill`）。
   文档：[15](../docs/protocol/15-progression.md) §3。
+- Utility flasks: every utility flask spends its charges, shows its buff and the timer bar under it, and gives its
+  buff's stats for its duration, all from the tables (Flasks.dat, BuffDefinitions, ComponentCharges).
+  The stats count in the pools (the walk estimate, `/defences`, `/resistances`, `/hit`) and go to the client.
+  Two flasks of one kind keep their own timers and only the strongest applies (poewiki); different effects stack.
+  They end with the duration, at death, with the area and when the flask leaves its cell; a pause holds them.
+  Quality, the flask's duration and effect mods, its "during effect" suffixes and the character's flask effect and
+  duration count.
+  Stibnite blinds monsters in its smoke cloud, Sulphur's consecrated ground regenerates life, Basalt taunts, Quartz
+  phases through monsters, Gold raises the rarity of drops, Silver gives Onslaught.
+  Checked live: every flask's use, stats on the client, bars, pause, death, area change; not the client walking faster
+  or phasing (the control bridge cannot make it walk).
+  Iron Flask now contributes to the authoritative Ward pool and restores broken Ward only after paid use.
+  A native Antiquarian check spent 40 charges, restored 502 Ward immediately and returned to 22 after expiry.
+  See [Ward and native evidence](../docs/game/antiquarian.md).
+  Not yet: ailments, stun and curses on the player (Aquamarine, Corundum and the ailment
+  suffixes reach the panel only), Aquamarine's chilled ground, the smoke cloud's art, leech suffixes.
+  Code: `UtilityFlasks.cs`, `FlaskGrounds.cs`, Gateway (`UseUtilityFlask`, `RunUtilityFlasks`, `RunFlaskGrounds`).
+  Docs: [13](../docs/protocol/13-items.md) §8a.
+- Items: the start kit (Characters.dat skill and support gems, two life flasks on keys 1–2 and a mana flask on key 5)
+  in the inventories, and the class weapon with two linked sockets worn in the main hand (`Game_START_WEAPON=ground`:
+  on the ground a few cells from the spawn until it is picked up);
+  pick up (0x28), put down, swap and equip (0x2a, slot classes and attribute requirements checked by the client),
+  one-hander off hand → main hand, socket and unsocket gems (0x30, 0x2f), drop to the ground outside town (0x29 →
+  WorldItem) and pick up again (to the cursor with the inventory open, at the client's 22-cell range), Destroy in town
+  (0x16 /destroy); stacks: merge a held stack onto one of its type up to the CurrencyItems StackSize (0x4a), split
+  with Shift + click (0x7c), Shift + click while holding places one, full fragment / shard stacks become their item,
+  pick-ups, `/item` and sale rewards fill existing stacks first; the equipped weapon on the model;
+  active gems in equipment grant their skill; class attributes and the class on the character panel;
+  `/item <row, Id or name> [count]`.
+  Code: `InstanceItems.cs`, Gateway (`ItemCatalog.cs`, `PlayerInventories.cs`).
+  Docs: [13](../docs/protocol/13-items.md) §4a.
+- Item mods: rarity (normal, magic, rare, unique), identified, and the implicit, explicit, enchant, scourge and hidden
+  mod lists in the Mods component; new items roll their BaseItemTypes implicits (Driftwood Wand 8-12% increased Spell
+  Damage); magic names come from the affixes; rarity and mods are saved with the item (characters and stash);
+  `/item_mod`, `/item_mod set`, `/item_mod remove`, `/item_mods`, `/rarity`, `/sockets` (colours and links, e.g. `/sockets RRGBBB`) on the held item;
+  `/item_give <JSON>` makes a whole item (base, rarity, mods with values, states, sockets, rare name) for tools such as
+  the launcher's item crafter; a JSON array grants items in order and reports a partial batch if placement stops
+  ([item-crafter.md](../docs/dev/item-crafter.md));
+  `Game_SOCKET_CAPACITY=1..6` (dev) lets `/sockets` give any socketable base that many, e.g. a 6-link wand (its own
+  capacity is 3).
+  Magic and rare items: affixes rolled from Mods.dat by domain, item level, the item's tags and families, rare names
+  from Words.dat; equipment drops magic / rare and unidentified; a Scroll of Wisdom identifies (C→S 0x71);
+  `/item <type> magic|rare`, `/roll`.
+  Equipped items' mods count on the character: global stats like a passive's (life, resistances, attributes, spell
+  damage …), the main hand's local crit, attack speed and accuracy, its local physical damage and quality,
+  and its local added elemental/chaos damage (`ItemWeapons`). The third ring slot (Ring3, row 102, shown by The Unseen
+  Hand's `enable_ring_slot_3`) counts like the first two.
+  Armour/evasion/ES local flat, increased and hybrid mods and multiplicative quality feed the shared pools and panel
+  (`ItemDefences`, [13](../docs/protocol/13-items.md) §2c).
+  Armour, evasion and ES share a saved variable base roll, sent in the native Armour component.
+  Fresh armour gets an ordinary roll once; legacy items keep their minimum, and ordinary crafting preserves the roll.
+  Native checks verified ordinary/special base-roll states, quality composition, equipment refresh and relog.
+  Sacred Orb rerolls and supported special ES rules are implemented with automated coverage (see Partly working).
+  Other uniques and special mods still depend on their individual mechanics (#60).
+  Mageblood's supported subset is below.
+  Equipment uses the shared `ItemDefences.Calculate`, including Tabula and explicit no-ES overrides.
+  Code: `InstanceItems.cs`, Gateway (`ModCatalog.cs`, `ItemRolls.cs`, `ItemDrops.cs`, `ItemModStats.cs`,
+  `ItemWeapons.cs`, `ItemDefences.cs`, `ItemCatalog.cs`, `CharacterSaves.cs`).
+  Docs: [13](../docs/protocol/13-items.md) §2a-§2c.
+- Item states (verified live 2026-10-30): the six influences, split, synthesised, corrupted, mirrored and fractured,
+  and crafted and enchanted mods show in the client's tooltip and Ctrl+C text, and survive a relog and a Gateway restart.
+  `/item_state` switches them on the held item.
+  An influence opens its class's influence mods to every roll and Harvest swap (`InfluenceTags.dat`), the uniques PoB marks Shaper or
+  Elder carry it, and the Fracturing Orb refuses influenced and synthesised items without spending the orb.
+  Nothing in play creates these states yet, and no mechanic reads influence.
+  Code: `InstanceItems.cs`, Gateway (`ItemStates.cs`, `ItemRolls.cs`, `CharacterSaves.cs`).
+  Docs: [13](../docs/protocol/13-items.md) §2f.
+- Game-data overrides (implemented 2026-10-30): the SQLite overlay `mod_stat_overrides`, `limit_overrides`,
+  `catalog_entries` and `system_settings` in `data/saves.db` changes mod roll ranges, item limits, catalogues and
+  numeric settings through `/game_data`; the Gateway loads the rows at startup, keeps the reference mod/base lists in
+  memory, and atomically republishes the effective snapshot after an edit, so no restart is needed. Verified live:
+  setting a range and a timeless-jewel limit, listing the revision, clearing both, and the tables being empty again
+  after the check.
+  Limits currently cover the Historic timeless jewel, Impossible Escape, radius unique jewels and the tattoo total/group
+  caps. `catalog_entries` now seeds and reloads the unique-item, radius/threshold/unique/timeless jewel, tattoo-effect
+  and jewel-art catalogues (1,299 / 76 / 43 / 6 / 48 / 190 rows on the live database; the unique rows are the full
+  generated PoB catalogue); the code arrays are the fresh-database seed. `catalog_seed_keys` records the applied
+  defaults, so a row deleted by an admin stays deleted while a genuinely new default is added, and a new unique seed
+  revision corrects the rows nobody edited. The
+  `stats`/`mods`/`mod_stats` tables hold 23,346 / 40,355 / 60,695 reference rows and `effective_mod_stats` joins the
+  range overrides. A fresh database gets all of them on the first Gateway start; `extract-data.ps1` checks `Stats.json`,
+  `Mods.json`, `BaseItemTypes.json`, `ItemClasses.json`, `Tags.json` and `UniqueStashLayout.json` as part of its `tables`
+  entry. `system_settings` seeds 51 numeric knobs: 21 socket caps by item class (wand 3, body 6, helmet/gloves/boots 4,
+  shield 3, belt 0, two-handed 6), rare prefix/suffix caps (3/3 ordinary, 2/2 jewels), passive points per level, gold
+  chance/amount/auto-loot, the 150-cell projectile maximum range, six drop multipliers, pack density/size, experience
+  multiplier, maximum level, default tattoo/jewel limits and grace period; `/game_data setting` changes a number and
+  reloads it. Live: a wand set to six
+  sockets accepted `RRGBBB` and was reduced back to three; `passive_points_per_level = 2` made the 0x33 client budget
+  and server budget agree at 1198 points. The item-template schema exists, but custom item templates, custom names and
+  the admin panel are not implemented yet.
+  Code: `GameData.cs`, `GameDataCatalog.cs`, `GameDataStore.cs`, `ModRangeProvider.cs`, `LimitSettings.cs`, Gateway
+  (`Program.Commands.cs`).
+  Docs: [editable game data](../docs/dev/editable-game-data.md), [saves](../docs/saves.md).
+- Sacred Orb: ordinary and Shift currency use reroll the saved shared defence base on eligible armour.
+  Only the base roll changes; mods, quality, sockets, gems, links, rarity and identification remain.
+  Inventory and stash pairings save the target and one-unit payment atomically, including unchanged roll outcomes.
+  Worn-item rerolls refresh the character pools and panel.
+  Native use verified raw 32 becoming ordinary, armour/evasion/ES updates, Shift repeat and same-value consumption.
+  Corrupted, mirrored, non-armour and fixed-range targets refuse use without payment.
+  Ward and the fifth native range count for eligibility; their character-pool mechanics remain separate work.
+  Uniform ordinary roll selection is local policy; the official distribution is unmeasured.
+  Native fixed/zero-base refusal and Ward-only rerolling matched; inventories and stash survived a Gateway restart.
+  See [13](../docs/protocol/13-items.md), "Sacred Orb" for the verified values.
+  Code: `CurrencyEffects.cs`, `ItemCatalog.cs`, Gateway (`UseItemOn`, `ItemMoves.UseAcross`).
+- Special defence overrides and ES-to-Life conversion are implemented.
+  Native full/50% conversion, independent ES, Life scaling, zero-ES controls and shield swaps matched.
+  Both test inventories and their final pools survived a Gateway restart.
+  Tabula's hidden override and explicit no-ES suppress only their item's ES before local scaling.
+  Full and percentage conversion use final local ES per active armour slot, including the eligible active shield.
+  Converted Life receives global Life increases; independent global ES stays ES.
+  PoB imports restore the hidden override only for four recognised unique names with matching native bases.
+  The importer recognises explicit no-ES and full/percentage conversion text and uses the shared local calculator.
+  Conditional corrupted-item ES maps to a global ES increase for that corrupted source, preserving local tooltip ES.
+  Shield-only increases now affect character defences without changing local item values or converted Life.
+  Native application, clearing, weapon swaps and Gateway-restart checks passed with final half-up pool rounding.
+  Ward conversions, ring-slot and jewel-radius mechanics remain separate work.
+  Code: `ItemDefences.cs`, `Program.Equipment.cs`, `Program.Progression.cs`, `PathOfBuildingItems.cs`.
+  Docs: [13](../docs/protocol/13-items.md) §2, [20](../docs/protocol/20-damage.md), "Player energy shield".
+- Gold: shared by the account's characters of one league (S→C 0x2aa), saved with that league's stash, sent on area
+  entry; every league has its own stash and gold, Standard keeps the account's stash from before (`AccountStash.Key`);
+  monsters drop piles of gold (normal 40%, magic 75%, rare and unique always;
+  (3 + 1.2 × level) × 1/2/5/15, our own numbers, `ItemDrops.Gold`), and picking one up adds it to the gold;
+  gold within 15 cells of the player is picked up by itself (player tick, `GoldAutoLootRange`);
+  older per-character gold moves into the account at login; `/gold <±amount>`.
+  Code: `InstanceEntities.Gold`, `AccountStash`, Gateway.
+  Docs: [04](../docs/protocol/04-player-entity.md) §6.
+- Loot: dying monsters drop currency, gems, flasks and equipment around the corpse, rolled in stages like the game's
+  with our own numbers: how many (by monster rarity, times item quantity: the league's, a mod's, the player's
+  increased quantity, no cap), the kind, for equipment the slot (armour often, jewellery seldom) and then any base the
+  level allows, and last the rarity: unique (one of that base's uniques, else rare), rare, magic, each chance raised
+  by item rarity. Bases tagged not_for_sale (unique-only bases like "Ring", Stygian Vise, Heist, Ritual, Expedition
+  bases) are left out, the atlas bases kept. Currency runs from Scrolls of Wisdom down to the Mirror, each from its
+  DropLevel. A unique's weight is the inverse of its disenchant value (`VillageUniqueDisenchantValues`, Ruthless has its
+  own column), so a Mageblood is about 840 times as rare as a Wanderlust, and a base whose uniques add up to less than 1
+  mostly gives a rare instead. The 1,527 reference weights are seeded into `unique_weights`; `/game_data unique_weight`
+  and `clear_unique_weight` edit the override layer live. Schema upgrades, repeated reference rebuilds and a reopened
+  database preserve overrides; invalid or non-finite weights are rejected before writing. The extracted JSON remains the fallback before seeding.
+  The core currency weights also live in `drop_currency_weights` (seeded from the compiled table with the client's
+  DropLevels, `GameDataDrops`); `ItemDrops.Build` prefers them and keeps the compiled table as the fallback, still gated by each
+  base's DropLevel. Cards and scarabs follow the poedata.dev community weights (`drop_item_weights`: 422 cards, 109
+  scarabs), and a map kill rolls our own base `drop_card_chance_pct`/`drop_scarab_chance_pct`; both settings are
+  editable live. The boss and divination-card area tables are seeded (630 bosses, 108 boss items, 555 area/card pairs) but
+  no roll reads them yet; [drop-data-schema](../docs/dev/drop-data-schema.md) has the schema and the next steps.
+  Mod affix spawn/generation weights (`SpawnWeight_*`, `GenerationWeight_*`, families and tags in `Mods.json`) are still
+  loaded from JSON; moving them would also require clearing the affix-pool cache on reload. Drops have the monster's level as item level, +1 from magic, +2 from rare and +3 from unique
+  monsters. One drop event's stackable items of one type become stacks up to its `CurrencyItems` StackSize (twenty-one
+  divine orbs lie as 10, 10 and 1), instead of one world item per unit (`ItemDrops.Stacked`).
+  Code: `ItemDrops.cs`, Gateway (`DropLoot`, `CommitProjectileKill`).
+  Docs: [15](../docs/protocol/15-progression.md) §3.
 
 ## 部分实现
 
@@ -212,6 +361,19 @@
 - 条件性物品门控会喂给实机池与属性发布；Kintsugi 的受击、过期与生命周期已核对。
   武器/光环、被追踪事件、数值阈值与受支持的运行时状态门控有自动化覆盖。
   未被追踪、统计近期与复合运算符仍是部分实现（[13](../docs/protocol/13-items.md)）。
+- **On-kill explosions and attribute damage reduction (implemented 2026-11-04; native behavior checked with the
+  official client 2026-11-05, server live check pending):** "Enemies you Kill Explode, dealing X% of their Life as
+  Physical Damage" (the Crusader body-armour prefix and the synthesis implicit) deals X% of the killed monster's
+  maximum life as physical damage to every hostile monster within 25 cells, mitigated by each target's resistances,
+  and a kill by the explosion can trigger another one. The radius is a fixed 25 cells: measured with the official
+  3.29.3b client, one explosion killed at 22.85 and 24.35 cells, and increased area of effect does not extend it.
+  The explosion consumes the corpse (0x2bd at once) and plays the native `HolyExplosion` art (MiscAnimated 2877,
+  `Metadata/Effects/Spells/holy_explode/holy_explode.ao`) for two seconds; its corpse was removed 0-6 ms after the
+  death. The Eater of Worlds body-armour implicits "1% less Damage Taken per X
+- Conditional item gates feed live pools and stat publication; Kintsugi incoming hits, expiry and lifecycle verified.
+  Weapon/aura, tracked-event, numeric-threshold and supported runtime-state gates have automated coverage.
+  The item mods' "when on low/full life or mana" spelling shares the "while" state flags and folds onto the plain stat.
+  Untracked, counted-recent and compound operators remain partial ([13](../docs/protocol/13-items.md)).
 
 - **物品词缀效果（2026-11-03 实现，自动化验证；实机客户端待做）：** 物品本地的提高效果属性会缩放该物品自身的显式词缀——
   全部显式词缀（`local_explicit_mod_effect_+%`：Simplex Amulet 100%、Focused Amulet 100%、Subsume the Source 120–240%），
@@ -424,6 +586,55 @@
   重铸保留品质并拒绝传奇。真实数据回归测试覆盖两个锁方向。
 
 ## 尚未实现
+- Sacred Orb rerolls: ordinary and Shift-repeat currency routes replace only the shared defence base roll (0..31).
+  Requires Armour/Mods components and a known variable native range.
+  Corrupted, mirrored and fixed-range targets are refused.
+  The same roll can recur and still costs one orb; affixes, quality, sockets, gems and other properties stay intact.
+  Automated coverage checks eligibility, persistence, save rollback and worn-item pool refresh.
+  Fourteen native captures recorded at `63c1039` verify ordinary/repeat use, refusals, inventory/stash combinations,
+  unchanged outcomes and restart persistence; fresh checks of the merged branch remain open.
+  Ward ranges count for eligibility, but Ward character calculations and recovery remain unimplemented.
+  Code: `CurrencyEffects.Sacred`, Gateway (`Program.Items.cs`).
+  Docs: [13](../docs/protocol/13-items.md), "Sacred Orb".
+- Special defence rules: local zero-ES modifiers override this item's base, mods and quality only for ES.
+  Supported equipment ES-to-Life conversion truncates each item's contribution, removes all equipment ES and adds
+  base Life before Life increases; independent global/aura ES remains ES and excluded shields grant no converted Life.
+  The corrupted-item conditional ES increase enters the global ES bucket, leaving tooltips and converted Life alone.
+  Hidden no-attribute-requirement modifiers retain the level gate.
+  Local requirement percentages (`local_attribute_requirements_+%`, `local_strength_requirement_+%` and the dexterity
+  and intelligence ones) change an item's attribute requirements, counting a row that is both implicit and explicit once;
+  automated, no native requirement check yet.
+  Automated coverage passes; historical native conversion and corrupted-item ES controls are recorded at `0bae37a`
+  and `c9060e4` (see the protocol reference for values).
+  Fresh real-client checks of the merged branch and other unique/conditional mechanics remain open.
+  Code: `ItemDefences.cs`, `ItemModStats.cs`, Gateway (`Program.Equipment.cs`).
+  Docs: [13](../docs/protocol/13-items.md) §2-§2d.
+- **Unique items and Mageblood (verified live 2026-10-26).** The client data links a unique's name (`Words` wordlist 6)
+  and artwork (`UniqueStashLayout` → `ItemVisualIdentity`), but not its mods, so `UniqueCatalog` holds each definition:
+  1,299 generated from Path of Building with their current base, implicits and rolls (`scripts/re/unique_items.py`),
+  compared with poedb's item cards, with the differences that remain on the roadmap. Divine and Blessed Orbs reroll
+  within a unique's own rolls, and an admin's `/game_data mod` range wins over them.
+  Ordinary uniques get default sockets; Tabula gets six linked whites and hidden overrides (tests; live check pending).
+  Skin of the Loyal gets its six linked random-colour sockets, and the 3.29 hidden no-white-socket property is on it and
+  Dialla's Malefaction (automated; live check pending).
+  Fixed "Has X Sockets" counts (Loreweave, Voidfletcher, The Squire, crests and hats) and Malachai's all-white Unset Ring
+  socket are generated from those rows too; link groups there use the Jeweller's approximation (automated).
+  Every definition but the five tinctures creates, writes and reloads by test (the server cannot write the Tincture
+  component). Seen in the client 2026-10-30, with their name, art, base, mods and item level: Tulfall, Shimmeron,
+  Replica Atziri's Foible, Kalandra's Touch, Emperor's Vigilance, The Broken Elegy, Gorgon's Gaze, Grand Spectrum and
+  Atziri's Reign.
+  `/item <name> <base name>` reaches one base of a unique with several (`/item Grand Spectrum Cobalt Jewel`).
+  `/item Mageblood` creates the Heavy Belt unique with its name, artwork and fixed mods (the Strength is the base
+  implicit); the client shows the unique tooltip.
+  While Mageblood is worn, the leftmost 2–4 magic utility flasks in the flask bar apply their effects permanently without
+  charges or a timer, and using them is refused (client mod, server backstop); the stats refresh when the belt or the
+  flask bar changes. Its flasks keep their buffs on the client without a timer (not seen live yet).
+  Headhunter: killing a rare gives each of its rolled affixes as a stack of character stats for 60 s (the same one resets
+  its time), with one Headhunter buff showing the count and the longest time, and
+  its rolled increased damage against rares (not seen live yet; they end on an area change, where the game keeps them).
+  Not yet: other uniques' mechanics, chancing, the "effects cannot be removed" backstop, the Foulborn rightmost variant,
+  Replica Headhunter and Enkindling (`UniqueCatalog`, `Program.Mageblood`, `StolenMods`, `Program.UniqueBelts`;
+  [13](../docs/protocol/13-items.md) §2e, §8a).
 
 - 多数传奇与特殊词缀（#60）以及点化（chancing）；Mageblood 与普通 Crown of Eyes 有定义；
   智慧卷轴、幻色石、工匠石、连接石、点金石、混沌石、神圣石、重铸石、蜕变石、改造石、增幅石、富豪石、崇高石、剥离石、
