@@ -229,29 +229,42 @@ static partial class Game
                 looks[hand] = VisibleItem.Empty(slot);
         // A bow is held in the left hand, and its model slot is not the main hand's: BowSetup holds the record the live server
         // sends (the bow's art in slot 1, an arrow in slot 0 with the weapon type and stance, the quiver on the back in 7).
+        bool bowHand = false;
         if (HandType(conn, PlayerInventories.Weapon1) is { Class: "Bow" } bow)
         {
             int quiver = looks.FindIndex(l => l.Slot == 1 && l.VisualIdentity != 0);
             ushort quiverArt = quiver >= 0 ? looks[quiver].VisualIdentity : ItemsFor(conn).Visual("DefaultQuiver") ?? 0x328b;
             looks.RemoveAll(l => l.Slot is 0 or 1 or 7);
             looks.AddRange(BowSetup.Entries(bow, ItemsFor(conn).Visual("DefaultArrow") ?? 0xb2f6, quiverArt));
+            bowHand = true;
         }
         var cosmeticSlots = CosmeticEffects.CosmeticOnlySlots.ToDictionary(s => s, VisibleItem.Empty);
         foreach (var worn in WornCosmetics(conn))
         {
-            if (MtxEffects.SlotOf(worn.Slot) is not { ModelSlot: byte model } slot || MtxEffects.Of(worn.MtxTypeHash) is not { } fx) continue;
+            if (MtxEffects.SlotOf(worn.Slot) is not { ModelSlot: byte model } slot) continue;
+            var fx = MtxEffects.Of(worn.MtxTypeHash);
             if (cosmeticSlots.ContainsKey(model))
             {
-                if (fx.Visual != 0)
-                    cosmeticSlots[model] = new VisibleItem(model, fx.Visual) { SkinVisual = fx.Visual, SkinHash = worn.MtxTypeHash };
+                if (fx is { Visual: not 0 } own)
+                    cosmeticSlots[model] = new VisibleItem(model, own.Visual) { SkinVisual = own.Visual, SkinHash = worn.MtxTypeHash };
                 continue;
             }
-            int at = looks.FindIndex(l => l.Slot == model);
+            // A bow character's hands are laid out differently: its weapon (the bow) is the record in slot 1, the main
+            // hand's slot 0 holds the drawn arrow and the off hand's art is the quiver in slot 7. The Cosmetics tab still
+            // names the model slots the ordinary way (Weapon 0, Off Hand 1), so without this a weapon skin dressed the
+            // arrow and an off-hand one dressed the bow (reported live 2026-11-08: "the weapon's and off-hand's looks are
+            // in the wrong place"). Only the two hand slots move; every other cosmetic slot is the same either way.
+            byte target = bowHand ? model switch { 0 => (byte)1, 1 => (byte)7, _ => model } : model;
+            int at = looks.FindIndex(l => l.Slot == target);
             if (at < 0 || looks[at].VisualIdentity == 0) continue;   // nothing equipped there to dress
-            if (slot.IsWeaponEffect && fx.WeaponEffect != 0)
-                looks[at] = looks[at] with { EffectVisual = fx.WeaponEffect, EffectHash = worn.MtxTypeHash };
-            else if (!slot.IsWeaponEffect && fx.Visual != 0)
-                looks[at] = looks[at] with { SkinVisual = fx.Visual, SkinHash = worn.MtxTypeHash };
+            // Most cosmetics have no model of their own (their ItemVisualIdentity row is the currency orb placeholder,
+            // Microtransactions.cs), so the hash alone is what dresses the item and the client draws the skin itself:
+            // the item keeps its own art here instead of the placeholder, which is what had a weapon skin hanging at
+            // the character's feet (live 2026-11-08).
+            if (slot.IsWeaponEffect)
+                looks[at] = looks[at] with { EffectVisual = fx?.WeaponEffect ?? 0, EffectHash = worn.MtxTypeHash };
+            else
+                looks[at] = looks[at] with { SkinVisual = fx?.Visual ?? 0, SkinHash = worn.MtxTypeHash };
         }
         return [.. looks, .. cosmeticSlots.Values];
     }

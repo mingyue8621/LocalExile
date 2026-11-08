@@ -137,6 +137,11 @@ sealed class CosmeticEffects(string folder = "data")
         var identities = Hash16s(Path.Combine(dir, "ItemVisualIdentity.json"));
         var weaponEffects = Hash16s(Path.Combine(dir, "ItemVisualEffect.json"));
         if (gameSpecific is null || identities is null || weaponEffects is null) return (effects, slots);
+        // A cosmetic's own ItemVisualIdentity row usually carries no model: 3046 of the 3214 rows a cosmetic names have
+        // the currency orb as their AOFile. Sent as an entry's art, that drew a currency orb where the item belongs
+        // (live 2026-11-08: a weapon skin "hangs at the character's feet"). Those cosmetics name only their MTX hash, so
+        // the client draws the skin itself; the 168 alternate-art rows keep their real model.
+        var placeholders = PlaceholderVisuals(Path.Combine(dir, "ItemVisualIdentity.json"));
         var skillEffects = Rows(Path.Combine(dir, "MtxTypeGameSpecific.json"))
             .Where(r => Ints(r, "__col4").Contains(27)).Select(r => r.GetProperty("HASH32").GetUInt32()).ToHashSet();
 
@@ -144,6 +149,7 @@ sealed class CosmeticEffects(string folder = "data")
         {
             if (Int(row, "Mtx") is not int mtx || mtx < 0 || mtx >= gameSpecific.Count || gameSpecific[mtx] is not uint hash) continue;
             ushort visual = Int(row, "VisualIdentity") is int vi && vi >= 0 && vi < identities.Count ? identities[vi] : (ushort)0;
+            if (placeholders?.Contains(visual) == true) visual = 0;
             ushort effect = Int(row, "VisualEffect") is int ve && ve >= 0 && ve < weaponEffects.Count ? weaponEffects[ve] : (ushort)0;
             var stats = new List<(uint, int)>();
             if (row.TryGetProperty("Stats", out var keys) && keys.ValueKind == JsonValueKind.Array
@@ -220,6 +226,21 @@ sealed class CosmeticEffects(string folder = "data")
     static List<ushort>? Hash16s(string path) => File.Exists(path)
         ? [.. Rows(path).Select(r => Int(r, "HASH16") is int h ? (ushort)h : (ushort)0)]
         : null;
+
+    /// <summary>The HASH16s of the ItemVisualIdentity rows that carry no model of their own: an empty AOFile, or the
+    /// currency orb every cosmetic's row names instead of art.</summary>
+    static HashSet<ushort>? PlaceholderVisuals(string path)
+    {
+        if (!File.Exists(path)) return null;
+        var set = new HashSet<ushort>();
+        foreach (var row in Rows(path))
+        {
+            string art = row.TryGetProperty("AOFile", out var a) ? a.GetString() ?? "" : "";
+            if ((art.Length == 0 || art == "Metadata/Items/Currency/CurrencyOrb.ao") && Int(row, "HASH16") is int h and > 0)
+                set.Add((ushort)h);
+        }
+        return set;
+    }
 
     static List<JsonElement> Rows(string path)
     {
