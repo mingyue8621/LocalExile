@@ -41,6 +41,11 @@ sealed record MonsterAttack(ushort SkillId, double Seconds, double Range, Damage
     /// virtual cast-time stat; an attack's from the weapon duration. Sending only attack stats for a spell left the client's
     /// cast-duration function without its value and crashed it (0xc0000005, live 2026-10-31).</summary>
     public bool Spell { get; init; }
+    /// <summary>Whether the client plays the skill as a cast, and so needs cast-time stats (a spell's own
+    /// <see cref="Spell"/> by its stat set, or an ActiveSkillType Spell effect whose stat set carries no casting_spell:
+    /// the Vaal Oversoul's IncaBossRocks. That one had attack stats only, and its cast duration had no value: the boss
+    /// stood and played no animation through every action).</summary>
+    public bool CastTime { get; init; }
 
     /// <summary>The attack's final stats (the client derives none, 11-skills.md §4): the swing time, reach and damage.
     /// These also go on the monster's Stats component.</summary>
@@ -69,10 +74,10 @@ sealed record MonsterAttack(ushort SkillId, double Seconds, double Range, Damage
     /// target and waits there until S→C 0x1ac starts the swing (07 §5). Anything else plays where it stands.</summary>
     public IReadOnlyList<(uint, int)> SkillStats() => InPlace ? InPlaceSkillStats() : Stats();
 
-    /// <summary>An attack's <see cref="Stats"/> or a spell's cast time, plus skill_is_non_pathing: the action starts at once
+    /// <summary>An attack's <see cref="Stats"/> or a cast's duration, plus skill_is_non_pathing: the action starts at once
     /// where the actor stands (the Melee action's begin, 0x141938830). Only on the skill: on the monster's Stats component
     /// it also stops its Move action from pathing (live 2026-10-17: the monsters stood still).</summary>
-    public IReadOnlyList<(uint, int)> InPlaceSkillStats() => [.. Spell ? SpellStats() : Stats(), (StatKeys.SkillIsNonPathing, 1)];
+    public IReadOnlyList<(uint, int)> InPlaceSkillStats() => [.. CastTime ? SpellStats() : Stats(), (StatKeys.SkillIsNonPathing, 1)];
 
     IReadOnlyList<(uint, int)> SpellStats()
     {

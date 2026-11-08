@@ -135,6 +135,15 @@ Part of [Status](../Status.md); what to build next in this area is in
   to the ceiling. Spell hits (`SkillCatalog.HitDamage`) read the skill's own
   `spell_minimum/maximum_base_{type}_damage` and are not capped, since those are the client's real values.
   Not checked with the real client yet.
+
+- **A Spell-type monster skill sends cast-time stats, not attack stats (2026-11-08).** `MonsterAttack.CastTime` is the
+  effect's stat set `casting_spell` or, failing that, its ActiveSkillType Spell. The Vaal Oversoul's IncaBossRocks,
+  its first granted effect and the one it always uses, carries no casting_spell, so the skill sent
+  `main_hand_attack_duration_ms` only; the client's cast-duration path read a missing virtual cast time as 0 and the
+  boss stood through every 0x1ab with no animation. `Spell` (an unavoidable hit in the damage pipeline) still follows
+  the stat set. Not checked live yet. The rest of the boss's order is unmodelled: it never uses its other seven
+  granted effects (spray, travel, explosion, summon, laser, the two triggered spells), and its stances (bone, meat,
+  claw: ACT `ChangeToStance2/3`) never change, which is on the roadmap.
 - The King in the Mists' Crux of Nothingness encounter: `An Audience With The King` alone opens the area in the map
   device; the humanoid form fights with the default attack, spell projectile, Vine Slam and Vine Cascade, spawns the three
   Mystic Fetishes as visible shrines, teleports next to them and runs the ritual server-side (the fetish is immune

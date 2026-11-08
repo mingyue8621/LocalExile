@@ -154,7 +154,7 @@ static partial class Game
             radius *= (1 + Raw("active_skill_area_of_effect_radius_+%_final") / 100.0)
                 * Math.Sqrt(Math.Max(0, 1 + (mods["base_skill_area_of_effect_+%"] + Raw("base_skill_area_of_effect_+%")) / 100.0));
             ushort skill = (ushort)(0x4000 + index);
-            var attack = new MonsterAttack(skill, seconds, range, damage) { Spell = spell, Ranged = spell, Scripted = true };
+            var attack = new MonsterAttack(skill, seconds, range, damage) { Spell = spell, CastTime = spell, Ranged = spell, Scripted = true };
             var projectile = catalog.MonsterProjectile(effect);
             // Ice spear / Flame spray are named active skills rather than monster_projectile_spell rows.
             projectile ??= GolemProjectile(effect, catalog);

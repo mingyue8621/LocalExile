@@ -163,9 +163,12 @@ static partial class Game
         var summon = variety.GrantedEffects is [int summonEffect, ..] ? catalog.MonsterSummon(summonEffect, level) : null;
         // A monster whose effect is a spell (the King's Death Effigy, fetish hazards) needs cast-time stats,
         // not the melee attack duration; the client crashed in its cast-duration path when the actor record carried only
-        // attack stats (0xc0000005, live 2026-10-31).
+        // attack stats (0xc0000005, live 2026-10-31). An ActiveSkillType Spell effect needs them whether or not its stat
+        // set says casting_spell: the Vaal Oversoul's IncaBossRocks carries none, and with attack stats only its cast
+        // duration had no value, so the boss played no animation through every 0x1ab (MonsterAttack.CastTime).
         bool spell = effect >= 0 && catalog.EffectStats(effect, level)
             .Any(s => s.Item1 == StatKeys.CastingSpell && s.Item2 != 0);
+        bool castTime = spell || effect >= 0 && catalog.IsSpell(effect);
         // A ranged attack reaches its variety's MaximumAttackDistance (a Sand Spitter's 30): the monster walks up to that
         // before it shoots, as GGG's do. A ranged spell (the Maven's and the Nucleus' barrages) and a summoner keep the
         // aggro range they were given with the map affixes; the attack distance of such a variety is its melee fallback.
@@ -175,7 +178,7 @@ static partial class Game
         // the chase's walk-up stops `Range - 1` cells short of the player (the player's size), so its 6 units as 0.55
         // cells would park the monster inside them; see the roadmap.
         double reachUnits = summon is not null || rangedAttack && !kingActor
-            ? spell ? Math.Max(variety.AttackRange, variety.AggroRange) : variety.AttackRange
+            ? castTime ? Math.Max(variety.AttackRange, variety.AggroRange) : variety.AttackRange
             : 0;
         double reach = reachUnits > 0 ? reachUnits / WorldUnits.PerCell : variety.AttackRange;
         double swing = !kingActor && effect >= 0 && catalog.IsSpell(effect) && catalog.CastTimeMs(effect) > 0
@@ -190,6 +193,7 @@ static partial class Game
             mods.Effects.Hit(DamagePacket.Of(DamageType.Physical, baseMin, baseMax)))
         {
             Spell = spell,
+            CastTime = castTime,
             Scripted = kingActor || brine,
             Ranged = rangedAttack,
             Projectile = projectile,

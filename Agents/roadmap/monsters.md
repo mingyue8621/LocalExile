@@ -25,7 +25,9 @@ Items keep the Roadmap's priority groups, and are in rough priority order within
   Automated cadence and lifecycle checks retain interruption and stage-completion guards.
 - **Start:** the systems the 74 unsupported monster mods need (auras on allies, retaliation and on-death skills, ailments and
   curses on the player; [14](../docs/protocol/14-monster-packs.md) §5), stages of other bosses (`BossFights.cs` has Hillock's
-  and `KingInMists.cs` the two-form Ritual pinnacle), pack
+  and `KingInMists.cs` the two-form Ritual pinnacle), every boss's skill order beyond its first granted effect (the Vaal
+  Oversoul only ever casts IncaBossRocks: rocks, spray, travel, explosion, summon, laser and its two triggered spells,
+  with the three stances of `ChangeToStance2/3`, are unmodelled), pack
   `Grounds`, the varieties with ControlZone / BlightTower / Mercenary … components (each needs its deserializer,
   schema.md; NPC, InteractionAction and Timer are written), the bandit lords' help-or-kill dialogue, bosses' later
   forms (Abberath2, Shakari2, Malachai's second form, The Depraved Trinity) created by their fight, tile spawner bosses
