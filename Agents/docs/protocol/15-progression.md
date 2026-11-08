@@ -223,6 +223,11 @@ and league bases), item level = the monster's level, +1 magic, +2 rare, +3 uniqu
 unique, rare or magic, raised by item rarity. A unique is chosen among its base's by the inverse of its
 `VillageUniqueDisenchantValues` value (the client's measure of a unique's rarity; `RuthlessValue` in Ruthless); where a
 base's weights add up to less than 1 the rest gives a rare, and a unique outside that table does not drop.
+A base's drop level does not bound its uniques' own requirements, so the rolled unique must also fit the area: its
+requirement (`ItemModStats.LevelRequirement`, the number the client shows — the base's drop level and every mod's
+`Mods.dat` Level × 4/5) has to be at most the monster's level, or the item rolls on as rare. Biting Braid is a Chain Belt
+(drop level 2) that requires 52, and without the gate a level-30 area dropped it (live 2026-11-09: a level-10 character
+identified level-30 to level-60 uniques off low bases).
 `DropLoot` puts each as a WorldItem
 ([13](13-items.md) §5) 3–6 cells around the corpse, on a walkable cell when the walk map is known. `Game_DROPS=0` turns
 it off.

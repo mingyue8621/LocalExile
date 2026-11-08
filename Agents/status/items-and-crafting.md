@@ -183,6 +183,10 @@
   而一个基底其传奇权重合计小于 1 时多数会给稀有。
   1,527 个参考权重被播种进 `unique_weights`；`/game_data unique_weight` 与 `clear_unique_weight` 实机编辑覆盖层。
   schema 升级、反复重建参考与重开数据库都会保留覆盖；非法或非有限的权重在写入前被拒绝。解包出的 JSON 在播种之前仍是回落。
+  **传奇还要过「等级」这道闸（2026-11-09）**：基底的 DropLevel 管不住它自己那些传奇的需求等级（Biting Braid 是 Chain Belt，
+  基底 2 级、却要 52 级），原先只要基底能掉就能掷出它，于是 10 级角色在三十来级的区域能捡到要 30/40/50/60 级的传奇。
+  现在掷出的传奇还要满足「需求等级 ≤ 区域等级」才留下，否则按稀有滚过去；需求等级用客户端同一个公式
+  （`ItemModStats.LevelRequirement`：基底 DropLevel 与每条词缀 `Mods.dat` Level × 4/5 取大）。
   词缀生成/几率权重（`SpawnWeight_*`、`GenerationWeight_*`、`Mods.json` 里的家族与标签）仍从 JSON 读取；
   迁移它们还需要在重载时清空词缀池缓存。掉落的物品等级取怪物等级，魔法 +1、稀有 +2、传奇 +3。
   一次掉落事件里同类型的可堆叠物品会合成不超过其 `CurrencyItems` StackSize 的堆叠（二十一颗神圣石躺成 10、10 与 1），

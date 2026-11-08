@@ -12,7 +12,8 @@ using GameServer.Core.Protocol.Instance;
 ///    monster's level meets, alike. Bases the game keeps out of the drop pools are left out: those tagged not_for_sale
 ///    (unique-only bases such as "Ring", Stygian Vise, league and Heist bases), except the atlas bases, which drop in maps.
 /// 4. Its rarity (<see cref="RarityChances"/>, raised by item rarity): unique (one of that base's uniques by
-///    <see cref="UniqueWeight"/>, else rare), rare, magic or normal, in that order; magic, rare and unique items drop
+///    <see cref="UniqueWeight"/> that the area's level can carry — a unique's own requirement, not its base's drop level,
+///    is what gates it — else rare), rare, magic or normal, in that order; magic, rare and unique items drop
 ///    unidentified, at the monster's level plus <see cref="ItemLevelBonus"/>.
 /// </summary>
 sealed class ItemDrops(ItemCatalog catalog, ItemRolls? rolls = null, string folder = "data", bool hardMode = false, AtlasCatalog? maps = null,
@@ -359,7 +360,7 @@ sealed class ItemDrops(ItemCatalog catalog, ItemRolls? rolls = null, string fold
         {
             // Magic, rare and unique items drop unidentified (a Scroll of Wisdom identifies them, C→S 0x71).
             bool rolledUnique = rng.NextDouble() < chances.Unique;
-            if (rolledUnique && Unique(type, itemLevel, rng) is { } unique)
+            if (rolledUnique && Unique(type, level, itemLevel, rng) is { } unique)
             {
                 // The unique's own base row (an Id can name another row than the one rolled).
                 item = unique with { Identified = false };
@@ -371,9 +372,11 @@ sealed class ItemDrops(ItemCatalog catalog, ItemRolls? rolls = null, string fold
         return new Drop(item, type);
     }
 
-    // A unique of this base at the monster's level, or null when the base has none the server can create (then the item
-    // rolls on as rare or magic, as the game makes it rare).
-    Item? Unique(ItemCatalog.BaseType type, int level, Random rng)
+    // A unique of this base the area's level allows, or null when the base has none the server can create or the one
+    // rolled needs a higher level than the area has (then the item rolls on as rare or magic, as the game makes it).
+    // Every base carries uniques of its own requirement, which the base's drop level does not bound: Biting Braid is a
+    // Chain Belt (drop level 2) that requires 52, so a level-30 area must not drop it even though the base may.
+    internal Item? Unique(ItemCatalog.BaseType type, int level, int itemLevel, Random rng)
     {
         if (uniques is null) return null;
         var all = uniques.All;
@@ -389,7 +392,12 @@ sealed class ItemDrops(ItemCatalog catalog, ItemRolls? rolls = null, string fold
             _uniques = index = new(all, byBase);
         }
         if (!index.ByBase.TryGetValue(type.Id, out var candidates) || PickUnique(candidates, rng) is not { } chosen) return null;
-        return uniques.Create(chosen, rng) is { } created ? created with { ItemLevel = (byte)Math.Clamp(level, 1, 100) } : null;
+        if (uniques.Create(chosen, rng) is not { } created) return null;
+        created = created with { ItemLevel = (byte)Math.Clamp(itemLevel, 1, 100) };
+        // The requirement the client shows, computed the server's way (ItemModStats.LevelRequirement: the base's drop
+        // level and every mod's Mods.dat Level × 4/5), against the level of the area it would drop in.
+        var baseType = catalog.ByHash(created.TypeHash) ?? type;
+        return ItemModStats.LevelRequirement(created, baseType.DropLevel, catalog.Mods) > level ? null : created;
     }
 
     /// <summary>One of a base's uniques by weight, or null. The weights are absolute: while a base's add up to less than 1
