@@ -13,9 +13,14 @@ static partial class Game
     /// fixed 8 metres "in your presence"). The client has both from the .ot; the server's stats do not carry them.</summary>
     internal const int BaseTotemsAllowed = 1, PresenceRadius = 80;
 
+    /// <summary>How long a totem whose skill has no base_totem_duration is kept: a day of game seconds, which no
+    /// session reaches. The ballistas and the melee totems last until they are killed or replaced; only the spell
+    /// totems carry a duration of their own.</summary>
+    internal const double PermanentTotemSeconds = 86400;
+
     /// <summary>The totem skills with an executor: Rejuvenation Totem's aura (BuffDefinitions 172 totem_aura_life_regen,
-    /// base radius 10, wiki Rejuvenation Totem) regenerates the player's Life. Other totem skills keep their old cast:
-    /// a totem that does not use its skill is not placed.</summary>
+    /// base radius 10, wiki Rejuvenation Totem) regenerates the player's Life. Every other totem skill places its
+    /// totem too (see <see cref="TotemVariety"/>); none of them fire yet, so the totem only stands and takes hits.</summary>
     static readonly Dictionary<string, (ushort Buff, int Radius)> TotemAuras = new() { ["RejuvenationTotem"] = (172, 10) };
 
     // GrantedEffects row → MonsterVarieties row of its default skin: ActiveSkills.SkillTotemId is SkillTotemVariations'
@@ -64,7 +69,7 @@ static partial class Game
 
     /// <summary>The totem variety a gem skill with a totem executor summons, or null.</summary>
     internal static MonsterCatalog.Variety? TotemVariety(ClientState conn, int effect) =>
-        SkillsFor(conn).EffectId(effect) is { } id && TotemAuras.ContainsKey(id) && TotemVarieties.Value.TryGetValue(effect, out int row)
+        TotemVarieties.Value.TryGetValue(effect, out int row)
             && Monsters.Find(row.ToString()) is { Supported: true } variety ? variety : null;
 
     // A totem skill's use, after its mana: the totem rises at the aimed point once the summon ends (GrantedEffects
@@ -102,6 +107,10 @@ static partial class Game
         int baseLife = Monsters.BaseLife(variety, level) ?? 1;
         uint life = (uint)Math.Clamp((long)baseLife * (100 + Get("totem_life_+%")) / 100, 1, int.MaxValue);
         double seconds = Get("base_totem_duration") / 1000.0 * Math.Max(0, 100 + Get("totem_duration_+%")) / 100;
+        // A skill without base_totem_duration keeps its totem until it is killed, replaced or the player dies (the
+        // ballistas and the melee totems): only the spell totems carry a duration. Zero would otherwise expire it at
+        // once, and the client would never see the totem it was just sent.
+        if (seconds <= 0) seconds = PermanentTotemSeconds;
         TotemState.Aura? aura = null;
         if (SkillsFor(conn).EffectId(effect) is { } id && TotemAuras.TryGetValue(id, out var source))
         {
