@@ -23,6 +23,9 @@ public sealed class PortalsModule : IModule, IDisposable
     /// <inheritdoc/>
     public void Load(IModuleContext module)
     {
+        // A portal cosmetic is the portal's own 0x008f entry, so the game module re-lists the standing portals when one
+        // is picked; the town portals are this module's (they are no map device's), hence this.
+        TownPortals = StandingTownPortals;
         module.OnAreaGenerated(async player =>
         {
             var conn = ConnOf(player); var (remote, stream, ciphers) = conn.Wire;

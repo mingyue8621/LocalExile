@@ -233,7 +233,17 @@ name, or the whole of it picks one, and a piece several effects share is answere
 is the completion ([10](10-chat-and-commands.md) §4).
 That the client swaps the effect on a re-sent 0x008f is what the dev command tests; a portal whose variation the client
 cannot resolve is expected to fall back to the default. Seen live 2026-10-21: the swap works — variation 6 draws the
-Black Hole effect on all six Beach portals, in place of the base visual and with no second object. **The orientation is
+Black Hole effect on all six Beach portals, in place of the base visual and with no second object.
+
+**Every portal the player owns carries it, not just the device's.** A town portal (a Portal Scroll's, the Portal
+skill's) and the portal back to it are listed with the same variation
+(`PortalsFeature.StandingTownPortals`), and a cosmetic picked in the Cosmetics tab's Portal slot (C→S 0x1f9, slot 20)
+re-lists them too: `Game.ResendMapPortals` sends the device's portals and then the town portals as their own 0x008f
+(the second list is complete for the portals it names, so it closes none of the first). Live 2026-11-08: before this,
+a pick sent no 0x008f at all outside a hideout with device portals open, and a scroll's portal was always listed with
+variation 0 — the effect never showed on it.
+
+**The orientation is
 the rig's own**: Black Hole's disc lies flat by design (as in the real game), and the portal's Positioned rotation is
 ignored when the client places the shop rig — 0°, 90° and 270°, and portal types 1, 2 and 4 (`/map_portal 2|4`), all
 render identically. `/portal_rotation <degrees>` (dev) still rebuilds the standing portals turned by that angle

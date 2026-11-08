@@ -189,7 +189,8 @@ static class PortalsFeature
         _ = Task.Delay(MapPortalListMs).ContinueWith(async _ =>
         {
             if (!conn.Closed && conn.BackPortal?.Id == id)
-                await Send(remote, stream, ciphers, InstanceMapDevice.Portals(0, [new(id, open.Area, owner)]),
+                await Send(remote, stream, ciphers, InstanceMapDevice.Portals(0,
+                    [new(id, open.Area, owner, conn.MapPortalStyle, conn.CosmeticPortalVariation)]),
                     $"0x008f the portal back 0x{id:x} leads to 0x{open.Area:x4}");
         });
     }
@@ -248,14 +249,37 @@ static class PortalsFeature
         string owner = CharacterName(conn);
         OpenPortals[owner] = new OpenPortal(here, conn.InstanceNumber, x, y, leadsTo);
         Console.WriteLine($"[gateway] {remote} {why}: town portal at ({x}, {y}) of 0x{here:x4} instance {conn.InstanceNumber} → 0x{leadsTo:x4}");
-        // 0x8f only reaches a portal the client has finished creating (MapPortalListMs, as the device's portals).
+        // 0x8f only reaches a portal the client has finished creating (MapPortalListMs, as the device's portals). The
+        // entry's variation is the portal cosmetic: the scroll's portal shows the shop effect too, not just the device's.
         _ = Task.Delay(MapPortalListMs).ContinueWith(async _ =>
         {
             if (!conn.Closed && conn.ReturnPortal?.Id == id)
-                await Send(remote, stream, ciphers, InstanceMapDevice.Portals(0, [new(id, leadsTo, owner)]),
+                await Send(remote, stream, ciphers, InstanceMapDevice.Portals(0,
+                    [new(id, leadsTo, owner, conn.MapPortalStyle, conn.CosmeticPortalVariation)]),
                     $"0x008f the Portal Scroll's portal 0x{id:x} leads to 0x{leadsTo:x4} ({(toHideout ? "the hideout" : "the last town")})");
         });
     }
+
+    // The town portals standing in this area, as 0x008f entries with the portal cosmetic's variation: the one this area
+    // opened (a Portal Scroll's or the Portal skill's, or a map's own way back) and, in the town or hideout it leads to,
+    // the portal back to it. The game module asks for these when a cosmetic changes, since a re-sent entry is what makes
+    // the client swap an open portal's visual (Game.TownPortals).
+    internal static List<InstanceMapDevice.Portal> StandingTownPortals(ClientState conn)
+    {
+        var list = new List<InstanceMapDevice.Portal>();
+        string owner = CharacterName(conn);
+        if (conn.ReturnPortal is { } town && ReturnPortalLeads(conn) is ushort leads and not 0)
+            list.Add(new(town.Id, leads, owner, conn.MapPortalStyle, conn.CosmeticPortalVariation));
+        if (conn.BackPortal is { } back && OpenPortals.TryGetValue(owner, out var open) && open.Area != 0)
+            list.Add(new(back.Id, open.Area, owner, conn.MapPortalStyle, conn.CosmeticPortalVariation));
+        return list;
+    }
+
+    // Where the portal this area opened leads: the hideout when a map's device opened the area, else the character's last
+    // town (ReturnPortalTo, 0 for the hideout, is only set with its hash when it is a town).
+    static ushort ReturnPortalLeads(ClientState conn) =>
+        MapDevices.Value.IsMapArea(conn.Layout.Hash) && HomeHideout(conn) is { } home ? home.AreaHash16 : conn.ReturnPortalTo;
+
     // C→S 0x00e7: an Atlas map node picked in the hideout map device (u16 WorldAreas HASH16, u8). The layout becomes
     // what the next generic map key opens.
     internal static async Task SelectAtlasMap(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, (ushort Area, byte Mode) picked)

@@ -107,6 +107,8 @@ static class CosmeticsFeature
         if (pick.Slot == InstanceMicrotransactions.PortalSlot)
         {
             ushort variation = record is not null && Cosmetics.Portals.FirstOrDefault(p => p.Hash == record.MtxTypeHash) is { } portal ? (ushort)portal.Index : (ushort)0;
+            Console.WriteLine($"[gateway] {remote} portal cosmetic: record {pick.RecordId} (hash 0x{record?.MtxTypeHash ?? 0:x8}) → " +
+                (variation == 0 ? "no MicrotransactionPortalVariations row: the base effect" : $"variation {variation}"));
             conn.CosmeticPortalVariation = variation;
             CharacterSaves.SetPortalCosmetic(character, variation);
             conn.WornCosmetics = null;

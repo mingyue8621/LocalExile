@@ -11,7 +11,12 @@
   （2026-10-21 实测：黑洞效果把六个传送门的基础外观全换掉了——它那个平盘就是真实美术；客户端保留每套骨架自身的
   朝向，会忽略对象的旋转和传送门类型，`/portal_rotation` 是针对确实朝向不对的骨架的开发用旋钮）。
   选择按角色保存（存档里的 `PortalCosmetic`，已验证重登后仍然保留）。
-  代码：`Cosmetics.cs`、`InstanceMapDevice.Portal`、Gateway（`ResendMapPortals`、`/cosmetic`）。
+  **2026-11-08 修好一处漏掉的**：卷轴/传送技能开的传送门、以及回程门，此前下发 0x008f 时变体恒为 0，
+  在地图装置没有门的时候选时装更是**一条 0x008f 都不发**，所以这些门永远显示基础外观。现在
+  `PortalsFeature.StandingTownPortals` 让它们也带变体，`ResendMapPortals` 在挑时装时把「装置的门」和
+  「城镇门/回程门」分成两条 0x008f 各发一遍（后一条对它所列的门是完整的，不会顶掉前一条）。
+  代码：`Cosmetics.cs`、`InstanceMapDevice.Portal`、Gateway（`ResendMapPortals`、`Game.TownPortals`）、
+  `PortalsFeature.StandingTownPortals`、`/cosmetic`。
   文档：[21](../docs/protocol/21-hideouts.md) §5。
 - 微交易：每个账号拥有客户端能展示的全部外观（7721 条带 `MtxTypeGameSpecific` 行的 `MtxTypes` 记录）；
   微交易面板（N）、商城的「ALREADY OWNED」标记和外观页签（K）都能加载（C→S 0x1f2 → S→C 0x1f4，
