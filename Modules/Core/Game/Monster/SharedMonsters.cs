@@ -80,8 +80,8 @@ static partial class Game
             if (!m.Aggro && d > m.AggroRange) m.Target = null; // gave up: free for whoever comes
             return true;
         }
-        // In its reach, or still chasing (the AI gives up beyond twice its aggro range, as before).
-        double reach = Math.Max(1, m.AggroRange) * (m.Aggro && !live ? 2 : 1);
+        // In its reach, or still chasing (a monster that noticed the player follows them as far as its own row says).
+        double reach = m.Aggro ? m.ChaseRange : Math.Max(1, m.AggroRange);
         if (conn.PlayerLife == 0 || d > reach || conn.Instance is not null && !conn.MonsterViews.ContainsKey(id)) return false;
         if (live)
         {

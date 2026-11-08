@@ -299,9 +299,10 @@ static partial class Game
             MonsterEmerge.AddLocked(conn, id, new SpawnedMonster($"{variety.Name}@{level}", conn.NewMonsterWalk(id, x, y, walkSpeed, bodySize, rarity == MonsterRarity.Unique),
                 // MinAgroRange/MaxAgroRange are world units too (105–135 for a Vaal archer, 9.6–12.4 cells; read as
                 // cells the monster noticed the player from four screens off). At least 3 cells, or a row with a small
-                // range would never wake up.
+                // range would never wake up. The chase goes on for the row's own number of cells (SpawnedMonster
+                // .ChaseRange): noticed at 12, it follows the player as far as the game's does.
                 (int)Math.Max(3, Math.Round(variety.AggroRange / WorldUnits.PerCell)),
-                Math.Max(2, variety.ObjectSize + 1), life)
+                Math.Max(2, variety.ObjectSize + 1), life, (int)Math.Max(3, variety.AggroRange))
             {
                 Attack = skill is null ? null : attack, Hostile = !friendly, Variety = variety, Level = level, Rarity = rarity,
                 Scripted = !friendly && scripted,
@@ -582,7 +583,7 @@ static partial class Game
                     m.BossBarShown = true;
                     plan.BossBars.Add((id, m));
                 }
-                else if (m.Aggro && !m.Fleeing && d > 2 * m.AggroRange && !conn.Minions.Owns(id))   // a flee walk is not cut short; a minion keeps following
+                else if (m.Aggro && !m.Fleeing && d > m.ChaseRange && !conn.Minions.Owns(id))   // a flee walk is not cut short; a minion keeps following
                 {
                     m.Aggro = false;
                     m.SwingGeneration = null;

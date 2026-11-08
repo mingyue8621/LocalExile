@@ -126,7 +126,7 @@ sealed class OpenShop(SpawnedNpc npc, Dictionary<uint, (uint Tab, InventoryItem 
     readonly Dictionary<uint, uint> _revisions = [];
 }
 
-sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange, int stopRange, uint maxLife)
+sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange, int stopRange, uint maxLife, int chaseRange = 0)
 {
     public double ReceivedActionFactor = 1;
     public double ReceivedActionUntil;
@@ -268,6 +268,11 @@ sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange, int s
     public PlayerWalk Walk { get; set; } = walk;
     public int AggroRange => aggroRange;
     public int StopRange => stopRange;
+    /// <summary>How far a monster that already noticed the player goes on chasing: the variety's own
+    /// MinAgroRange/MaxAgroRange read as cells (a Vaal archer's 105–135), not the 12 within which it notices them.
+    /// Twice <see cref="AggroRange"/> gave up 24 cells out (8 for a Raised Zombie), so a monster stopped following a
+    /// player who simply walked away (live 2026-11-08); the data's own row keeps the chase as long as the game's.</summary>
+    public int ChaseRange => chaseRange > 0 ? chaseRange : 2 * aggroRange;
     public uint MaxLife { get; set; } = maxLife;
     public uint Life = maxLife;
     // Until when its last flinch plays (Clock seconds; HitReaction): no new action or flinch before.
