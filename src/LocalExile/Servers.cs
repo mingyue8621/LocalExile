@@ -111,6 +111,10 @@ sealed class Servers : IDisposable
         foreach (var output in _logs) lock (output) output.Dispose();
     }
 
+    /// <summary>Programs deployed inside the install that are the player's own windows, not what a stop ends: the login
+    /// launcher sits beside the game in <c>Client\</c> and is what starts it.</summary>
+    static readonly string[] KeptRunning = ["流放之路登录器.exe"];
+
     /// <summary>"stop": what this install runs — its own LocalExile.exe, app\'s servers and the client — except this one.
     /// Not everything under the folder: a tool the player keeps beside it (a launcher of their own) is not the install's
     /// to kill, and killing it would end the tree that asked for the stop (live 2026-11-08: the console's Stop did
@@ -128,6 +132,10 @@ sealed class Servers : IDisposable
                 try { path = process.MainModule?.FileName; }
                 catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException) { continue; }
                 if (path is null || process.Id == Environment.ProcessId) continue;
+                // The login launcher is deployed beside the game in Client\, but it is the window the player starts the game
+                // from, not the game: a stop closes the game and leaves that window open (live 2026-11-09: Stop closed the
+                // login launcher too, so starting the servers again meant opening it once more).
+                if (KeptRunning.Contains(Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)) continue;
                 // A linked client's path is outside the install: it is told by its name.
                 bool ours = path.StartsWith(app, StringComparison.OrdinalIgnoreCase) || path.StartsWith(client, StringComparison.OrdinalIgnoreCase)
                     || path.Equals(self, StringComparison.OrdinalIgnoreCase)
