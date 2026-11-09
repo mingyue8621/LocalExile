@@ -111,8 +111,10 @@ It prints no line itself: S→C 0x12d with BackendErrors code 240 (JoinedGlobalC
 chat channel {1} {0}." with the placeholders unfilled, so the Gateway sends that text filled in as a 0x17 line instead.
 The Gateway (`Program.Chat.cs`, `ChatChannels`) answers every 0x134 with 0x135: the number asked for, else the
 character's last channel of that kind, else channel 1, and the language echoed.
-After the answer it prints "You have joined global chat channel N." when the channel is new for the character or a
-command asked for it.
+After the answer it prints "You have joined global chat channel N." for **a command only** (`/global N`, `/trade N`): the
+client's own join on entering an area is silent, since printing it there put a global and a trade line in a fresh
+character's chat before play (live 2026-11-09; before that the line also went out when the channel was new for the
+character, which is every login).
 The client joins only once per game session: after an area change (a new instance connection, live 2026-10-25 with
 `/goto`) the listener runs again but flag +0xa08 is set, and the new instance's channels are 0, so the tabs would grey
 out again.

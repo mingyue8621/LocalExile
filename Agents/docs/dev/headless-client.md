@@ -283,7 +283,8 @@ WARP were skipped on purpose (the reference row stands in for the baseline).
 | DX11 with `--window minimized` | preset | — | — | — | — | — | no frames while minimized: never reached login |
 
 "All ✓": `/waypoints all` (reply listing every waypoint), `waypoint:travel` to The Coast (`/pos` then answered
-`(1362, 626) in 1_1_2`), `/goto 1_1_town` (`Area generated at Seed: 1`), `/pos` (`(384, 224) in 1_1_town`), chat,
+`(1362, 626) in 1_1_2`), `/goto 1_1_town` (`Area generated at Seed: 1`, with `Game_AREA_SEED=1`: the line is a
+development aid, off by default so the chat panel stays clean in play), `/pos` (`(384, 224) in 1_1_town`), chat,
 `/tp +5 +0` (`Teleported to (389, 224) in 1_1_town.`). Every client but the `--no-render-jobs` one ran at 9.2 frames
 per second and entered the town 6–8 s after launch (menu 1–3 s, login 0.8 s, play 2.5–4.3 s). The Null client runs 41–43 threads against 107 for
 DirectX 11. The session settings file was written by the client (`localexile-pr-nullifier-bench_Config.ini`), the

@@ -682,7 +682,7 @@ static partial class Game
                     await SpawnTownStash(remote, stream, ciphers, conn);
                     // All stationary objects must exist before validating the arrival cell.
                     await PushOutOfCollision(remote, stream, ciphers, conn, tell: true);
-                    await conn.Commands!.Reply($"Area generated at Seed: {conn.Seed}");
+                    if (AreaSeedMessage) await conn.Commands!.Reply($"Area generated at Seed: {conn.Seed}");
                     // An area the Gateway does not generate itself (ServerLevels) runs on the client's layout alone.
                     if (!ServerLevels.IsSupported(conn.Layout.Id) && !CaptureTour.Active(CharacterName(conn)))
                         await conn.Commands!.Reply(ServerLevels.UnsupportedMessage);

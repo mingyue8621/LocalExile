@@ -20,6 +20,10 @@ static partial class Game
 {
     // Game_LEAGUE=hardcore treats every character as hardcore; otherwise the character's league decides (Auth's resolve).
     internal static readonly bool ForceHardcore = Environment.GetEnvironmentVariable("Game_LEAGUE")?.ToLowerInvariant() == "hardcore";
+    // Game_AREA_SEED=1 has every area entry answer "Area generated at Seed: n" in chat: the headless client's scripts
+    // wait for that line to know the area is ready (Agents/docs/dev/headless-client.md). Off by default — it is a
+    // development line and the chat panel should not carry it in play (live 2026-11-09).
+    internal static readonly bool AreaSeedMessage = Environment.GetEnvironmentVariable("Game_AREA_SEED") == "1";
     // S→C 0x55 flags (11-skills.md §8): standard = bit2 (Resurrect at Checkpoint) + bit3 (Resurrect in Town); hardcore =
     // bit0 (a single Exit button, "Exit to the character selection screen", which sends C→S 0x153). Before the character
     // has a town (The Twilight Strand) only bit2, as in the real game.

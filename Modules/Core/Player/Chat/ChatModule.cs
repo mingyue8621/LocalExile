@@ -145,8 +145,9 @@ sealed class ChatService : IDisposable
 
     // C→S 0x134: the client joins a global or trade channel after entering an area and for /global N and /trade N, and
     // prints "Timeout while joining … chat channel" when no 0x135 comes within 5 s. The join is answered with 0x135 at once,
-    // whatever the chat server is doing, then a chat line naming the channel when it is new for the character or was asked
-    // for by a command.
+    // whatever the chat server is doing. Only a command prints the "You have joined … chat channel" line: the client's own
+    // join on entering (every login) did too, so a fresh character's chat carried a global and a trade line before play
+    // (live 2026-11-09).
     public async Task<bool> Join(ClientState conn, ReadOnlyMemory<byte> bytes)
     {
         string remote = conn.Wire.Remote;
@@ -157,9 +158,9 @@ sealed class ChatService : IDisposable
         }
         string asked = join.Channel == InstanceChat.AnyChannel ? "any" : join.Channel.ToString();
         Log($"{remote} <= 0x0134 join {join.Kind} chat channel {asked} ({(join.Automatic ? "on entering" : "command")}, language {join.Language})");
-        var (channel, changed) = JoinOn(Session(conn), CharacterName(conn), join.Kind, join.Channel, join.Language);
+        var (channel, _) = JoinOn(Session(conn), CharacterName(conn), join.Kind, join.Channel, join.Language);
         await Send(remote, conn.Wire.Stream, conn.Wire.Ciphers, InstanceChat.ChannelJoined(join.Kind, channel, join.Language), $"0x0135 joined {join.Kind} chat channel {channel}");
-        if (changed || !join.Automatic)
+        if (!join.Automatic)
         {
             string text = ChatChannels.JoinedText(join.Kind, channel, join.Language);
             await Send(remote, conn.Wire.Stream, conn.Wire.Ciphers, InstanceChat.ChatLine(text), $"0x0017 chat line \"{text}\"");
