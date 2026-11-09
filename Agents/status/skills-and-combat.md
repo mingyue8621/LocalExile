@@ -1143,6 +1143,12 @@
 - 战斗负载：报文/帧与新建的投射物释放快照；按输入校验的技能/装备缓存忽略同级宝石经验与延长的近期激活窗口；
   不可变的物品本地属性、条件解析器与投射物配方被复用。F1 NETWORK 保留真实的输入队列延迟；
   大的负载尖峰仍在调查。代码：`PlayerStatsCache.cs`、`StatConditions.cs`。
+- Combat load: message/frame and fresh projectile-release snapshots; input-checked skill/equipment caches ignore
+  within-level gem XP and extended active recent windows; immutable item-local stats, condition parsers and projectile
+  recipes are reused. Aura reconciliation compares live sources, restrictions, equipment and reservation inputs;
+  support resolution shares raw gem sources, quest rewards follow flag changes, and projectile motion is reused only
+  until the next contact. F1 NETWORK retains real input-queue latency; pathfinding and load spikes remain under investigation.
+  Code: `PlayerStatsCache.cs`, `OwnAuras.cs`, `GemLevels.cs`, `ProjectileRuntime.cs`, `StatConditions.cs`.
 
 - 幸存者赛季与三个可选模块，含七个阶段闸门 Boss；目录只保留飞行/脉冲呈现能播放的技能
   （每个投射物都有可见兜底），地面区域法术落在目标上，辅助池是所有施法管线会读数值的普通辅助宝石，

@@ -229,6 +229,190 @@
   怪物除攻击之外的技能（Discharge、焦油、死亡新星）与房间出口（一次跑动）尚未实现。
   代码：`LabyrinthTrials.cs`、QuestObjects 的 `Rules.LabyrinthTrials.cs`。
   文档：[labyrinth-trials](../docs/game/labyrinth-trials.md)。
+- Lockstep is served whenever the client picks it (no server setting; the log notes Predictive is preferred). It
+  handles pickup/attack recovery, corpse collision and ground melee/chest approach;
+  crowd and predictive gaps remain ([07](../docs/protocol/07-latency-visibility-movement.md) §6).
+- League isolation is enforced by full league for towns and instance selection.
+  SSF wilderness instances and Gateway ground-item state additionally belong to the stable character ID.
+  Another character, including one reusing a deleted name, cannot inherit or join that state.
+  Automated league/SSF instance checks pass.
+  Shared peer presence preserves SSF town visibility while mutable world state remains private.
+  Other players walk with the Move action the client animates.
+  Multi-client world joining and pickup boundaries remain covered by automated checks.
+  See [league modes](../docs/game/league-modes.md).
+- **Predictive actor collision.** Player paths include living monsters and published players in the same instance.
+  Monster paths use their `MonsterVarieties.ObjectSize` clearance and avoid other living bodies, including friendlies.
+  A 50 ms pass steps the player's and the monsters' estimates in time order as the client does (no packets): a step
+  blocked by terrain or a body ends the walk, and a path cut short paths again from its end. On a lockstep client the
+  pass replays whole frames instead, each walker in object order (the player first) against the cells as moved so far,
+  as the client's world ticks ([07](../docs/protocol/07-latency-visibility-movement.md) §5). Nothing is pushed out of a
+  body. Death releases the occupied space and the corpse stays in the area.
+  Melee monsters chase with their attack aimed at the player, about every 200 ms, and the swing starts on S→C 0x1ac.
+  Ranged monsters and minions take rings around the player (`MonsterSurround`); the AI decides every 50 ms.
+  Automated regressions cover player-body clearance for new and reused slots.
+  Further automated checks cover short attack reach, stationary-blocked slots and queued channel/Rage refreshes.
+  A 50 ms pass steps the estimates as the client does (no packets): a step blocked by terrain or a body ends the walk, a
+  path cut short paths again from its end, and an attack does not stop the walk; death releases the occupied space and
+  the corpse stays in the area.
+  Chasers spread around the player on rings (`MonsterSurround`); the AI decides every 100 ms.
+  Automated regressions cover direct chases for negative footprints and player-body clearance for new and reused slots.
+  Further automated checks cover short attack reach, stationary-blocked slots, bounded crowd escape and queued
+  channel/Rage refreshes.
+  Combined regressions cover silent channel updates, removed gems and projectile contacts before crowd movement.
+  AI and correction passes share indexed body snapshots; surround reservations use spatial queries and cached rings.
+  Queue age, send/wire/socket timings and hot combat-lock timings are measured independently of tick latency.
+  Stuns and freezes hold the walk and the newest click until they end; a speed change restarts the segment in progress;
+  an attack follows its target to the swing; totems and the tutorial chest block paths.
+  Melee hits land at the swing clip's contact keyframe.
+  Resync (S→C 0x128): sent on every stun, after a movement skill, on the client's own request (C→S 0x16 command 8) and by `/oos`;
+  it corrects errors of 20 cells or more and leaves smaller ones alone.
+  Native-client checks cover a normal zombie, unique Hillock and an injected remote player object.
+  Remote player creation, movement, life, departure and skill actions are replicated.
+  Code: `LivingCollision.cs`, `ClientState.LivingCollision.cs`, `Program.LivingCollision.cs`, `InstancePlayers.cs`.
+  Docs: [07](../docs/protocol/07-latency-visibility-movement.md).
+- **Shared instance** (two clients, 2026-11-05): an instance's monsters are its own (`InstanceWorld`), on its clock and
+  ids; every client is shown them, any player's hits hurt the same ones and each monster targets the nearest player.
+  Ground items are shared, quest items and kill quest progress go to each player near, kill experience to all near.
+  Ailment ticks and monster collisions run on one connection's loop; the King in the Mists' arena objects and the
+  league encounters stay one player's.
+  Code: `InstanceWorld.cs`, `SharedMonsters.cs`, `SharedKills.cs`, `SharedGround.cs`.
+- **Spawn points.** Logins, Resurrect in Town and one-way entries other than The Twilight Strand → Lioneye's Watch use
+  the area's spawn: the town's fixed point, or the walkable cell farthest from any edge in a generated area.
+- **Area seeds.** A new instance of an area the Gateway generates itself gets a random seed (`Game_RANDOM_SEEDS=0`
+  pins it to 1); towns, hideouts and the areas still read from captures use seed 1.
+  An area the client cannot generate at seed 1 either (The Crossroads of acts 2 and 7, Act 6's Twilight Strand and
+  Southern Forest, The Karui Fortress, some maps and league arenas) is played at a seed the client built in place of
+  seed 1 (`ServerLevelAreas.SeedsInPlaceOfOne`, `AreaSeeds`); the Gateway generates it once a trace at that seed
+  matches in every layer (re/011 §7), not yet the Labyrinth's Estate Crossing sections.
+  A seed the port cannot generate (2 of 21 for The Coast, 5 of 21 for 1_2_12) is played at the first of 8 replacements
+  derived from it that the port generates (`ServerLevels.PlayableSeed`, sent in 0x1d): before, such a map had no walk
+  grid, area transitions or waypoint.
+  An opened map is generated at the area level 0x1d sends (its tier: 83 for tier 16), the level the client generates
+  at, not its WorldAreas level (2026-11-01). Before, a tier-16 Chateau (WorldAreas 71) took another topology than the
+  client's, so the player spawned outside the client's layout (a black screen), and seeds the client cannot build
+  were played.
+- **Level generator port.** `GameServer.Data/Terrain/Generation` reproduces the client's level generator: the tile
+  grid, the walkability and projectile grids, the doodads, every cell's ground height (`CellHeights.cs`) and the area
+  transitions and waypoints (`AreaObjects.cs`: the tiles' objects, and a room's `Waypoint` line where no tile places
+  one, as The Ledge's `waypoint.arm`).
+  1669 of the 1671 seed-1 traces match the client in tile hash, both grids, every random draw the port makes and every doodad,
+  and 2884 of the 2886 loads the 3.29.3 client logged match by tile hash (`scripts/re/levelgen/gate.ps1`); of the 118
+  loads the client itself failed to generate, the port fails 112 the same way (115 expected once the gate reruns:
+  the Sanctum Cellar, Nave and Vaults now fail as the client does). The 34 areas the client cannot
+  generate at seed 1 (and that need no server data) were toured at random seeds the port generates: all 73 loads match.
+  An unattended tour of every WorldAreas row with a topology (2026-10-27, `scripts/re/levelgen/tourloop.py`, which
+  restarts and logs in the client by itself) left 234 of the 1932 rows with no client-side level to match: 17 without a
+  topology, 202 that need data from the server (Incursion temples, Delve cells and biomes, Heist contracts, Synthesis
+  memories, the Sanctum floors, the Deepwater biome grid; they come with each league's server side, see the
+  [roadmap](../roadmap/world.md)), and 15 the client cannot generate at any seed tried (the
+  list is written to data/areas-unavailable.txt). The port matches a load of every other row.
+  A tour of 3 random seeds per matching area: all 519 match. Every traced load at another seed of that tour (1215,
+  `lg.ps1 loads`) matches in draws, grids, doodads, heights and transitions too, the last one (a shrine's ground,
+  2_6_2) since 2026-10-29. A 5-seed tour of every supported area, stopped after 475 stops (101 areas): 469 match in
+  every layer and in the rooms' monster points; 4 do not (1_2_15 at 3 seeds, 1_2_14_2 at 1), and the port cannot
+  generate 202 of the 7700 seeds (re/011 §8).
+  Every load with a height capture matches cell for cell, and every one of the 186 with a transitions capture
+  matches exactly (186 expected once the gate reruns: one capture was cut short by the recorder, now repaired).
+  Act 5's crater effects in The Slave Pens (`GlowyFX`, `SlavePensIntroGround`: `server_only` types the client draws
+  only when the server creates them) are sent at their end state (Transitionable 3); the client draws them
+  (2026-10-29, seed 1).
+  The Gateway generates the supported areas itself (`ServerLevels.cs`): those whose seed-1 trace passes every gate
+  check (`gate-baseline.json`); their walk grid, projectile grid, cell heights, transitions and waypoint, and the
+  doodads, rooms and quest tile objects the monster points and a1 quests are fitted to, need no capture.
+  Entering any other area tells the player it is generated on the client and not supported by the server yet.
+  The client's stages after the doodads (mesh variation, ground clutter, critters) are client-only and not ported.
+  Code: `GameServer.Data/Terrain/Generation`, `scripts/re/levelgen`.
+  Docs: [re/011](../docs/re/011-level-generation.md).
+- **The Labyrinth's day layout.** The Gateway builds the day's layout as the client does (sections, rooms,
+  connections and secrets: 168 client layouts match) and gives each room its LabyrinthAreas area as the official
+  server does; entering one of those areas sends the room's node in 0x1d's extra data, and the client and the server's
+  generation then apply the room's overrides and secret rooms alike (live: `1_Labyrinth_OH_quad_#` with its Gauntlet
+  room, 2026-11-02). The day is the official one: the seed (the UTC day number, `Game_LAB_SEED`) and the room areas
+  match poelab.com's layouts (re/011). A room's tile seed is ours. `/lab_layout [tier] [yyyy-mm-dd]` lists a day.
+  The secret rooms' objects (hidden doors, the Gauntlet's end) are not created yet.
+  Code: `LabyrinthLayout.cs`, `LabyrinthPass.cs`, `LabyrinthDay.cs`, `ServerLevels.cs`.
+  Docs: [03](../docs/protocol/03-area-and-world.md), [re/011](../docs/re/011-level-generation.md) ("Labyrinth pass").
+- **A Labyrinth run (Normal).** The Sarn Encampment's (Acts 3, 8) plaque shows the trials until the six Normal ones are
+  done, then opens the statue for good and the way to the plaza behind it (`/trials off` shuts it). At the plaza the
+  device opens the select window (0x7b kind 0x10); choosing Normal (C→S 0x212 = 1) opens the door with its animation
+  and shows the way into the day's first room; the portal goes back to town. Each room is its own instance (the run
+  picks its seed, so the server knows its node), its "entranceN" exits lead to its neighbours, the glyph statues open
+  the Labyrinth map (0x7b kind 0x0f) with the run's rooms (S→C 0x1cb),
+  and a statue by an exit also shows the room behind it, the way there in green (checked live 2026-11-07);
+  being anywhere else ends the run, and the plaza's door shuts again. Checked live 2026-11-03.
+  In the last room's Ascendancy Chamber the font gives the tier's two ascendancy points and opens the class selector
+  (0x7b kind 0x0a; the choice, C→S 0x39, is saved and the area reloads), and its portal goes back to town.
+  Checked live 2026-11-03: the class chosen there stays after a relog.
+  Izaro's three Aspirant's Trials: the corridor's gate opens when used (his prefight line), he rises on the elevator
+  with the day's weapon as the player comes into the arena (the mechanic's line) and the arena's doors shut; his life
+  bar goes in thirds from trial to trial: in the first two he leaves at the next third (his line, a walk to the
+  elevator's middle, down on it) and the doors and the way on open; in the last he dies, the way to the Ascendancy
+  Chamber opens and `LabyrinthKilledIzaro` and the tier's `LabyrinthComplete` flag are set. His lines are S→C 0x1c7.
+  Checked live 2026-11-07 (trial 1).
+  Two arena mechanics, Toggle Statues and Gargoyles, with what they leave on him shown and active in the later
+  trials (alcove and ledge) and his two end lines; no life bar while he rises, dimmed at his trial's floor; the account's
+  stash in the room before each arena and the Ascendancy Chamber. Checked live 2026-11-08: a whole run on 3.29.3c, the
+  gargoyles' beam on 3.29.3b.
+  Not yet: the other arena mechanics, the Goddess of Justice, his chests, the room's craft recipe, the enchanting bench,
+  Cruel and harder tiers, the secret rooms' objects; a room's exits keep the plain AreaTransition type (not type 5).
+  Code: `LabyrinthDay.cs`, `IzaroFights.cs`, `AreaTransitionCatalog.cs`, QuestObjects `Rules.LabyrinthTrials.cs`,
+  `Rules.Izaro.cs` (`Rules.IzaroArena.cs`, `Rules.IzaroStatues.cs`, `Rules.IzaroGargoyles.cs`), `Act3.cs`, `Act8.cs`.
+- **Trials of Ascendancy.** In each LabyrinthTrials area the Gateway places the trial rooms' door, levers, Locked
+  Doors, plaque and portal back, and the Bronze Monograph at the door, which reads at once when clicked.
+  The door opens, a lever opens what its room's links name (the `.arm` files' link section), the plaque sets the trial's quest flag and its league quest
+  flag, saved for the account's league so the trial is done for each of its characters there (the client counts it
+  done), opens the portal back to the door and opens the Trial Plaque window (0x7b kind 9) with the trials done; a
+  done trial's portal too opens only when its plaque is used.
+  Entering a trial's area gives the Lord's Labyrinth quest (`LabyrinthQuestReceived`): the client's tracker then says
+  "Solve the Trial of Ascendancy in this Area" until it is done, and "Enter the Labyrinth" once the six Normal trials
+  are ([labyrinth-trials](../docs/game/labyrinth-trials.md), "The Lord's Labyrinth quest"); checked live (2026-11-01).
+  What an instance opened stays open; an opened trial Locked Door (bars) is removed, a room's gate stays open.
+  Verified with the real client in The Lower Prison (2026-10-31).
+  Its spike traps cascade round their ring from the lever towards the door (the plaque room's as a checkerboard), rise
+  over a stretched Emerge animation (0x1d1), hit a player on their tile for LbRetractableTrap's share of life and energy
+  shield, bleed for a second and wall their tile while they show; matched by eye against the original game.
+  The Imperial Gardens' 14 dart turrets fire together every 1.5 s, four poison darts each a quarter turn apart, through
+  the projectile world, stopping at walls and at the turrets' Hull; a dart hits for LbArrowTrap's share and adds a 2 s
+  poison stack reckoned from the hit's life share, less armour, and slows movement by 60% for 2 s. Being checked live.
+  The Catacombs' eight roombas run their rails (two rings round, two chains to and fro, set out as they face) and cut
+  a player inside them, who degenerates by a share of life and energy shield a second (fitted live to the original,
+  2026-11-01) with the roomba's own effect on them; the trial doors open for walking (checked in The Catacombs).
+  The Chamber of Sins' nine sawblades run their tracks (shown, Rail_Visible) to and fro, each pair together, and cut
+  as the roombas do; its two levers (`Switch`) go both ways: pulled, a lever shuts the cage round its room
+  (`Door_Open`) and stops the sawblades its links pause, pulled back it opens it and they run on. Checked live
+  against the original (2026-11-01).
+  The Crypt's twelve spinners (spinning morning stars) run their track pieces piece by piece, turning back at ends
+  and at stoppers, round corners, and at a junction as its rail switch stands, and cut as the roombas do; its
+  `Switch_Multi` lifts the two stoppers in the way up so those spinners run to their lanes' ends, its `Switch` sets
+  the upper room's TriCorner straight so its two spinners leave their small rings for the square, both going both
+  ways; the plain door between its upper spinner room and the plaque room stays shut until clicked, keeping the
+  plaque room's monsters in. Checked live against the original (2026-11-01).
+  The Crematorium's hot plates, those under the grates by its walls too, lie at their lines' fixed height under the
+  floor's grates and heat together on a timer (5 s at the peak, 6 s cold) and
+  burn a player while their lava lies (a share of life and energy shield a second, less fire resistance, with the lava
+  buff's burning look); each of its three levers opens its Locked Door and sets its gears turning; its Immolators
+  bring Ember Claimants. Timings, damage and the Immolators' skeletons checked live against the original (2026-11-01);
+  the plates' height under the grates is being checked.
+  The area's packs keep away from a trial's traps; its rooms get what their room file places: the Gardens' four
+  Devourers, the Lower Prison plaque platform's pack and its spawner's rare Brittle Poacher, the Crypt spawner's rare
+  Frost Priest, the Crematorium spawner's rare Cinder Elemental and its four Immolators, and the packs the original has where the room file
+  has none (two before the Chamber of Sins' upper cage, one past the Crypt trial's door and one by its plaque, one in
+  the Crematorium trial's first room and one past its second Locked Door).
+  Not built: the traps of Izaro's rooms and the hot plates' Cruel and Merciless rooms.
+  The Labyrinth's own rooms (`1_Labyrinth_*`) get the same traps, levers and doors from the Gateway's generated rooms,
+  wired by their rooms' links (spike chains and triggers, rails, levers, plates and their darts): spikes on their
+  `Trigger_*` timers and pressure spikes a step fires, abyss edge blades, dart turrets and wall darts, roombas,
+  sawblades, spinners with the two-lever rooms' swap piece, the ElegantHouse rooms' hot plates (`*_EH`), and their
+  puzzles: `Door_Counter` gates, `Counter_Handler(_Any)`, cranks that come back up, `Switch_Multi` levers that open
+  Locked Doors and flip shared cages. Their tiles add the ElegantHouse doorway rollers (a dropping roller that cuts while
+  down, rising spikes striking with their clips), abyss edge blades, smashable walls a hit breaks, the DryGarden secret
+  wall a pair of hidden switches opens, and statues whose monster steps off its pedestal when the player comes near.
+  Their areas get packs of the Labyrinth's own monsters by room set (ours: no data names them). Checked live on seed 1
+  of `1_Labyrinth_RT_straight`, `_C_straight`, `_OH_end`, `_P_straight`, `_EH_end`, `_EH_end_bottleneck`, `_DG_end`,
+  `_DG_quad_bottleneck`, `_P_end_bottleneck` and `_P_straight_bottleneck` (2026-11-01, 2026-11-02). The monsters'
+  skills beyond attacks (Discharge, tar, death novas) and the room exits (a run) are not built.
+  Code: `LabyrinthTrials.cs`, QuestObjects `Rules.LabyrinthTrials.cs`.
+  Docs: [labyrinth-trials](../docs/game/labyrinth-trials.md).
 
 ## 尚未实现
 

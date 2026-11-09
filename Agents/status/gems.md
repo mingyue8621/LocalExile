@@ -92,6 +92,46 @@
   每发间隔 20 度）；官方的下雨骨架站在施法者格子上并在那里播放抬手，再在目标处播放落地，技能的箭矢美术挂在
   `aux_projectile_attach` 上，记录在 [25](../docs/protocol/25-gem-supports.md)。
   特殊执行机制仍不完整；见 [25](../docs/protocol/25-gem-supports.md)。
+- **Linked support gems.** Native compatibility, link groups, duplicate families and skill-bar support records
+  are implemented; Cyclone with Increased Area of Effect was read successfully by the real client.
+  Ordinary hit, area, speed, critical, cost and reservation calculations use linked support stats.
+  Overcharge, Bloodthirst and four more supports scale hits by their more damage ([20](../docs/protocol/20-damage.md)).
+  Item-granted supports join the same compatibility, duplicate resolution, calculations and native badge records
+  for gems in their source item, independently of links; automated tests cover their addition and removal.
+  Every third Ruthless-supported use is a Ruthless Blow ([25](../docs/protocol/25-gem-supports.md)).
+  Local socketed level/quality bonuses apply to physical gems, including support gems, without raising requirements.
+  Second Wind adds a stored use only to non-instant skills; ordinary cooldown charges recover sequentially on game time.
+  The Delve socketed attack/spell more-damage effects reach the ordinary hit calculation.
+  Hypothermia, Behead and Damage on Full Life scale the hits they apply to ([25](../docs/protocol/25-gem-supports.md)).
+  Vile Toxins scales a hit per poison on the enemy; Lethal Dose adds two poisons to an unpoisoned one; Hypothermia's
+  extra freeze chance counts an enemy chilled by an earlier hit; Sadism's less duration shortens its ailments; Vicious
+  Projectiles' less attack speed and Greater Chain's more chains apply. Greater Fork can add a third projectile at the
+  fork; Rupture's stacks raise bleeding damage taken; Close Combat's Combat Rush speeds up eligible travel skills
+  and is consumed by a paid travel use; Block Chance Reduction lowers the monster's block roll and applies Overpowered;
+  Machinations counts allocated keystones for its chaos gain and skill-local cost increase ([25](../docs/protocol/25-gem-supports.md)).
+  Awakened supports' extra stats that have a consumer now apply: per-type supported gem levels, Brutality's Crush,
+  Spell Echo's double damage on the final repeat, and Generosity's aura effect with its "does not affect you".
+  Multistrike repeats its hits within the attack time, and Melee Splash hits the enemies around each struck one
+  ([25](../docs/protocol/25-gem-supports.md)).
+  Maim, Bloodlust, Pulverise, Rage, Power Charge on Critical, Volatility, Combustion, Item Quantity, Iron Grip and
+  Iron Will apply their stats as well ([25](../docs/protocol/25-gem-supports.md)).
+  Immolate, Bloodthirst, Bonechill, Coursing Current, Fist of War, Devour, Sacrifice, Spellblade, Hallow and
+  Excommunicate apply too ([25](../docs/protocol/25-gem-supports.md)).
+  Arcane Surge tracks each spell's mana spent and grants its buff; Inspiration gains charges on mana spent; Controlled
+  Blaze scales ignite damage and hit damage by enemies ignited recently
+  ([25](../docs/protocol/25-gem-supports.md)).
+  A real-client Cyclone control accepted the item-support records and displayed blue s/c, red W and white d.
+  The supported critical values appeared in its panel and tooltip; special execution still has the gaps below.
+  Spell Echo repeats a supported spell's releases and area hits a cast time apart, with its 40% more cast speed
+  (`SpellRepeats`; [11](../docs/protocol/11-skills.md) "Spell repeats"); checked with the real client (2026-11-04).
+  Spell Cascade places its extra areas one effective radius apart in a line, and across the aim with Greater and
+  Awakened `support_spell_cascade_sideways`, so the aimed centre still lands the main hit; captured from the 3.29.3b
+  client (2026-11-04): Reap's five Awakened areas were 28-29 cells apart at a 28.5 effective radius.
+  Arrow Nova fires one payload arrow to the aim and then the skill's whole volley in a circle from there (18 arrows
+  20 degrees apart for Split Arrow in the same capture); the official rain rig stands at the caster's cell and plays
+  its up-cast there, then its landing at the target, with the skill's arrow art riding `aux_projectile_attach`,
+  documented in [25](../docs/protocol/25-gem-supports.md).
+  Special execution mechanics remain incomplete; see [25](../docs/protocol/25-gem-supports.md).
 
 - **斩杀（Culling Strike）。** 近战、范围与投射物命中会在生命 10% 时斩杀；Cull the Weak 按其自身份额斩杀普通与魔法敌人，
   Pacifism 的命中会留下 1 点生命（[25](../docs/protocol/25-gem-supports.md)）。

@@ -129,6 +129,41 @@
      普通、无情与残酷的房间都没有。无情与永恒迷宫还有 Argus（wiki），它是当天布局中某个房间里的 Boss，掉一把宝藏钥匙。
 - **完成标准：** 一个角色完成六个普通试炼，从广场进入当天的普通迷宫，走完其房间，击败 Izaro 三次并在祭坛选择升华，
   重登后仍保有该升华与它的两点。
+- **Known:** the server port generates the Labyrinth's rooms (249 of 257 match), and the gate baseline lists the
+  supported ones ([re/011](../docs/re/011-level-generation.md), "Labyrinth pass").
+  The day's layout is sent with each room in it, and a Normal run works ([status](../status/world.md), "A Labyrinth run").
+  The Aspirants' Plaza (`Labyrinth_Airlock`, `WaypointCatalog.LabyrinthPlaza`) is a waypoint the World panel's
+  Labyrinth pin always shows.
+  The Ascendancy Chamber's font chooses the ascendancy and gives the tier's two points, and Izaro's three trials are
+  fought ([status](../status/world.md), "A Labyrinth run";
+  [labyrinth-trials](../docs/game/labyrinth-trials.md), "Izaro's arenas").
+  The tables are extracted (`data/tables/Labyrinth*.json`): 4 tiers with their required trials, quest flag and area
+  level, 18 trials, 47 sections, 223 section layout rows, 58 secrets and the Izaro chests.
+  AreaTransition type 5 is Labyrinth ([08](../docs/protocol/08-area-transitions.md) §7), and
+  `AreaTransitionCatalog` does not know the Labyrinth areas yet.
+- **Known (trials):** the Gateway places each trial's door, `Switch_Once` levers, Locked Doors, plaque, portal,
+  spike traps, the Imperial Gardens' dart traps, the Catacombs' roombas, the Chamber of Sins' sawblades with
+  their toggling `Switch` levers and `Door_Open` cages, and the Crypt's spinners with its `Switch_Multi` and rail
+  switches;
+  The Lower Prison's trial completes with the real client ([status](../status/world.md), "Trials of Ascendancy").
+  A trial is done for the client by its quest flag or its league quest flag; the plaque sets both, and the league
+  flag is saved for the account's league, so every character of it has the trial
+  ([labyrinth-trials](../docs/game/labyrinth-trials.md)).
+- **Start**, one pull request per step, in this order:
+  1. Izaro's arenas' other mechanics (Toggle Statues and Gargoyles are done: `Rules.IzaroArena.cs` places them and
+     what they leave), one at a time, and the Goddess of Justice.
+  2. Izaro's chests in the last arena (LabyrinthIzaroChests at the IzaroChestMarkers).
+  3. The Cruel and Merciless Labyrinths (their select-window choice) and trials, then the secret rooms' objects (hidden doors, the Gauntlet) and darkshrines, the Divine Font (LabyrinthCraftOptions),
+     enchantments and the Eternal Labyrinth with its map trials (a dev command opens them while maps are missing).
+     Those two have Sentinel traps (wiki, 2.3.0): monsters (`Metadata/Monsters/Totems/LabyrinthPopUpTotem*`, type
+     `LabyrinthMonsterTotem`: Endless Pain, Hazard, Drought, Sting, Unending Lethargy, Frost, Fire, Storm, Vaal Totem,
+     some with Proximity Shield) that rise from the floor and debuff by an aura, sink when damaged and rise again
+     (`ReviveAfterDuration`). The map trials' end rooms place them as points (`TrialsEndgame/*/end*.arm`), and
+     MonsterGroupEntries' group 35 lists them; no Normal, Cruel or Merciless room has one. The Merciless and Eternal
+     Labyrinths also have Argus (wiki), a boss in one room of the day's layout who drops a Treasure Key.
+- **Done when:** a character completes the six Normal trials, enters the day's Normal Labyrinth from the plaza,
+  walks its rooms, defeats Izaro three times and chooses an ascendancy at the Altar, keeping it and its two points
+  after a relog.
 
 ## 4. 服务端设计
 
