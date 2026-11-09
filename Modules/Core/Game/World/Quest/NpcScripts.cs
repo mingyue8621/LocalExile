@@ -11,7 +11,14 @@ using GameServer.Core.Protocol.Login;
 static partial class Game
 {
     // S→C 0x7b kinds of the screens the scripts open (the client's screen table at 0x142fd89f0, campaign/pantheon.md §3).
-    internal static readonly Dictionary<string, byte> ScriptScreens = new(StringComparer.Ordinal) { ["PantheonScreen"] = 0x14 };
+    internal static readonly Dictionary<string, byte> ScriptScreens = new(StringComparer.Ordinal)
+    {
+        ["PantheonScreen"] = 0x14,
+        // Einhar's "View Bestiary" (SendOpenScreen( BestiaryScreen )): 0x0f is the kind every master-crafting window
+        // opens — the client then shows the crafting UI the object offers (05-inventories-and-ui.md: BestiaryCrafting is
+        // inventory row 31, 2x4). Not verified live yet.
+        ["BestiaryScreen"] = 0x0f,
+    };
 
     /// <summary>Whether the row does something when its talk ends (or at once without a talk).</summary>
     internal static bool EndsWithScript(NpcCatalog.Talk talk) =>
@@ -118,6 +125,12 @@ static partial class Game
             await ChangeArea(remote, stream, ciphers, conn, new PendingTransfer(hash, 0, false, AtSpawn: true),
                 $"{npc.Npc.Name}: {talk.Option} (AreaTransitionTo {area}, {index})");
         }
+        // Einhar's "Visit Menagerie": OpenMenageriePortal is the client's own portal effect, so the server only has to
+        // move the player — to Menagerie_Hub, the same destination the World panel's pin uses.
+        if (talk.Script.Contains("OpenMenageriePortal", StringComparison.Ordinal)
+            && AreaTransitionCatalog.HashOf(WaypointCatalog.MenagerieHub) is { } menagerie)
+            await ChangeArea(remote, stream, ciphers, conn, new PendingTransfer(menagerie, 0, false, AtSpawn: true),
+                $"{npc.Npc.Name}: {talk.Option} (OpenMenageriePortal)");
         return true;
     }
 
