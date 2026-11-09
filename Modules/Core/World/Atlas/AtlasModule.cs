@@ -79,13 +79,22 @@ public sealed class AtlasModule : IModule, IDisposable
                 await command.Player.Tell(nodes.Count == 1 ? $"Atlas: {nodes[0].Name} completed." : $"Atlas: {nodes.Count} maps completed.");
                 await AwardMapPoints(ConnOf(command.Player), command.Player, earned, "/atlas_complete");
             });
-        module.OnChatCommand("atlas_reset", "/atlas_reset (dev: clear the Atlas's completed maps)", async command =>
+        module.OnChatCommand("atlas_reset", "/atlas_reset (dev: clear the Atlas's completed maps, its points and the tree)",
+            async command =>
         {
+            var conn = ConnOf(command.Player);
             AtlasProgress.Reset(module.World(command.Player).CharacterData);
+            // The tree's budget and every preset go too: a character whose maps the login used to complete kept 100 points
+            // and a filled tree, and this is the way back to the game's start (live 2026-11-09).
+            foreach (var preset in conn.AtlasPassives) preset.Clear();
+            conn.AtlasPassivePoints = 0;
+            if (CharacterName(conn) is { } character)
+                CharacterSaves.SetAtlasPassives(character, conn.AtlasPassives, conn.AtlasPassivePoints);
             var slots = AtlasFeature.SlotsOf(command.Player);
             await command.Player.Send(AtlasProgress.EmptyMessage(AtlasProgress.VoidstoneMask(slots), (byte)slots.Count),
                 "0x01a3 /atlas_reset");
-            await command.Player.Tell("Atlas: progress cleared.");
+            await global::Game.SendAtlasSlots(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers, conn, "Atlas reset");
+            await command.Player.Tell("Atlas: completed maps, passive points and allocations cleared.");
         });
         module.OnPacket(InstanceEntities.AtlasAllocateId, async p =>
         {
@@ -215,10 +224,12 @@ static class AtlasFeature
         ApplyLeagueFlags(conn);
         var player = PlayerOf(conn);
         var data = module.World(player).CharacterData;
-        AtlasProgress.Complete(data, AtlasProgress.Maps);
+        // No map is completed by logging in: the Atlas panel already draws every on-atlas row from the first mask
+        // (AtlasProgress.FullMessage), and a completion is what a boss kill earns — marking them all here gave every
+        // character the tree's full 100 points on its first login (live 2026-11-09).
         var completed = AtlasProgress.Completed(data);
         // One Atlas passive point per map completed, up to the 100 the tree's map half has (#382 item 3). The completed set
-        // is restored above, so a character whose Atlas was filled before the award existed gets its points too.
+        // is read, so a character whose Atlas was filled before the award existed gets its points too.
         bool pointsChanged = false;
         if (Math.Min(AtlasModule.MapCompletionPoints, completed.Count) is int earned and > 0 && earned > conn.AtlasPassivePoints)
         {
