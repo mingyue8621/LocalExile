@@ -50,8 +50,8 @@ partial class Program
         if (conn.PartySize == size) return;
         conn.PartySize = size;
         int more = size - 1;
-        string text = more == 0 ? "Party bonus: none"
-            : $"Party bonus ({size} players): monster life +{50 * more}% normal, +{60 * more}% magic, +{80 * more}% rare, +{100 * more}% unique; currency items +{23 * more}%";
+        string text = more == 0 ? "组队加成：无"
+            : $"组队加成（{size} 人）：怪物生命 普通 +{50 * more}%、魔法 +{60 * more}%、稀有 +{80 * more}%、传奇 +{100 * more}%；通货掉落 +{23 * more}%";
         if (conn.Outbox is { } outbox)
         {
             await outbox(GameServer.Core.Protocol.Instance.InstanceChat.ChatLine(text), $"0x0017 chat line \"{text}\"");
