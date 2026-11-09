@@ -19,35 +19,7 @@ static partial class Game
         };
         string weapon = spell ? "Wand" : bow ? "Bow" : characterClass == CharacterClass.Marauder ? "Two Hand Mace"
             : characterClass == CharacterClass.Shadow ? "Claw" : "One Hand Sword";
-        var nodes = new List<ushort>();
-        double Score(ushort id)
-        {
-            var n = Passives.Find(id);
-            if (n is null || n.IsKeystone || n.IsJewelSocket) return -1000;
-            double score = .1;
-            foreach (var (key, value) in n.Stats)
-            {
-                string name = Stats.Name(key) ?? "";
-                if (name is "base_strength" or "base_dexterity" or "base_intelligence" or "base_all_attributes") score += value * .65;
-                if (name is "maximum_life_+%" or "base_maximum_life") score += value * 2;
-                if (name is "base_resist_all_elements_%") score += value;
-                if (name == "damage_+%" || spell && name is "spell_damage_+%" or "fire_damage_+%"
-                    || !spell && name is "attack_damage_+%" or "physical_damage_+%"
-                    || bow && name == "projectile_damage_+%") score += value;
-                if (name == (spell ? "base_cast_speed_+%" : "attack_speed_+%")) score += value * 2;
-            }
-            return score;
-        }
-        for (int point = 0; point < level - 1; point++)
-        {
-            var frontier = OrdinaryPassives.Frontier((byte)cls.IntegerId, AscendancyFamily.Normal, nodes)
-                .Where(id => Score(id) >= 0).ToArray();
-            if (frontier.Length == 0) break;
-            var pick = frontier.OrderByDescending(id => Score(id) + .5 * OrdinaryPassives.Adjacent(id, AscendancyFamily.Normal)
-                .Where(next => !nodes.Contains(next)).Select(Score).DefaultIfEmpty(0).Max()).ThenBy(id => id).First();
-            nodes.Add(pick);
-        }
-        OrdinaryPassives.Validate((byte)cls.IntegerId, AscendancyFamily.Normal, nodes);
+        var nodes = ControlledNodes(characterClass, level);
         var passiveStats = Passives.Stats(nodes);
         int Attr(string name, int basis) => basis + (Stats.Key(name) is uint key ? passiveStats.GetValueOrDefault(key) : 0)
             + (Stats.Key("base_all_attributes") is uint all ? passiveStats.GetValueOrDefault(all) : 0);
@@ -113,5 +85,73 @@ static partial class Game
         return new(inventory, Experience: CharacterStats.ExperienceFor(level), Passives: nodes,
             SkillBar: new() { [0] = "Action/Move", [1] = Skills.EffectId(Items.GemEffects(active).First())! },
             ModuleData: new() { ["PlayerBots.BuildVersion"] = "1" });
+    }
+
+    /// <summary>The passives a controlled character of that class and level allocates: a conservative, ordinary allocation
+    /// that prefers attributes, life and its own damage type. Shared by its starting gear and by the gear it is given later
+    /// (<see cref="ControlledAttributes"/>).</summary>
+    internal static List<ushort> ControlledNodes(CharacterClass characterClass, int level)
+    {
+        level = Math.Clamp(level, 1, 100);
+        var cls = Skills.ClassFor(Skills.RowOfClass((int)characterClass));
+        bool spell = characterClass is CharacterClass.Witch or CharacterClass.Templar;
+        bool bow = characterClass == CharacterClass.Ranger;
+        var nodes = new List<ushort>();
+        double Score(ushort id)
+        {
+            var n = Passives.Find(id);
+            if (n is null || n.IsKeystone || n.IsJewelSocket) return -1000;
+            double score = .1;
+            foreach (var (key, value) in n.Stats)
+            {
+                string name = Stats.Name(key) ?? "";
+                if (name is "base_strength" or "base_dexterity" or "base_intelligence" or "base_all_attributes") score += value * .65;
+                if (name is "maximum_life_+%" or "base_maximum_life") score += value * 2;
+                if (name is "base_resist_all_elements_%") score += value;
+                if (name == "damage_+%" || spell && name is "spell_damage_+%" or "fire_damage_+%"
+                    || !spell && name is "attack_damage_+%" or "physical_damage_+%"
+                    || bow && name == "projectile_damage_+%") score += value;
+                if (name == (spell ? "base_cast_speed_+%" : "attack_speed_+%")) score += value * 2;
+            }
+            return score;
+        }
+        for (int point = 0; point < level - 1; point++)
+        {
+            var frontier = OrdinaryPassives.Frontier((byte)cls.IntegerId, AscendancyFamily.Normal, nodes)
+                .Where(id => Score(id) >= 0).ToArray();
+            if (frontier.Length == 0) break;
+            var pick = frontier.OrderByDescending(id => Score(id) + .5 * OrdinaryPassives.Adjacent(id, AscendancyFamily.Normal)
+                .Where(next => !nodes.Contains(next)).Select(Score).DefaultIfEmpty(0).Max()).ThenBy(id => id).First();
+            nodes.Add(pick);
+        }
+        OrdinaryPassives.Validate((byte)cls.IntegerId, AscendancyFamily.Normal, nodes);
+        return nodes;
+    }
+
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<(CharacterClass Class, int Level), (int Str, int Dex, int Int)> AttributeCache = new();
+
+    /// <summary>The strength, dexterity and intelligence that build reaches at that level (base attributes plus the
+    /// allocation's attribute nodes): the highest requirements a base item it wears may ask for. Cached, since every bot's
+    /// gear is picked through it.</summary>
+    internal static (int Str, int Dex, int Int) ControlledAttributes(CharacterClass characterClass, int level)
+    {
+        level = Math.Clamp(level, 1, 100);
+        return AttributeCache.GetOrAdd((characterClass, level), key =>
+        {
+            var cls = Skills.ClassFor(Skills.RowOfClass((int)key.Class));
+            var passiveStats = Passives.Stats(ControlledNodes(key.Class, key.Level));
+            int Attr(string name, int basis) => basis + (Stats.Key(name) is uint stat ? passiveStats.GetValueOrDefault(stat) : 0)
+                + (Stats.Key("base_all_attributes") is uint all ? passiveStats.GetValueOrDefault(all) : 0);
+            return (Attr("base_strength", cls.Strength), Attr("base_dexterity", cls.Dexterity), Attr("base_intelligence", cls.Intelligence));
+        });
+    }
+
+    /// <summary>Whether a base item's own attribute requirements are within what that class reaches at that level: the check
+    /// behind the gear bots are given, so none is dressed in something it could not wear.</summary>
+    internal static bool GearFitsClass(CharacterClass characterClass, int level, ItemCatalog.BaseType type)
+    {
+        var (str, dex, intel) = ControlledAttributes(characterClass, level);
+        var req = Items.Requirements(type);
+        return req.Str <= str && req.Dex <= dex && req.Int <= intel;
     }
 }

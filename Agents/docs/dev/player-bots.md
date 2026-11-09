@@ -67,6 +67,10 @@ skill (its hits were fists) and every other client drew it bare.
   puts them on the character as real items at that level (`ControlledEquipment.EquipControlledGear`), replacing whatever
   the rows held, one row per piece (a dual wielder's second one-hander takes the off hand). The model, the weapon's damage
   and the armour then all come from the items.
+  The pick also checks attribute requirements: `ControlledPlayers.GearFitsClass` answers with the strength, dexterity and
+  intelligence the class's own allocation reaches at that level (`ControlledBuilds.ControlledAttributes`, cached per class
+  and level), so a base whose `ComponentAttributeRequirements` exceed them is skipped rather than worn with "requirements
+  not met".
 - **Cosmetics** (`BotCosmetics`): every worn item gets a skin whose own `ItemClasses` name that item's class — armour by
   its row, a bow only for a bow. The pick is stable per character and item (an FNV hash of the name and the base id), so a
   bot keeps its look. A party follower takes its skins through the worn table the client's model is built from

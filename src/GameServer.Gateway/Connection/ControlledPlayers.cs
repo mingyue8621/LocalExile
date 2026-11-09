@@ -38,6 +38,11 @@ static class ControlledPlayers
     /// no connection for the worn table to arrive on.</summary>
     internal static Func<string, string, (uint Hash, ushort Visual)?>? BotSkin;
 
+    /// <summary>Whether a base item's attribute requirements are within what that class reaches at that level (the game
+    /// module answers with the same allocation its controlled characters use). The PlayerBots module filters its gear
+    /// choice with it, so a bot is never dressed in armour it could not wear.</summary>
+    internal static Func<GameServer.Core.Accounts.CharacterClass, int, ItemCatalog.BaseType, bool>? GearFitsClass;
+
     static readonly ConditionalWeakTable<ConnectionCiphers, object> Transports = new();
     internal static bool IsTransport(ConnectionCiphers ciphers) => Transports.TryGetValue(ciphers, out _);
 

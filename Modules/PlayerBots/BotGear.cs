@@ -40,23 +40,26 @@ static class BotGear
     {
         var gear = new List<string>();
         var (main, off) = Weapons[cls][random.Next(Weapons[cls].Length)];
-        if (Best(main, level, random) is { } weapon) gear.Add(weapon.Id);
-        if (off is not null && Best([off], level, random, ArmourTag[cls]) is { } shield) gear.Add(shield.Id);
-        else if (cls == CharacterClass.Shadow && Best(main, level, random) is { } second) gear.Add(second.Id);
+        if (Best(main, cls, level, random) is { } weapon) gear.Add(weapon.Id);
+        if (off is not null && Best([off], cls, level, random, ArmourTag[cls]) is { } shield) gear.Add(shield.Id);
+        else if (cls == CharacterClass.Shadow && Best(main, cls, level, random) is { } second) gear.Add(second.Id);
         foreach (string piece in new[] { "Helmet", "Body Armour", "Gloves", "Boots" })
-            if (Best([piece], level, random, ArmourTag[cls]) is { } armour) gear.Add(armour.Id);
-        if (Best(["Belt"], level, random) is { } belt) gear.Add(belt.Id);
+            if (Best([piece], cls, level, random, ArmourTag[cls]) is { } armour) gear.Add(armour.Id);
+        if (Best(["Belt"], cls, level, random) is { } belt) gear.Add(belt.Id);
         return gear;
     }
 
-    // One of the two highest bases of the classes a character of this level can wear (DropLevel), with the tag if given.
-    static ItemCatalog.BaseType? Best(string[] classes, int level, Random random, string? tag = null)
+    // One of the two highest bases of the classes a character of this level can wear (DropLevel), with the tag if given, and
+    // only one whose own attribute requirements the character's allocation meets (ControlledPlayers.GearFitsClass): worn
+    // anyway it would read "requirements not met" and give nothing.
+    static ItemCatalog.BaseType? Best(string[] classes, CharacterClass cls, int level, Random random, string? tag = null)
     {
         var fitting = Program.Items.All
             .Where(t => classes.Contains(t.Class) && t.VisualIdentity != 0 && t.DropLevel <= Math.Max(1, level)
                 && t.Id.StartsWith("Metadata/Items/", StringComparison.Ordinal) && !t.Id.Contains("Demigod", StringComparison.Ordinal)
                 && !t.Id.Contains("Royale", StringComparison.Ordinal) && !t.Id.Contains("Talisman", StringComparison.Ordinal)
-                && (tag is null || t.Tags.Contains(tag) || !t.Tags.Any(g => g.EndsWith("_armour", StringComparison.Ordinal) || g.EndsWith("_shield", StringComparison.Ordinal))))
+                && (tag is null || t.Tags.Contains(tag) || !t.Tags.Any(g => g.EndsWith("_armour", StringComparison.Ordinal) || g.EndsWith("_shield", StringComparison.Ordinal)))
+                && (ControlledPlayers.GearFitsClass?.Invoke(cls, Math.Max(1, level), t) ?? true))
             .OrderByDescending(t => t.DropLevel).Take(2).ToList();
         return fitting.Count == 0 ? null : fitting[random.Next(fitting.Count)];
     }

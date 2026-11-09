@@ -15,6 +15,7 @@ public sealed class GameModule : IModule
         // What a bot wears: its party body takes real gear (ControlledPlayers.Gear, from PlayerBots) and skins it here; its
         // town body, drawn without a connection, asks for one skin at a time (BotSkin).
         ControlledPlayers.BotSkin = global::Game.BotSkin;
+        ControlledPlayers.GearFitsClass = global::Game.GearFitsClass;
         Program.SetGameLogic(new GameLogic(module.Lifetime));
         module.OnTick((player, _) => global::DoedreSewers.Tick(Program.ConnOf(player)));
         module.Lifetime.Own(GameEvents.ObjectUse.Add("Game", global::DoedreSewers.Use));
