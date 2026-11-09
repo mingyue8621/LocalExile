@@ -197,9 +197,11 @@ static class CurrencyEffects
     public const string VaalOrb = "Metadata/Items/Currency/CurrencyCorrupt";
 
     /// <summary>Vaal Orb, the documented LocalExile rule: a modifiable weapon, armour piece or jewellery (ring,
-    /// amulet, belt) that is not unique or corrupted/mirrored is always corrupted. Normal/magic become rare; rare
-    /// items replace 1-5 affixes or reroll all of them. One white socket is coloured. Missing/empty pools and
-    /// unsupported or unmodifiable bases are refused before the inventory handler spends an orb.</summary>
+    /// amulet, belt) that is not corrupted or mirrored is always corrupted. Normal/magic become rare; rare
+    /// items replace 1-5 affixes or reroll all of them; half of those uses also add one of the base's corruption
+    /// implicits. A unique keeps its modifiers and gains that implicit when its base has one. One white socket is
+    /// coloured. Missing/empty pools and unsupported or unmodifiable bases are refused before the inventory handler
+    /// spends an orb.</summary>
     public static Item? Vaal(Item item, ItemCatalog.BaseType type, (int Str, int Dex, int Int) requirements, ItemRolls rolls, Random random) =>
         rolls.Vaal(item, type, requirements, random);
 

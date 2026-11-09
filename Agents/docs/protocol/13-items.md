@@ -1013,13 +1013,21 @@ it and is saved with the item. A corrupted item takes no currency but a Scroll o
 currency yet), and nothing removes corruption.
 
 `CurrencyCorrupt`, same handler (0x71, 0x72 with Shift). A server rule, not the official one: `CurrencyEffects.Vaal`
-delegates to `ItemRolls.Vaal`, which takes a modifiable weapon, armour piece or jewellery (ring, amulet, belt) that is
-not unique, corrupted or mirrored, and always corrupts it.
+delegates to `ItemRolls.Vaal`, which takes a modifiable weapon, armour piece, quiver, jewel or jewellery (ring,
+amulet, belt) that is not corrupted or mirrored, and always corrupts it.
 A normal or magic item becomes rare with 4-6 new affixes and a rare name. A rare item has 1, 2, 3 or 4 random affixes
 replaced (20% each), 5 (10%) or all of them rerolled (10%: 4-6, new name) (`ItemRolls.ReplaceAffixes`: the replaced
 ones come back through `AddAffix`, at most three of each kind, so the count stays).
+**A corruption implicit** comes with half of those uses: one Mods.dat GenerationType 5 row of the base's own mod domain,
+no higher level than the item, weighted for its tags (`ItemRolls.CorruptionImplicits`; weapons and armour carry the
+"adds x-y damage"/charge rows, jewels the `...JewelCorrupted` ones). It is rolled into the item's implicit list, after
+the ones it has, so the client draws it as a Vaal implicit.
+**Uniques are corrupted too** (2026-11-09): the item keeps its own modifiers, and takes that implicit on the same half
+chance when its base offers one at its item level — before this the orb refused uniques outright, so using one on a
+unique did nothing at all (live report 2026-11-09).
 Unknown/unsupported or `Unmodifiable` bases and empty pools are refused before spending.
-Official CoE Vaal outcomes are separate work; see [the admission check and boundary](../re/vaal-coe.md).
+Official CoE Vaal outcomes for gems, flasks and maps are still separate work; see
+[the admission check and boundary](../re/vaal-coe.md).
 
 ### Eldritch Ichors and Embers (2026-10-30)
 

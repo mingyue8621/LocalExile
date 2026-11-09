@@ -273,11 +273,14 @@ sealed class ItemRolls(ItemCatalog catalog, string folder = "data", SystemSettin
         item.Rarity != ItemRarity.Unique && TryModifiable(item, out var type) && type.CanBeMirrored
             ? item with { Mirrored = true } : null;
 
-    /// <summary>Vaal Orb, the documented LocalExile rule: a weapon, armour piece or jewellery (ring, amulet, belt)
-    /// that is modifiable, not unique and not corrupted/mirrored is always corrupted. A normal or magic item becomes
-    /// rare with 4-6 affixes; a rare one replaces 1-5 affixes or rerolls all of them. One white socket is coloured.
-    /// Maps and MapKeys are corrupted the same way (white/magic become rare; a rare map can gain extra affixes up to
-    /// 4/4). Refused targets return null before rolling or spending, including missing/empty pools on equipment.</summary>
+    /// <summary>Vaal Orb, the documented LocalExile rule: a weapon, armour piece, quiver, jewel or jewellery (ring,
+    /// amulet, belt) that is modifiable and not corrupted/mirrored is always corrupted. A normal or magic item becomes rare with 4-6
+    /// affixes; a rare one replaces 1-5 affixes or rerolls all of them. Half of those uses also add one of the base's
+    /// corruption implicits (Mods.dat GenerationType 5, e.g. "adds x-y Chaos Damage"), which is the effect the orb is
+    /// known for. A unique keeps its own modifiers: it is corrupted, and gains that implicit when its base has one.
+    /// One white socket is coloured. Maps and MapKeys are corrupted the same way (white/magic become rare; a rare map
+    /// can gain extra affixes up to 4/4). Refused targets return null before rolling or spending, including
+    /// missing/empty pools on equipment.</summary>
     public Item? Vaal(Item item, ItemCatalog.BaseType type, (int Str, int Dex, int Int) requirements, Random random)
     {
         if (CurrencyEffects.IsMap(item, type))
@@ -297,12 +300,23 @@ sealed class ItemRolls(ItemCatalog catalog, string folder = "data", SystemSettin
             return map with { Corrupted = true, Identified = true };
         }
         bool target = item.Components.Contains("Weapon") || item.Components.Contains("Armour") ||
-            type.Class is "Ring" or "Amulet" or "Belt";
-        if (!target || item.Rarity == ItemRarity.Unique || !TryModifiable(item, out _) ||
-            Pool(type, item).Count == 0) return null;
+            type.Class is "Ring" or "Amulet" or "Belt" or "Quiver" or "Jewel";
+        if (!target || !TryModifiable(item, out _)) return null;
+        // A unique keeps the modifiers it has: the orb corrupts it and, in half of the uses, adds a corruption implicit
+        // when its base has one at this item level (the Vaal implicit corrupted uniques carry); a normal, magic or rare
+        // item rolls its new rarity first and takes that implicit on the same chance.
+        bool corruptable = Pool(type, item).Count > 0;
+        if (item.Rarity != ItemRarity.Unique && !corruptable) return null;
         int roll = random.Next(100);
-        Item result = item.Rarity != ItemRarity.Rare || roll >= 90 ? Roll(item, ItemRarity.Rare, random)
-            : ReplaceAffixes(item, roll switch { < 20 => 1, < 40 => 2, < 60 => 3, < 80 => 4, _ => 5 }, random);
+        Item result = item.Rarity switch
+        {
+            ItemRarity.Unique => item,
+            ItemRarity.Rare when roll < 90 => ReplaceAffixes(item, roll switch { < 20 => 1, < 40 => 2, < 60 => 3, < 80 => 4, _ => 5 }, random),
+            _ => Roll(item, ItemRarity.Rare, random),
+        };
+        // The Vaal implicit: half of the uses, when the base offers one at this item level.
+        if (CorruptionImplicits(type, item.ItemLevel) is { Count: > 0 } pool && random.Next(2) == 0)
+            result = AddCorruptionImplicit(result, pool, random);
         var sockets = result.Sockets.ToArray();
         var whites = Enumerable.Range(0, sockets.Length).Where(i => sockets[i].Colour == SocketColour.White).ToArray();
         if (whites.Length > 0)
@@ -312,6 +326,26 @@ sealed class ItemRolls(ItemCatalog catalog, string folder = "data", SystemSettin
             result = result with { Sockets = sockets };
         }
         return result with { Corrupted = true, Identified = true };
+    }
+
+    /// <summary>Mods.dat GenerationType of the corruption implicits a Vaal Orb adds.</summary>
+    const int CorruptionImplicit = 5;
+
+    /// <summary>The corruption implicits (GenerationType 5) this base can carry at this item level: its own mod domain,
+    /// a spawn weight for its tags and no higher level than the item.</summary>
+    IReadOnlyList<(ModCatalog.Mod Mod, int Weight)> CorruptionImplicits(ItemCatalog.BaseType type, int itemLevel) =>
+        [.. catalog.Mods.All
+            .Where(m => m.GenerationType == CorruptionImplicit && m.Domain == type.ModDomain && m.Level <= itemLevel)
+            .Select(m => (m, m.WeightFor(type.Tags))).Where(p => p.Item2 > 0)];
+
+    // The item with one of those rolled into its implicit list, after the implicits it has.
+    static Item AddCorruptionImplicit(Item item, IReadOnlyList<(ModCatalog.Mod Mod, int Weight)> pool, Random random)
+    {
+        var chosen = Pick(pool, random);
+        var mods = item.Mods.ToList();
+        int at = mods.FindLastIndex(m => m.Section == ModSection.Implicit) + 1;
+        mods.Insert(at, chosen.Roll(ModSection.Implicit, random));
+        return item with { Mods = mods };
     }
 
     /// <summary>The item with this rarity and freshly rolled affixes (its implicits and other lists kept, earlier
