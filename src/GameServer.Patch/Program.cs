@@ -27,6 +27,10 @@ using GameServer.Data.Ggpk;
 //                                         is saved once to data/gateway_list.original.txt
 //   gateway [ggpk] --restore              write the saved original back
 
+// The console's encoding: logs\live-patch.log is read as UTF-8, so an error message from the OS (Chinese here) must go
+// out as UTF-8 rather than the console's own code page. Auth sets this for the same reason.
+Console.OutputEncoding = new System.Text.UTF8Encoding(false);
+
 if (args.Length > 0 && args[0] is "root-hash" or "gateway")
 {
     try { return GgpkTool(args); }
