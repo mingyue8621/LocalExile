@@ -109,6 +109,12 @@
 
 ## 部分实现
 
+- **每击伤害按「同等级共享 DPS」折算（2026-11-09，按官方修正）。** 官方 Wiki「Monster damage」：同等级怪物共享
+  一个 DPS，慢攻怪每击更高、快攻怪每击更低。`MonsterCatalog.BaseDamage` 因此接受动作自身的耗时：
+  法术传 `GrantedEffects.CastTime`，物理攻击传 `MonsterVarieties.AttackSpeed`。原来一律用品种攻击间隔，
+  让施法 1.0 秒的 Shrieker（品种 1.5 秒）打出 1.5 倍 DPS、投火灯笼手（1.0 对 1.395）1.4 倍；
+  现在 34 级两者分别为 103 / 100 每击，与同级物理怪一致。Boss 脚本（BrineKing 的砸地、VaalOversoul 的砸地）
+  同样按各自动作时间传入。
 - **单次命中的上限是同级 Damage 的 4 倍（2026-11-08）。** `MonsterCatalog.BaseDamage` 把一次命中封顶在
   `HitCapFactor`（4）× 该等级的 `DefaultMonsterStats.Damage`，因为表里的 `DamageMultiplier` 与攻击时间属于游戏的技能行，
   那些行带有一个本服务端未建模的伤害效率。有两个变体需要它：瓦尔超灵（4.005 秒时 1595%，23 级 1913，

@@ -120,21 +120,24 @@ static class BrineKing
         }).OfType<GrantedSkill>()];
     }
 
+    // The time this action takes: the slowed slam clip (−50% / −60% attack speed), the melee clip's own attack time, or
+    // the skill's cast time (never under 0.5 s). One hit is the level's shared DPS over this time (MonsterCatalog.BaseDamage).
+    static double SwingSeconds(SkillCatalog catalog, MonsterCatalog.Variety variety, int effect) =>
+        effect is 6668 or 6670 ? effect == 6670 ? 3.1 : 2.4
+        : effect == MeleeEffect ? variety.AttackMs / 1000.0
+        : Math.Max(0.5, catalog.CastTimeMs(effect) / 1000.0);
+
     static MonsterAttack Attack(ClientState conn, MonsterCatalog.Variety variety, byte level, int effect)
     {
         var catalog = Game.SkillsFor(conn);
-        var (min, max) = Monsters.BaseDamage(variety, level) ?? (1, 1);
+        double seconds = SwingSeconds(catalog, variety, effect);
+        var (min, max) = Monsters.BaseDamage(variety, level, seconds) ?? (1, 1);
         var damage = DamagePacket.Of(DamageType.Physical, min, max);
         bool spell = catalog.IsSpell(effect);
         if (spell) damage = catalog.HitDamage(effect, level);
-        double seconds = effect == MeleeEffect ? variety.AttackMs / 1000.0 : Math.Max(0.5, catalog.CastTimeMs(effect) / 1000.0);
         if (effect is 6668 or 6670)
-        {
-            // The slam's ACT clip is slowed by its own attack-speed stat (−50% / −60%).
-            seconds = effect == 6670 ? 3.1 : 2.4;
             damage = damage.Scale(2).Select((t, r) => t == DamageType.Physical ? r.Scale(0.5) : r)
                 .Add(DamageType.Cold, new DamageRange(min, max));
-        }
         if (effect is 6354 or 6355 or 6361) damage = DamagePacket.Empty;
         return new(Skill(effect), seconds, effect == MeleeEffect ? variety.AttackRange : 45, damage)
         { Spell = spell, Scripted = true };
@@ -488,7 +491,8 @@ static class BrineKing
                     double t = Math.Clamp(((at.X - before.X) * dx + (at.Y - before.Y) * dy) / Math.Max(1e-9, dx * dx + dy * dy), 0, 1);
                     if (Math.Pow(at.X - before.X - t * dx, 2) + Math.Pow(at.Y - before.Y - t * dy, 2) > 16) continue;
                     surf.Hit.Add(participant);
-                    var damage = Monsters.BaseDamage(boss.Variety!, boss.Level) ?? (50, 70);
+                    // The surf hits once a second (the hit's own time below), so the level's shared DPS is the hit.
+                    var damage = Monsters.BaseDamage(boss.Variety!, boss.Level, 1) ?? (50, 70);
                     await Hit(participant, ((int)p.X, (int)p.Y), new(Skill(6359), 1, 4,
                         DamagePacket.Of(DamageType.Cold, damage.Item1, damage.Item2)) { Spell = true, Scripted = true });
                 }
@@ -506,7 +510,8 @@ static class BrineKing
                 foreach (var player in players.Where(p => p.PlayerLife > 0))
                 {
                     var at = player.Walk.Position(now);
-                    var damage = Monsters.BaseDamage(boss.Variety!, boss.Level) ?? (100, 150);
+                    // The tide's damage is a per-second rate, which is exactly the level's shared DPS.
+                    var damage = Monsters.BaseDamage(boss.Variety!, boss.Level, 1) ?? (100, 150);
                     await TideAt(player, Distance(at, center) > radius * open, (damage.Item1 + damage.Item2) * 0.75);
                 }
             }

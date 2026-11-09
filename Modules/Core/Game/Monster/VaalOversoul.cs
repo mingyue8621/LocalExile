@@ -33,7 +33,7 @@ static class VaalOversoul
         var damage = catalog.HitDamage(effect, Level(catalog, effect, level));
         if (effect == Slam)
         {
-            var (min, max) = Monsters.BaseDamage(v, level) ?? (1, 1);
+            var (min, max) = Monsters.BaseDamage(v, level, catalog.CastTimeMs(effect) / 1000d) ?? (1, 1);
             damage = DamagePacket.Of(DamageType.Physical, min, max)
                 .Scale(Math.Max(0, 1 + Stat(conn, effect, level, "active_skill_damage_+%_final") / 100d));
             var physical = damage[DamageType.Physical];

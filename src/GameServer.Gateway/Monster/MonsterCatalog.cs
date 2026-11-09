@@ -119,16 +119,23 @@ sealed class MonsterCatalog(string folder = "data")
     /// <summary>
     /// A monster's hit at this level, before mods: DefaultMonsterStats row level − 1 `Damage` (`MinionDamage` for an
     /// IsPlayerMinion type, as PoB's monsterAllyDamageTable for non-hostile minions) × DamageMultiplier / 100
-    /// × the attack time in seconds (unless its MonsterTypes row has BaseDamageIgnoresAttackSpeed, as Path of Building
+    /// × the action time in seconds (unless its MonsterTypes row has BaseDamageIgnoresAttackSpeed, as Path of Building
     /// does), spread ± MonsterTypes `DamageSpread` percent (20 without one). Hillock at level 1: 4.99 × 1.01 × 1.65 = 8.3,
     /// spread 30%. Null when the tables are missing.
+    /// <para>
+    /// <paramref name="hitSeconds"/> is the time the action itself takes — a spell's cast time, else the variety's attack
+    /// time — because DefaultMonsterStats `Damage` is the DPS every monster of a level shares (wiki "Monster damage":
+    /// "Monsters of the same level share DPS ... monsters which attack slower will have higher per hit damage"). A caller
+    /// that leaves it 0 gets the variety's attack time.
+    /// </para>
     /// </summary>
-    public (int Min, int Max)? BaseDamage(Variety v, byte level)
+    public (int Min, int Max)? BaseDamage(Variety v, byte level, double hitSeconds = 0)
     {
         if (_life.Value is not { } t || level < 1 || level > t.Levels.Count) return null;
         var type = v.MonsterType >= 0 && v.MonsterType < t.Types.Count ? t.Types[v.MonsterType] : default;
         var row = t.Levels[level - 1];
-        double d = (type.Minion ? row.MinionDamage : row.Damage) * v.DamageMultiplier / 100.0 * (type.IgnoresAttackSpeed ? 1 : v.AttackMs / 1000.0);
+        double seconds = hitSeconds > 0 ? hitSeconds : v.AttackMs / 1000.0;
+        double d = (type.Minion ? row.MinionDamage : row.Damage) * v.DamageMultiplier / 100.0 * (type.IgnoresAttackSpeed ? 1 : seconds);
         double spread = (type.DamageSpread > 0 ? type.DamageSpread : 20) / 100.0;
         // A hit's ceiling: HitCapFactor × the level's own Damage. The data's DamageMultiplier and attack time belong to the
         // game's own skill rows, which carry a damage effectiveness the tables here do not have; applied raw to a slow

@@ -145,12 +145,6 @@ static partial class Game
         // reach and the level's damage as the skill's final stats (11-skills.md §7).
         // The mods' damage and speed: the rarity's more damage per hit and faster attacks with that much less damage, the
         // affixes' increased damage, attack speed and extra elemental / chaos damage (MonsterModEffects.Hit).
-        var (baseMin, baseMax) = Monsters.BaseDamage(variety, level) ?? (1, 1);
-        if (mapBoss)
-        {
-            baseMin = Math.Max(1, (int)Math.Round(baseMin * mapBossScaling.Damage));
-            baseMax = Math.Max(1, (int)Math.Round(baseMax * mapBossScaling.Damage));
-        }
         var catalog = SkillsFor(conn);
         // The King's actors keep their first granted effect, reach and official ids: KingInMists.cs plays their actions
         // itself. Every other monster takes its combat effect (MavenNucleus.CombatEffect).
@@ -191,6 +185,16 @@ static partial class Game
         double reach = reachUnits > 0 ? reachUnits / 2 : variety.AttackRange;
         double swing = !kingActor && effect >= 0 && catalog.IsSpell(effect) && catalog.CastTimeMs(effect) > 0
             ? catalog.CastTimeMs(effect) / 1000.0 : variety.AttackMs / 1000.0;
+        // Its hit: the level's Damage is the DPS every monster of that level shares (wiki "Monster damage"), so one hit is
+        // that DPS over the time this action takes. A spell's time is its cast time, not the variety's attack time: the
+        // Shrieker's BatScreech casts in 1 s while its variety attacks in 1.5 s, and charging the attack time here gave
+        // the screech 1.5× the level's DPS (live 2026-11-09: 154 a hit instead of 103).
+        var (baseMin, baseMax) = Monsters.BaseDamage(variety, level, swing) ?? (1, 1);
+        if (mapBoss)
+        {
+            baseMin = Math.Max(1, (int)Math.Round(baseMin * mapBossScaling.Damage));
+            baseMax = Math.Max(1, (int)Math.Round(baseMax * mapBossScaling.Damage));
+        }
         // The King's two forms carry the official MeleeAtAnimationSpeedUnique ids (0x4001 humanoid, 0x4000 treant);
         // 0x0102 is the player/generic default attack and has no matching clip on their rigs.
         ushort skillId = KingInMists.IsBoss2(variety) ? KingInMists.Boss2AttackSkill
