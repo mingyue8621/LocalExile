@@ -143,6 +143,9 @@ sealed class CosmeticEffects(string folder = "data")
     /// <summary>The Cosmetics tab slot with this MicrotransactionSlot Id, or null.</summary>
     public Slot? SlotOf(byte id) => _data.Value.Slots.GetValueOrDefault(id);
 
+    /// <summary>Every Cosmetics tab slot by its Id (the ones the client's worn table is keyed by).</summary>
+    public IReadOnlyDictionary<byte, Slot> Slots => _data.Value.Slots;
+
     static (Dictionary<uint, Effect>, Dictionary<byte, Slot>) Load(string folder)
     {
         string dir = Path.Combine(folder, "tables");

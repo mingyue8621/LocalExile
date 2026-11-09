@@ -61,8 +61,10 @@ static class BotGear
         return fitting.Count == 0 ? null : fitting[random.Next(fitting.Count)];
     }
 
-    /// <summary>The model's entries for the gear, every visible slot (an empty one where nothing is worn).</summary>
-    public static IReadOnlyList<VisibleItem> Looks(IReadOnlyList<string> gear)
+    /// <summary>The model's entries for the gear, every visible slot (an empty one where nothing is worn). <paramref
+    /// name="seed"/> is what a cosmetic pick is stable by (the bot's name): the game module answers a skin for each base
+    /// item, only one whose ItemClasses name that item's class.</summary>
+    public static IReadOnlyList<VisibleItem> Looks(IReadOnlyList<string> gear, string seed)
     {
         var looks = Slots.ToDictionary(s => s, VisibleItem.Empty);
         var types = gear.Select(id => Program.Items.All.FirstOrDefault(t => t.Id == id)).Where(t => t is not null).Select(t => t!).ToList();
@@ -78,15 +80,19 @@ static class BotGear
                 _ => OffHand,
             };
             if (slot is MainHand) firstHand = false;
+            var skin = ControlledPlayers.BotSkin?.Invoke(t.Id, seed);
             if (t.Class == "Bow")
             {
-                // Held in the left hand, an arrow in the right, the quiver on the back (BowSetup).
+                // Held in the left hand, an arrow in the right, the quiver on the back (BowSetup). Its skin dresses the bow's
+                // own entry (the off hand's), as a player's bow skin does (Equipment.Looks moves slot 0 to 1 for a bow).
                 looks[MainHand] = new VisibleItem(MainHand, DefaultArrow) { Type = look.Type, Stance = t.Stance };
                 looks[OffHand] = new VisibleItem(OffHand, t.VisualIdentity) { Type = NoWeaponType, Stance = NoStance };
                 looks[Back] = new VisibleItem(Back, DefaultQuiver) { Type = NoWeaponType, Stance = NoStance };
+                if (skin is { } bowSkin) looks[OffHand] = looks[OffHand] with { SkinVisual = bowSkin.Visual, SkinHash = bowSkin.Hash };
                 continue;
             }
             looks[slot.Value] = look with { Slot = slot.Value };
+            if (skin is { } worn) looks[slot.Value] = looks[slot.Value] with { SkinVisual = worn.Visual, SkinHash = worn.Hash };
         }
         return [.. looks.OrderBy(e => e.Key).Select(e => e.Value)];
     }

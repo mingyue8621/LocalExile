@@ -744,7 +744,7 @@ sealed partial class BotDirector
         var player = new PlayerObject(bot.Name, CharacterClassByte.Encode((byte)cls.IntegerId, 0), (int)bot.X, (int)bot.Y, life, mana,
             Experience: CharacterStats.ExperienceFor(bot.Level),
             AnimatedObject: cls.AnimatedObject, Skills: [], Stats: bot.Town.Contains("_town", StringComparison.Ordinal) ? [(TownStance, 1)] : [],
-            Equipped: BotGear.Looks(bot.Gear));
+            Equipped: BotGear.Looks(bot.Gear, bot.Name));
         return (InstanceEntities.ObjectTypeHash(cls.ObjectType), player);
     }
 }

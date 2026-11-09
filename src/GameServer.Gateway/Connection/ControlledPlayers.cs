@@ -32,6 +32,12 @@ static class ControlledPlayers
     /// because only it can put items in the character's rows. Null or empty keeps whatever the character already has.</summary>
     internal static Func<string, IReadOnlyList<string>>? Gear;
 
+    /// <summary>The cosmetic skin a base item takes, by (base item Id, seed): its MtxTypeGameSpecific hash and the
+    /// ItemVisualIdentity art to draw. The game module answers from the cosmetics data, only for a cosmetic whose own
+    /// ItemClasses name that item; null for none. The PlayerBots module uses it for the body it draws in a town, which has
+    /// no connection for the worn table to arrive on.</summary>
+    internal static Func<string, string, (uint Hash, ushort Visual)?>? BotSkin;
+
     static readonly ConditionalWeakTable<ConnectionCiphers, object> Transports = new();
     internal static bool IsTransport(ConnectionCiphers ciphers) => Transports.TryGetValue(ciphers, out _);
 

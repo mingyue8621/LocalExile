@@ -67,6 +67,12 @@ skill (its hits were fists) and every other client drew it bare.
   puts them on the character as real items at that level (`ControlledEquipment.EquipControlledGear`), replacing whatever
   the rows held, one row per piece (a dual wielder's second one-hander takes the off hand). The model, the weapon's damage
   and the armour then all come from the items.
+- **Cosmetics** (`BotCosmetics`): every worn item gets a skin whose own `ItemClasses` name that item's class — armour by
+  its row, a bow only for a bow. The pick is stable per character and item (an FNV hash of the name and the base id), so a
+  bot keeps its look. A party follower takes its skins through the worn table the client's model is built from
+  (`Equipment.Looks`: `SkinVisual` + the hash); a town body, which has no connection, asks for one skin per item through
+  `ControlledPlayers.BotSkin` and draws it in its own model entries. The class → candidates table and the picks are cached,
+  since a town body is republished every tick.
 
 ## Party combat
 
