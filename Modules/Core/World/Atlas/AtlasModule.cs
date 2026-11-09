@@ -268,7 +268,11 @@ static class AtlasFeature
     static bool ApplyLeagueFlags(ClientState conn)
     {
         bool changed = false;
-        foreach (int id in UnlockLeagueFlags) if (conn.LeagueQuestFlags.Add(id)) changed = true;
+        // The map device, its extra slots, the Maven's device and the voidstones are endgame: the campaign has none of
+        // them until Kitava falls in The Feeding Trough (live 2026-11-10, the same mistake the Atlas quest flags had:
+        // a level-1 character could open the map device). They are granted with the campaign's EndGameAvailable.
+        if (conn.EarnedQuestFlag(Quests.EndGameAvailable))
+            foreach (int id in UnlockLeagueFlags) if (conn.LeagueQuestFlags.Add(id)) changed = true;
         foreach (int id in StripLeagueFlags) if (conn.LeagueQuestFlags.Remove(id)) changed = true;
         return changed;
     }
