@@ -16,6 +16,11 @@ using DamageRange = GameServer.Core.World.DamageRange;
 using DamageOverTime = GameServer.Core.World.DamageOverTime;
 using GameServer.Core.Diagnostics;
 
+// The console's encoding is the machine's own (936 here) while the launcher reads logs\live-gateway.log as UTF-8: a
+// Cyrillic bot name or a Chinese error came out as \uFFFD soup in it (live 2026-11-09). Auth sets this for the same
+// reason; the Gateway writes its output through the same redirection.
+Console.OutputEncoding = new System.Text.UTF8Encoding(false);
+
 // GameServer.Gateway — the instance (game) server the client connects to after login 0x14, or after 0x27 on an area
 // change (Agents/docs/protocol/02, 09).
 // Reads the plaintext opening (0x0F ticket + 0x0E hello), asks GameServer.Auth which area/instance the ticket belongs to

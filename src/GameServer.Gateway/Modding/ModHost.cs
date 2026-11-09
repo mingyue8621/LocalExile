@@ -388,11 +388,15 @@ sealed class ModHost(string folder, Action<string> log, bool modules = false, bo
         if (id is "" or "." or ".." || relative.StartsWith("..", StringComparison.Ordinal)) return;
         // Choices written by another program (a launcher's switch) apply like /mod_enable and /mod_disable.
         if (id == StateFile) { if (!modules && parts.Length == 1) Later(StateFile, busy: 0); return; }
-        // A module's source and its build's scratch are not the module: its build's output is.
+        // A module is its build's output, its manifest and its user settings; everything else in the folder is data —
+        // its sources, its scratch, and the state and logs it writes while it runs. Those must never reload it: the
+        // module writes them again as soon as it loads, so each write would reload it and the next write reload it again
+        // (live 2026-11-09: PlayerBots rewrote logs\status.txt every settle and the host reloaded it 495 times in six
+        // minutes). A published module has no project file to tell its data from a build, so this cannot depend on one.
         // A league's own compile writes its Binaries/.
         if (leagues && parts is [_, "Binaries", ..]) return;
         if (modules && parts is [_, var part, ..]
-            && (part == "obj" || (part != "bin" && part != Manifest && part != ModSettings.FileName && HasProject(DirOf(id) ?? "")))) return;
+            && part != "bin" && part != Manifest && part != ModSettings.FileName) return;
         Later(id, busy: 0);
     }
 
