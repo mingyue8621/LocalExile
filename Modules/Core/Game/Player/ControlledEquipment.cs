@@ -16,16 +16,27 @@ static partial class Game
         var items = ItemsOf(conn);
         var catalog = ItemsFor(conn);
         var used = new HashSet<byte>();
-        int worn = 0;
+        int worn = 0, carried = 0;
         foreach (string id in ids)
         {
             if (catalog.All.FirstOrDefault(t => t.Id == id) is not { } type || RowFor(type, used) is not { } row) continue;
             used.Add(row);
+            // The gems socketed in what this replaces go on its replacement: a bot's only skill is the gem in its weapon, and
+            // replacing the weapon without it left the follower with no skill at all, so it stood in every fight doing
+            // nothing (live 2026-11-09: "the party bots do not attack"). A bot whose weapon lost its gems that way gets its
+            // class's set back here, instead of staying mute for good.
+            var gems = items.Items(row).SelectMany(old => old.Item.Sockets).Where(s => s.Gem is not null).ToList();
+            if (gems.Count == 0 && row == PlayerInventories.Weapon1)
+                gems = [.. SocketedGems(ControlledGems(
+                    (GameServer.Core.Accounts.CharacterClass)SkillsFor(conn).ClassFor(conn.ClassRow).IntegerId, level, type))];
             foreach (var old in items.Items(row).ToList()) items.Remove(row, old.Id);
-            items.Add(row, 0, 0, ItemCatalog.Create(type) with { ItemLevel = (byte)Math.Clamp(level, 1, 100) });
+            var fresh = ItemCatalog.Create(type) with { ItemLevel = (byte)Math.Clamp(level, 1, 100) };
+            if (gems.Count > 0) fresh = fresh with { Sockets = [.. gems], Links = [(byte)Math.Min(gems.Count, 6)] };
+            items.Add(row, 0, 0, fresh);
             worn++;
+            carried += gems.Count;
         }
-        if (worn > 0) Console.WriteLine($"[bots] {CharacterName(conn)} wears {worn} piece(s) at level {level}");
+        if (worn > 0) Console.WriteLine($"[bots] {CharacterName(conn)} wears {worn} piece(s) at level {level}, {carried} gem(s) in the weapon");
     }
 
     // The slot a base item is worn in: the hand that takes that weapon class, the shield or quiver hand, or the armour row

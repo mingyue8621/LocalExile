@@ -40,6 +40,32 @@ internal static class ControlledPlayerBuildChecks
                         $"{name}: {active.Name}, supports: {string.Join(", ", supported.Supports.Select(s => s.Effect.Id))}");
                     var native = Game.PlayerForCreation(conn);
                     Assert.Contains(native.Skills!, s => s.Id == active.Id);
+                    // The gear pass replaces every worn item. The weapon's gems have to survive it, and a weapon that lost
+                    // them (an older pass stripped them) gets the class's set back: a follower with no gem has no skill at
+                    // all and stood in every fight doing nothing (live 2026-11-09: "the party bots do not attack").
+                    var worn = Game.ItemsOf(conn);
+                    var pieces = new[]
+                        {
+                            PlayerInventories.Weapon1, PlayerInventories.Offhand1, PlayerInventories.BodyArmour,
+                            PlayerInventories.Helmet, PlayerInventories.Gloves, PlayerInventories.Boots, PlayerInventories.Belt,
+                        }
+                        .SelectMany(row => worn.Items(row)).Select(held => Program.Items.ByHash(held.Item.TypeHash)!.Id).ToArray();
+                    var gear = ControlledPlayers.Gear;
+                    ControlledPlayers.Gear = _ => pieces;
+                    try
+                    {
+                        Game.EquipControlledGear(conn, level);
+                        Assert.Single(Game.GemSkillEffects(conn));
+                        foreach (var held in worn.Items(PlayerInventories.Weapon1).ToList())
+                        {
+                            worn.Remove(PlayerInventories.Weapon1, held.Id);
+                            worn.Add(PlayerInventories.Weapon1, 0, 0, held.Item with { Sockets = [], Links = null });
+                        }
+                        Assert.Empty(Game.GemSkillEffects(conn));
+                        Game.EquipControlledGear(conn, level);
+                        Assert.Single(Game.GemSkillEffects(conn));
+                    }
+                    finally { ControlledPlayers.Gear = gear; }
                 }
         }
         finally

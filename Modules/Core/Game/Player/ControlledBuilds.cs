@@ -48,6 +48,31 @@ static partial class Game
             ?? throw new InvalidDataException($"No wearable {weapon} for controlled {characterClass}");
         if (Items.ByHash(main.TypeHash)?.Class is "Wand" or "One Hand Sword" or "Claw" or "Dagger" or "One Hand Mace") Wear("Shield", 3);
         Wear("Body Armour", 1); Wear("Helmet", 4); Wear("Gloves", 8); Wear("Boots", 9); Wear("Belt", 10);
+        var gems = ControlledGems(characterClass, level, Items.ByHash(main.TypeHash)!);
+        if (gems.Count == 0) throw new InvalidDataException($"No usable {skill} for controlled {characterClass}");
+        main = main with { Sockets = SocketedGems(gems), Links = [(byte)gems.Count] };
+        inventory[2] = [inventory[2][0] with { Item = CharacterSaves.ToSaved(main, Items.Mods) }];
+        return new(inventory, Experience: CharacterStats.ExperienceFor(level), Passives: nodes,
+            SkillBar: new() { [0] = "Action/Move", [1] = Skills.EffectId(Items.GemEffects(gems[0]).First())! },
+            ModuleData: new() { ["PlayerBots.BuildVersion"] = "1" });
+    }
+
+    /// <summary>The gems a controlled character carries in its weapon at that level: its one active skill, at the highest
+    /// level its attributes allow, and then the supports that resolve for that weapon's class. Shared by the starting build
+    /// and by the gear pass, which replaces the weapon and must not take the bot's only skill with it
+    /// (<see cref="EquipControlledGear"/>). Empty when the class has no usable gem at that level.</summary>
+    internal static List<Item> ControlledGems(CharacterClass characterClass, int level, ItemCatalog.BaseType weapon)
+    {
+        level = Math.Clamp(level, 1, 100);
+        bool spell = characterClass is CharacterClass.Witch or CharacterClass.Templar;
+        bool bow = characterClass == CharacterClass.Ranger;
+        string skill = characterClass switch
+        {
+            CharacterClass.Witch or CharacterClass.Templar => "Fireball",
+            CharacterClass.Ranger => "Split Arrow", CharacterClass.Marauder => "Ground Slam",
+            CharacterClass.Shadow => "Frost Blades", _ => "Cleave",
+        };
+        var (str, dex, intel) = ControlledAttributes(characterClass, level);
         Item? Gem(string name)
         {
             var type = Items.All.FirstOrDefault(t => t.Name == name && Items.Gem(t) is { IsVaalOrAwakened: false });
@@ -65,7 +90,7 @@ static partial class Game
             }
             return null;
         }
-        var active = Gem(skill) ?? throw new InvalidDataException($"No usable {skill} for controlled {characterClass}");
+        if (Gem(skill) is not { } active) return [];
         string[] candidates = spell ? ["Added Lightning Damage Support", "Faster Casting Support", "Controlled Destruction Support"]
             : bow ? ["Added Cold Damage Support", "Faster Attacks Support", "Pierce Support"]
             : ["Melee Physical Damage Support", "Faster Attacks Support", "Added Fire Damage Support"];
@@ -73,19 +98,17 @@ static partial class Game
         foreach (string supportName in candidates)
         {
             if (gems.Count >= 3) break;
-            if (Gem(supportName) is { } support)
-            {
-                int effect = Items.Gem(Items.ByHash(support.TypeHash)!)!.Variant(support.GemVariant).Effect;
-                if (Supports.Resolve(Items.GemEffects(active).First(), [new(effect, Items.GemLevel(support), 0, gems.Count)], Skills,
-                    Items.ByHash(main.TypeHash)?.ClassRow).Count > 0) gems.Add(support);
-            }
+            if (Gem(supportName) is not { } support) continue;
+            int effect = Items.Gem(Items.ByHash(support.TypeHash)!)!.Variant(support.GemVariant).Effect;
+            if (Supports.Resolve(Items.GemEffects(active).First(), [new(effect, Items.GemLevel(support), 0, gems.Count)], Skills,
+                weapon.ClassRow).Count > 0) gems.Add(support);
         }
-        main = main with { Sockets = gems.Select(g => new ItemSocket((SocketColour)(Items.Gem(Items.ByHash(g.TypeHash)!)!.Colour), g)).ToArray(), Links = [(byte)gems.Count] };
-        inventory[2] = [inventory[2][0] with { Item = CharacterSaves.ToSaved(main, Items.Mods) }];
-        return new(inventory, Experience: CharacterStats.ExperienceFor(level), Passives: nodes,
-            SkillBar: new() { [0] = "Action/Move", [1] = Skills.EffectId(Items.GemEffects(active).First())! },
-            ModuleData: new() { ["PlayerBots.BuildVersion"] = "1" });
+        return gems;
     }
+
+    /// <summary>Those gems as sockets in the order they are linked.</summary>
+    internal static ItemSocket[] SocketedGems(IReadOnlyList<Item> gems) =>
+        [.. gems.Select(g => new ItemSocket((SocketColour)(Items.Gem(Items.ByHash(g.TypeHash)!)!.Colour), g))];
 
     /// <summary>The passives a controlled character of that class and level allocates: a conservative, ordinary allocation
     /// that prefers attributes, life and its own damage type. Shared by its starting gear and by the gear it is given later

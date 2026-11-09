@@ -78,14 +78,14 @@ static partial class Game
     }
 
     /// <summary>Whether this gem can be used now: the next gem in the list is used meanwhile, where the follower used to
-    /// stand on a cooling skill doing nothing.</summary>
+    /// stand on a cooling skill doing nothing. Reading the state also refreshes it, so it happens inside the same short
+    /// critical section the game's own cooldown path takes (<see cref="ProjectileMutation"/>) rather than under the
+    /// monster list's lock, which guards a different table.</summary>
     internal static bool ControlledSkillReady(ClientState conn, ControlledSkill skill, double now)
     {
-        lock (conn.Monsters)
-        {
-            if (CooldownFor(conn, skill.Effect, skill.Level, skill.Quality) is not { } plan) return true;
+        if (CooldownFor(conn, skill.Effect, skill.Level, skill.Quality) is not { } plan) return true;
+        using (ProjectileMutation(conn, advance: false))
             return CooldownStateLocked(conn, skill.Effect, plan, now).Ready;
-        }
     }
 
     /// <summary>Walk to just inside the reach of that enemy. <see cref="ControlledMoveFits"/> keeps the destination inside
