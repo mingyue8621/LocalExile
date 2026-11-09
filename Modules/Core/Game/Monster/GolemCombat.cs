@@ -63,7 +63,13 @@ static partial class Game
             else return;
         }
         if (now < m.BusyUntil || now < m.FlinchUntil || MonsterActionFactor(m, now) == 0) return;
-        m.Walk.SetSpeed(m.Mods.Effects.MovementSpeed(m.Variety!.MovementSpeed) * MonsterSpeedRoll.Factor(m.SpeedRoll), now);
+        // Its speed changes only with a slow or a buff. SetSpeed restarts the segment in progress as a straight line from
+        // the cell the walker has reached, which is the client's behaviour when the speed really changes; calling it on
+        // every step kept restarting that segment from wherever the estimate was, so the estimate never advanced while
+        // the client walked on, and the next resync put the golem back where the server still had it (live 2026-11-09:
+        // a golem that walked to the player and then snapped back to where it had been standing).
+        double walkSpeed = m.Mods.Effects.MovementSpeed(m.Variety!.MovementSpeed) * MonsterSpeedRoll.Factor(m.SpeedRoll);
+        if (Math.Abs(m.Walk.Speed - walkSpeed) > .01) m.Walk.SetSpeed(walkSpeed, now);
         var here = m.Walk.Position(now); var owner = conn.Walk.Position(now);
         bool follows = !conn.Summons.Definitions.TryGetValue(g.Id, out var summon) || summon.Follows;
         if (follows && Dist(here, owner) > 150)
