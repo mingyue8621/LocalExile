@@ -77,14 +77,14 @@ static partial class Game
         return reaching;
     }
 
-    /// <summary>Whether this gem's cooldown has recovered: the next gem in the list is used meanwhile, where the follower
-    /// used to stand on a cooling skill doing nothing.</summary>
+    /// <summary>Whether this gem can be used now: the next gem in the list is used meanwhile, where the follower used to
+    /// stand on a cooling skill doing nothing.</summary>
     internal static bool ControlledSkillReady(ClientState conn, ControlledSkill skill, double now)
     {
         lock (conn.Monsters)
         {
             if (CooldownFor(conn, skill.Effect, skill.Level, skill.Quality) is not { } plan) return true;
-            return CooldownStateLocked(conn, skill.Effect, plan, now).FullyRecovered;
+            return CooldownStateLocked(conn, skill.Effect, plan, now).Ready;
         }
     }
 
