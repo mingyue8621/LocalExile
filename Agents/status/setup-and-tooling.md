@@ -52,6 +52,59 @@
   记住密码表单的回归测试通过正常 Auth 走到角色选择；已保存登录的保留则是用 mock 验证的。
   代码：`scripts/dev/client-control.js`、`scripts/dev/test-client-login-writer.cjs`。
   文档：[客户端控制](../docs/dev/client-control.md)。
+- The 3.29.3c client: login, characters, town, inventory and stash, cosmetics, kills, items, flasks and skills,
+  waypoints and transitions, NPCs and shops, the hideout, chat and relog (live run, 2026-11-08). Both 3.29.3c builds
+  work with the same code: the release (build 327984) and the 3.29.3.5 hotfix (build 328126; login, zones, combat,
+  items and waypoints live 2026-11-09).
+  Port tools: `scripts/re/port`, `PortMap.java`; docs: [tooling](../docs/re/tooling.md) §11.
+- Game data extracted from the GGPK in one step: `scripts/dev/extract-data.ps1` (run by `live.ps1` on every start,
+  `-NoExtract` to skip) regenerates each data file that is missing or whose manifest version changed (stamps in
+  `data/extract-stamps.json`), and the Gateway warns once at startup about any missing file.
+  Code: `scripts/dev/extract-data.ps1`, `GameDataFiles.cs`.
+  Docs: [GettingStarted](../GettingStarted.md) step 7.
+- The servers run without `Client/`: level generation and the Phrecia graph check read `data/game-files.zip` (every file
+  of the types they read), the HNC mask and GGPK root hash come from `data/client-constants.json`, and Node is not needed
+  at run time. `live.ps1` refreshes the root hash before each client start, because the gateway list in the GGPK changes it.
+  Code: `scripts/re/game-pack`, `GamePack.cs`, `ClientConstants.cs`.
+- Player releases, started by hand: a workflow builds a draft with a self-contained zip, and `LocalExile.exe` takes a player
+  from the client to the game with no SDK, Python or Node installed (`--json` for a GUI).
+  Built and its extraction checked on a PC's client; the first full client run is the maintainer's check of the first draft.
+  Code: `src/LocalExile`, `scripts/release`, `.github/workflows/release.yml`.
+  Docs: [releases](../docs/dev/releases.md).
+- Local patching server: the client never contacts the official patch servers. A GGPK whose root hash is zero (the
+  client then always patches and times out at "Checking resources") gets one on each start (`root-hash --repair`).
+  Code: `GameServer.Patch`, `GgpkMaintenance.RepairRootHash`.
+  Docs: [01](../docs/protocol/01-login.md) §1, [GettingStarted](../GettingStarted.md) step 6.
+- Dev account service: register, log in, create characters, list every account (JSON-lines over TCP).
+  Code: `GameServer.Host`, `GameServer.DevClient`.
+  Docs: [dev-server.md](../docs/dev-server.md).
+- Hooks for outside tools such as the desktop launcher: `live.ps1 -Stop` (also with `-Only` or `-NoClient`),
+  `live.ps1 -ClientOnly -Walkmaps` (the client and its walk-map recorder against running servers), the
+  Gateway's `commands` and `values <kind>` modes (its chat commands, their argument kinds and values, as JSON lines),
+  its `crafter` mode with `/item_give` (an item crafter's bases, mod pools and English stat descriptions, and the item
+  it composed: [item-crafter.md](../docs/dev/item-crafter.md)), its `labyrinth [yyyy-mm-dd | seed]` mode (a day's four
+  Labyrinths: rooms with their map positions, connections and secrets, `LabyrinthDay.Listing`), and the dev host's `accounts`.
+  Checked on a real setup: `-Stop` ending a watched Gateway with its `dotnet watch`, every argument kind's values, and
+  the account list from the real save database.
+  Code: `scripts/dev/live.ps1`, `Program.Completions.cs`, `ChatCommands.cs`, `GameSession.cs`.
+  Docs: [GettingStarted](../GettingStarted.md) step 10, [10](../docs/protocol/10-chat-and-commands.md) §4,
+  [dev-server.md](../docs/dev-server.md).
+- Gateway hot reload, on by default (`live.ps1 -NoHotReload` turns it off): the Gateway runs under `dotnet watch`,
+  which applies saved code edits to the running server; `HotReload.cs` logs each applied edit and tells players in
+  chat when a save starts a reload, when it is applied, when it fails to compile (first three errors, from
+  `dotnet watch`'s output), when it changes nothing, and when the edit needs a restart.
+  Live, with the client in game and no disconnect: Gateway edits applied in 9-18 s (the Burning Arrow fix among
+  them), a Core edit in 0.08 s, two files saved together as one reload, a broken save kept the old code and listed its
+  errors (5 shown as 3 + "2 more"), and the fix applied.
+  A removed member restarted the Gateway as expected; switching to and from `-NoHotReload` stops a Gateway that is
+  still loading. Parsing of the error lines is unit-tested (`HotReloadTests`).
+  Code: `scripts/dev/live.ps1`, `HotReload.cs`.
+  Docs: [GettingStarted](../GettingStarted.md) step 10 (hot reload), [live testing](../docs/dev/live-testing.md).
+- Client control distinguishes explicit password login from a remembered native form submission.
+  Password replacement clears the outgoing saved-credential flag and retains the Remember Password preference.
+  A remembered-form regression reaches character selection through normal Auth; saved-login preservation is mocked.
+  Code: `scripts/dev/client-control.js`, `scripts/dev/test-client-login-writer.cjs`.
+  Docs: [client control](../docs/dev/client-control.md).
 
 ## 部分实现
 
