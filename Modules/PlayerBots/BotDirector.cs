@@ -46,6 +46,8 @@ sealed class Bot
     public string Town = "1_1_town";
     public double X, Y, TargetX, TargetY;
     public DateTime Until;
+    /// <summary>When it shifts its feet next while waiting at a place (a body that never moves reads as a mannequin).</summary>
+    public DateTime ShuffleAt;
     public int ActivitiesLeft, Stuck;
     public string? TargetKind;
     /// <summary>A quick visit (in, hand the quest in to an NPC, out) or a stay (by the stash, a few things to do).</summary>
@@ -442,6 +444,7 @@ sealed partial class BotDirector
                 break;
             case BotPhase.Idling:
                 if (now >= bot.Until) NextActivity(bot, now, observers);
+                else if (now >= bot.ShuffleAt) Shuffle(bot, now, observers);
                 break;
             case BotPhase.Leaving:
                 if (layout is null || Walk(bot, layout, seconds)) { BeginQuest(bot, now); return; }
@@ -522,6 +525,7 @@ sealed partial class BotDirector
         int[] idle = _settings.IdleSeconds is [var lo, var hi] ? [lo, hi] : [8, 75];
         bot.Phase = BotPhase.Idling;
         bot.Until = now.AddSeconds(bot.Quick ? _random.Next(3, 9) : _random.Next(idle[0], idle[1] + 1));
+        bot.ShuffleAt = now.AddSeconds(_random.Next(6, 18));
         var quest = bot.QuestIndex > 0 ? _route[bot.QuestIndex - 1] : null;
         bot.Doing = bot.TargetKind switch
         {
@@ -530,6 +534,30 @@ sealed partial class BotDirector
             _ => "стоит и отдыхает",
         };
         _log.Write(bot.Account, bot.Name, $"{bot.Town}: {bot.Doing}");
+    }
+
+    // A few cells this way or that while it waits: a body that stands perfectly still for a minute reads as a mannequin,
+    // and this keeps it where it came to without changing what it is doing.
+    void Shuffle(Bot bot, DateTime now, List<ClientState>? observers)
+    {
+        bot.ShuffleAt = now.AddSeconds(_random.Next(6, 18));
+        if (observers?.FirstOrDefault() is not { } town) return;
+        var layout = town.Layout;
+        bool Free(int x, int y) => x >= 0 && y >= 0 && x < layout.GridW && y < layout.GridH
+            && (layout.Walkable?.Invoke(x, y) ?? true);
+        for (int trial = 0; trial < 8; trial++)
+        {
+            double angle = _random.NextDouble() * 2 * Math.PI;
+            int radius = _random.Next(2, 7);
+            var at = (X: (int)Math.Round(bot.X) + (int)Math.Round(Math.Cos(angle) * radius),
+                Y: (int)Math.Round(bot.Y) + (int)Math.Round(Math.Sin(angle) * radius));
+            if (!Free(at.X, at.Y)) continue;
+            (bot.TargetX, bot.TargetY) = (at.X, at.Y);
+            bot.TargetKind = "spot";
+            bot.Phase = BotPhase.Walking;
+            bot.Stuck = 0;
+            return;
+        }
     }
 
     // A step toward the target, cell by cell on the town's walk map; true when there, or after being stuck a while (which

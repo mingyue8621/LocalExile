@@ -3,11 +3,21 @@ using GameServer.Core.World;
 static partial class Game
 {
     internal const double ControlledFollowerLeash = 60;
+    /// <summary>How far behind it will still try to run after the leader before blinking back into the party.</summary>
+    internal const double ControlledCatchUpRange = 120;
+    /// <summary>How long it keeps running while the gap is not closing; the leader's own speed means it may never close.</summary>
+    internal const double ControlledCatchUpSeconds = 1.5;
     static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ClientState, ControlledFollowing> FollowerPlans = new();
     sealed class ControlledFollowing
     {
         public bool Following;
         public double RepathAt, AttackUntil, IdleAt = double.NaN, FarSince = double.NaN;
+        // The fight's own timing: when it may look for a new approach spot (and whether the last one was walkable), and when
+        // it may drink again (ControlledCombat).
+        public double ApproachAt, FlaskAt;
+        public bool Approaching;
+        // The catch-up run after a leader that got away: when it started and how near it got (ControlledFollowing).
+        public double CatchUpAt, CatchUpBest;
         public (int X, int Y) LeaderAt, LeaderGoal;
         public uint IdleTurn;
         public uint Target;
@@ -58,6 +68,23 @@ static partial class Game
         // Brief gaps are caught on foot; a blink or an obstructed follower cannot stay off screen.
         if (distance > 100 || distance > ControlledFollowerLeash && now - plan.FarSince >= 1.25)
         {
+            // Run after the leader before blinking: a follower appearing out of nowhere beside the player is what reads as
+            // teleporting. While the gap keeps closing it keeps running; when it stops closing (the leader runs on at the
+            // same speed, or the way is blocked) it comes back the old way.
+            if (distance + .5 < plan.CatchUpBest) { plan.CatchUpBest = distance; plan.CatchUpAt = now; }
+            else if (plan.CatchUpAt == 0) { plan.CatchUpAt = now; plan.CatchUpBest = distance; }
+            if (distance <= ControlledCatchUpRange && now - plan.CatchUpAt < ControlledCatchUpSeconds)
+            {
+                if (now >= plan.RepathAt)
+                {
+                    MoveControlledFollower(conn, ControlledFollowerPoint(conn, leader, atTime: now), now);
+                    plan.RepathAt = now + .5;
+                }
+                plan.Following = true;
+                return true;
+            }
+            plan.CatchUpAt = 0;
+            plan.CatchUpBest = 0;
             var at = ControlledFollowerPoint(conn, leader, atTime: now);
             lock (conn.Monsters)
             {

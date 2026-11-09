@@ -57,36 +57,37 @@ static partial class Game
             await SendCharacterStats(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers, conn, "bot allocates earned passive points");
         }
         if (await ExecuteControlledIntent(conn, leader, now, following)) return;
-        var gem = GemSkillEffects(conn).FirstOrDefault(g => SkillHitPlan.ForSkill(SkillsFor(conn), g.Effect, g.Level, g.Quality).CanHit
-            && GemSkillInstanceDisabled(conn, g.Effect, g.Id) is null);
-        bool onTheMove = following || leader.Walk.Moving(now);
-        double seconds = gem.Name is null ? .35 : SkillsFor(conn).IsAttack(gem.Effect)
-            ? SupportedAttackSeconds(conn, gem.Id) : (CastMs(conn, gem.Effect, gem.Id) ?? 750) / 1000.0;
-        double gap = Dist(conn.Walk.Position(now), leader.Walk.Position(now));
-        double ahead = ControlledAhead(conn.Walk.Position(now), leader.Walk.Position(now), leader.Walk.Destination);
-        bool mayAttack = !onTheMove || ControlledFollowAttackFits(gap, leader.Walk.Moving(now) ? leader.Walk.Speed : 0, seconds, ahead);
-        (uint Id, SpawnedMonster Monster)? target;
         var here = conn.Walk.Position(now);
-        var plan = FollowerPlans.GetOrCreateValue(conn);
-        double reach = gem.Name is null ? 0 : ControlledInPlaceReach(conn, gem.Id, gem.Effect);
-        lock (conn.Monsters)
-            target = conn.Monsters.Where(p => p.Value is { Hostile: true, Dead: false, Life: > 0, Invulnerable: false, Asleep: false }
-                    && mayAttack
-                    && !conn.AsleepMonsters.Contains(p.Key)
-                    && Dist(p.Value.Walk.Position(now), leader.Walk.Position(now)) < 60
-                    && Dist(p.Value.Walk.Position(now), here) < 65
-                    && (!onTheMove || conn.Walk.InReachOf(here, p.Value.Walk.Position(now), (int)reach, p.Value.StopRange - 2)))
-                .OrderBy(p => p.Key == plan.Target ? 0 : 1).ThenBy(p => Dist(p.Value.Walk.Position(now), here))
-                .Select(p => ((uint Id, SpawnedMonster Monster)?)(p.Key, p.Value)).FirstOrDefault();
-        if (!InTown(conn) && target is { } enemy && gem.Name is not null)
+        bool inTown = InTown(conn);
+        // First the thing a player reaches for: a follower that stands in the fire until it dies is what reads as an idiot.
+        if (!inTown && await DrinkControlledFlask(conn, now)) return;
+        // The rarest enemy first, then the nearest (ControlledCombat.ControlledTarget).
+        var enemy = inTown ? null : ControlledTarget(conn, leader, here, now);
+        if (enemy is not { } picked) { if (!following) IdleControlledFollower(conn, leader, now); return; }
+        var skills = ControlledSkills(conn);
+        if (skills.Count == 0) return;
+        var at = picked.Monster.Walk.Position(now);
+        double distance = Dist(here, at);
+        // A gem that reaches it, area first when a pack stands there, and one whose cooldown has recovered: a cooling gem
+        // hands the turn to the next instead of standing still on it.
+        var reaching = ControlledSkillsFor(skills, distance, ControlledPacked(conn, picked.Monster, now));
+        var skill = reaching.FirstOrDefault(s => ControlledSkillReady(conn, s, now));
+        if (skill is null)
         {
-            HoldControlledFollowerAttack(conn, now, seconds, enemy.Id);
-            var bytes = new LoginWriter().U16(InstanceTransfer.UseSkillOnObjectId).U32(enemy.Id)
-                .U16(gem.Id).U16(0xffff).U16(onTheMove ? (ushort)1 : (ushort)0).ToArray();
-            await OnClientMessages(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers,
-                [(InstanceTransfer.UseSkillOnObjectId, bytes)], [], conn);
+            if (reaching.Count > 0) return;                       // all of them cooling: wait a tick
+            ApproachControlledTarget(conn, leader, at, skills.Max(s => s.Reach), now);
+            return;
         }
-        else if (!following) IdleControlledFollower(conn, leader, now);
+        bool onTheMove = following || leader.Walk.Moving(now);
+        double gap = Dist(here, leader.Walk.Position(now));
+        double ahead = ControlledAhead(here, leader.Walk.Position(now), leader.Walk.Destination);
+        if (onTheMove && !ControlledFollowAttackFits(gap, leader.Walk.Moving(now) ? leader.Walk.Speed : 0, skill.Seconds, ahead))
+            return;
+        HoldControlledFollowerAttack(conn, now, skill.Seconds, picked.Id);
+        var bytes = new LoginWriter().U16(InstanceTransfer.UseSkillOnObjectId).U32(picked.Id)
+            .U16(skill.Id).U16(0xffff).U16(onTheMove ? (ushort)1 : (ushort)0).ToArray();
+        await OnClientMessages(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers,
+            [(InstanceTransfer.UseSkillOnObjectId, bytes)], [], conn);
     }
 
     static double ControlledInPlaceReach(ClientState conn, ushort skill, int effect)

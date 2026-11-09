@@ -54,6 +54,26 @@ does not know is deleted, and no other account ever is, whatever its name.
 - **Party kick**: the native member-menu action sends C→S `0x94` with a compact wide string containing the selected
   account (`0x140ab8ed0`), not `0x97` (promote leader). Confirmed through the actual party portrait menu.
 
+## Party combat
+
+A follower runs on a real controlled-player connection (`ControlledPlayers.StepControlledPlayer`) and decides three
+times a second (`ControlledCombat`):
+
+- **What to hit**: the rarest hostile within 60 cells of the leader and 65 of itself (normal < magic < rare < unique),
+  then the nearest. Invulnerable, asleep and dead bodies are skipped.
+- **With what**: the gems that would actually hit (`SkillHitPlan.CanHit`, not a disabled gem instance), in socket order,
+  keeping the ones whose reach covers the distance (`ControlledInPlaceReach`: weapon range for a melee skill, its radius
+  for a self-targeted one, 65 for a projectile). An area gem goes first when three monsters stand within 15 cells of the
+  target. A gem on cooldown hands the turn to the next one instead of standing still on it.
+- **Where**: when nothing reaches, it walks to just inside the longest reach, on walkable ground and inside the
+  leader's leash (`ControlledMoveFits`), instead of waiting for the monster to come to it.
+- **When to drink**: under 35% life it uses the first life flask of the bar that still has charges.
+- **Falling behind**: beyond the 60-cell leash it first runs after the leader, and only blinks back when the gap stops
+  closing for 1.5 s (the leader keeps running at the same speed, or the way is blocked). A leader that stops or turns
+  is caught on foot.
+
+It still cannot pick a flask for its resists, kite, or use a movement skill to close a gap.
+
 ## Not done yet
 
 Party combat uses the ordinary player pipeline; offscreen quests, loot and crafting remain simulated.
