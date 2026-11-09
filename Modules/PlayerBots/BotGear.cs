@@ -51,16 +51,18 @@ static class BotGear
 
     // One of the two highest bases of the classes a character of this level can wear (DropLevel), with the tag if given, and
     // only one whose own attribute requirements the character's allocation meets (ControlledPlayers.GearFitsClass): worn
-    // anyway it would read "requirements not met" and give nothing.
+    // anyway it would read "requirements not met" and give nothing. When nothing of that class fits at all (a low-level
+    // caster asked for strength armour) the unfiltered pick is kept: better than an empty slot.
     static ItemCatalog.BaseType? Best(string[] classes, CharacterClass cls, int level, Random random, string? tag = null)
     {
-        var fitting = Program.Items.All
+        IEnumerable<ItemCatalog.BaseType> Candidates(bool byAttributes) => Program.Items.All
             .Where(t => classes.Contains(t.Class) && t.VisualIdentity != 0 && t.DropLevel <= Math.Max(1, level)
                 && t.Id.StartsWith("Metadata/Items/", StringComparison.Ordinal) && !t.Id.Contains("Demigod", StringComparison.Ordinal)
                 && !t.Id.Contains("Royale", StringComparison.Ordinal) && !t.Id.Contains("Talisman", StringComparison.Ordinal)
                 && (tag is null || t.Tags.Contains(tag) || !t.Tags.Any(g => g.EndsWith("_armour", StringComparison.Ordinal) || g.EndsWith("_shield", StringComparison.Ordinal)))
-                && (ControlledPlayers.GearFitsClass?.Invoke(cls, Math.Max(1, level), t) ?? true))
-            .OrderByDescending(t => t.DropLevel).Take(2).ToList();
+                && (!byAttributes || (ControlledPlayers.GearFitsClass?.Invoke(cls, Math.Max(1, level), t) ?? true)));
+        var fitting = Candidates(true).OrderByDescending(t => t.DropLevel).Take(2).ToList();
+        if (fitting.Count == 0) fitting = Candidates(false).OrderByDescending(t => t.DropLevel).Take(2).ToList();
         return fitting.Count == 0 ? null : fitting[random.Next(fitting.Count)];
     }
 
