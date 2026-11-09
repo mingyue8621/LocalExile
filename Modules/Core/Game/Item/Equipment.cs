@@ -262,7 +262,8 @@ static partial class Game
             // arrow and an off-hand one dressed the bow (reported live 2026-11-08: "the weapon's and off-hand's looks are
             // in the wrong place"). Only the two hand slots move; every other cosmetic slot is the same either way.
             byte target = bowHand ? model switch { 0 => (byte)1, 1 => (byte)7, _ => model } : model;
-            if (HeldItem(target) is { } held && !MtxEffects.FitsItem(worn.MtxTypeHash, held)) continue;
+            var held = HeldItem(target);
+            if (held is not null && !MtxEffects.FitsItem(worn.MtxTypeHash, held)) continue;
             int at = looks.FindIndex(l => l.Slot == target);
             if (at < 0 || looks[at].VisualIdentity == 0) continue;   // nothing equipped there to dress
             // The skin's own art is the reference the client draws: its ItemVisualIdentity row answers that art with the
@@ -273,7 +274,17 @@ static partial class Game
             if (slot.IsWeaponEffect)
                 looks[at] = looks[at] with { EffectVisual = fx?.WeaponEffect ?? 0, EffectHash = worn.MtxTypeHash };
             else
-                looks[at] = looks[at] with { SkinVisual = fx?.Visual ?? 0, SkinHash = worn.MtxTypeHash };
+                // An off hand's entry is also what the client draws the slot's own picture from, and the cosmetic's hash made
+                // that picture the cosmetic's: the quiver slot showed the alternate art whatever quiver was worn (live
+                // 2026-11-09). The client swaps an item's icon from a hash-keyed table (MicrotransactionAppliedInventoryItemArt
+                // Variations / EquippedIconVariations), so without the hash it has nothing to match and keeps the item's own
+                // art, while the art in this reference still dresses the model. The main hand keeps its hash until that is
+                // confirmed live, as the control of the comparison.
+                looks[at] = looks[at] with
+                {
+                    SkinVisual = fx?.Visual ?? 0,
+                    SkinHash = target is 1 or 7 ? 0u : worn.MtxTypeHash,
+                };
         }
         return [.. looks, .. cosmeticSlots.Values];
     }
