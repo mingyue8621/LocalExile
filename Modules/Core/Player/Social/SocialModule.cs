@@ -12,6 +12,14 @@ public sealed class SocialModule : IModule
     /// <inheritdoc/>
     public void Load(IModuleContext module)
     {
+        // The party of a connection, for the level-up announcement (Program.PartyMembers): this module owns the parties.
+        Program.PartyMembers = conn =>
+        {
+            foreach (var list in SocialFeature.Parties.Values)
+                lock (list)
+                    if (list.Contains(conn)) return [.. list];
+            return [conn];
+        };
         static (ClientState Conn, string Remote) Of(Packet p) => (ConnOf(p.Player), ConnOf(p.Player).Wire.Remote);
         module.OnEnterMessages(player => FriendsFeature.Enter(ConnOf(player)));
         // The first tick after the entry: the party (after an area change) and the friends' presence as they are now.

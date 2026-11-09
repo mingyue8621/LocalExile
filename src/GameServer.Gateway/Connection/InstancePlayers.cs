@@ -41,6 +41,10 @@ partial class Program
     /// own: server-driven players (the PlayerBots module) look up the towns players are in.</summary>
     internal static readonly System.Collections.Concurrent.ConcurrentDictionary<ClientState, byte> InGame = new();
 
+    /// <summary>The connections in this one's party, itself included (filled by the social module, which owns the parties).
+    /// A level-up is announced to the party, as the game does; the game module cannot see the party table itself.</summary>
+    internal static Func<ClientState, IReadOnlyList<ClientState>>? PartyMembers;
+
     /// <summary>Sets the player's party size; a change tells the client the players in the area (S→C 0x231: the party
     /// panel's bonus icons, which compute their percentages from the client's own constants, Game.PartyBonus) and the
     /// player the bonus in chat.</summary>

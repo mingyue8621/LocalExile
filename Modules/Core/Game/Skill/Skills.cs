@@ -1155,6 +1155,22 @@ static partial class Game
         await Send(remote, stream, ciphers, InstanceProtocol.LifeUpdate(PlayerId, conn.PlayerLife, conn.PlayerReservedLife), $"0x01b1 player life {conn.PlayerMaxLife}");
         await SendPlayerMana(remote, stream, ciphers, conn, $"0x01b1 player mana {conn.PlayerMana}");
         await SendPassives(remote, stream, ciphers, conn);
+        // The game announces a level in chat, to the player and to the party. A quiet level-up reads as a missed one
+        // (live 2026-11-09: "levelling no longer shows a message in chat"). Bots are not announced: their levels change
+        // whenever they join an area, and nothing of theirs is meant to be read.
+        if (!conn.Controlled && level > before)
+        {
+            await Send(remote, stream, ciphers, InstanceChat.ChatLine($"你升到了 {level} 级。"),
+                $"0x0017 chat line: reached level {level}");
+            if (Program.PartyMembers?.Invoke(conn) is { Count: > 1 } party)
+                foreach (var member in party)
+                {
+                    if (ReferenceEquals(member, conn) || member.Controlled || member.Closed || !member.PlayerSent) continue;
+                    await Send(member.Wire.Remote, member.Wire.Stream, member.Wire.Ciphers,
+                        InstanceChat.ChatLine($"{CharacterName(conn)} 升到了 {level} 级。"),
+                        $"0x0017 chat line: {CharacterName(conn)} reached level {level}");
+                }
+        }
     }
 
     // The player's stats (0x1b3) and the skills computed with them (0x2bc Actor), after the level or the passives changed.
