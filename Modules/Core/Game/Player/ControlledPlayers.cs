@@ -7,6 +7,8 @@ static partial class Game
     {
         RegisterVitalsAdmission(conn);
         PrepareCharacterForArea(conn.Wire.Remote, conn, conn.Pools.Level);
+        // The gear the PlayerBots module picked for this character, put on before the peer template is built from it.
+        EquipControlledGear(conn, conn.Pools.Level);
         InitializeCharacterVitals(conn);
         conn.ControlledPrepared = true;
         var at = ControlledFollowerPoint(conn, leader, arrival: true);

@@ -54,6 +54,20 @@ does not know is deleted, and no other account ever is, whatever its name.
 - **Party kick**: the native member-menu action sends C→S `0x94` with a compact wide string containing the selected
   account (`0x140ab8ed0`), not `0x97` (promote leader). Confirmed through the actual party portrait menu.
 
+## Level and gear of a party bot
+
+A bot in town is a published body with the gear `BotGear` picked for its class and level (`Template`). A party follower is
+a controlled player instead, so before this it carried no items at all: `WeaponFor` fell back to the class's unarmed
+skill (its hits were fists) and every other client drew it bare.
+
+- **Level**: when the follower connection is made, its level becomes the level of the area's monsters (the median of the
+  living ones, ±2), and only where monsters live — a town or a hideout leaves it alone. A change of three levels or more
+  re-picks its gear and saves the character.
+- **Gear**: `ControlledPlayers.Gear` (filled by the PlayerBots module with `BotGear`) names base item ids; the game module
+  puts them on the character as real items at that level (`ControlledEquipment.EquipControlledGear`), replacing whatever
+  the rows held, one row per piece (a dual wielder's second one-hander takes the off hand). The model, the weapon's damage
+  and the armour then all come from the items.
+
 ## Party combat
 
 A follower runs on a real controlled-player connection (`ControlledPlayers.StepControlledPlayer`) and decides three

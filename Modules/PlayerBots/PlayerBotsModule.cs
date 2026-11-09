@@ -22,6 +22,9 @@ public sealed class PlayerBotsModule : IModule
             Path.Combine(module.Folder, "state", "bots.json"));
         AppContext.SetData(Running, (Action)director.Stop);
         module.Lifetime.Own(new StopOnDispose(director.Stop));
+        // What a bot wears when it becomes a party follower: the game module equips these base items on its character (it is
+        // the only place that can), so the follower is armed and dressed for its level instead of fighting bare-handed.
+        ControlledPlayers.Gear = director.GearOf;
         director.Start();
         // Parties with bots (BotParty): the Social module passes on the invites and parties that are not its own.
         module.OnPacket(InstanceSocial.PartyInviteId, async p =>

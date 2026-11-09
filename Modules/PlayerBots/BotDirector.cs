@@ -255,6 +255,24 @@ sealed partial class BotDirector
 
     // ---- accounts and characters ----
 
+    /// <summary>What the bot of that character name wears (ControlledPlayers.Gear): the game module puts these base items on
+    /// its controlled player when it joins a party.</summary>
+    internal IReadOnlyList<string> GearOf(string name)
+    {
+        lock (_bots) return _bots.FirstOrDefault(b => b.Name == name)?.Gear is { } gear ? gear : [];
+    }
+
+    // The level of the area the leader stands in, read from the monsters that live there. 0 where there are none (a town or
+    // a hideout), where a bot keeps its own level: only a fight is worth matching.
+    static int AreaMonsterLevel(ClientState leader)
+    {
+        lock (leader.Monsters)
+        {
+            var levels = leader.Monsters.Values.Where(m => !m.Dead).Select(m => (int)m.Level).OrderBy(l => l).ToList();
+            return levels.Count == 0 ? 0 : levels[levels.Count / 2];
+        }
+    }
+
     void Spawn(string? town = null)
     {
         string name = BotNames.Pick(_random, n => _accounts.FindCharacter(n) is not null || _accounts.FindAccount(n + "_bot") is not null);
@@ -683,6 +701,20 @@ sealed partial class BotDirector
         {
             StopCombat(bot);
             Hide(bot);
+            // Levelled to the area it is about to fight in, and dressed for that level: its campaign level made it a spectator
+            // in a high map (and a monster in a low one), and its gear came from the town it last quested in.
+            if (AreaMonsterLevel(leader) is int areaLevel and > 0)
+            {
+                int scaled = Math.Clamp(areaLevel + _random.Next(-2, 3), 1, 100);
+                if (Math.Abs(scaled - bot.Level) >= 3)
+                {
+                    _log.Write(bot.Account, bot.Name,
+                        $"уровень {bot.Level} -> {scaled}: подстраивается под уровень местности ({areaLevel})");
+                    bot.Level = scaled;
+                    Dress(bot);
+                    SaveProgress(bot);
+                }
+            }
             var record = _accounts.GetCharacter(bot.CharacterId);
             if (record is null) return;
             var player = ControlledPlayers.Open(record, bot.Account, leader);

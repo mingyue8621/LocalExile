@@ -27,6 +27,11 @@ interface IControlledPlayerCommands
 
 static class ControlledPlayers
 {
+    /// <summary>The gear a party bot wears when its controlled player is made, by character name: base item ids of the game
+    /// data for its class and level. The PlayerBots module fills this in (it owns the choice); the game module equips them,
+    /// because only it can put items in the character's rows. Null or empty keeps whatever the character already has.</summary>
+    internal static Func<string, IReadOnlyList<string>>? Gear;
+
     static readonly ConditionalWeakTable<ConnectionCiphers, object> Transports = new();
     internal static bool IsTransport(ConnectionCiphers ciphers) => Transports.TryGetValue(ciphers, out _);
 
