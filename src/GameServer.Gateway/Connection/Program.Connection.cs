@@ -379,7 +379,7 @@ partial class Program
                 string line = $"[gateway] {remote} => {log}: {Convert.ToHexString(bytes.AsSpan(0, Math.Min(bytes.Length, 96)))}";
                 // Explicit traces retain synchronous output; normal summaries cannot stall the wire on disk IO.
                 if (ServerTrace.Packets) Console.WriteLine(line);
-                else PacketSummaries.Value.Write(line);
+                else if (ServerTrace.Summaries) PacketSummaries.Value.Write(line);
             }
             if (ServerTrace.Packets && PacketHistory.Kept(sent: true, PacketHistory.IdOf(bytes)))
                 Console.WriteLine($"[packets] {remote} => 0x{PacketHistory.IdOf(bytes):x4} {bytes.Length} B: {Convert.ToHexString(bytes)}");
@@ -457,7 +457,7 @@ partial class Program
                 {
                     string line = $"[gateway] {remote} => {item.Log}: {Convert.ToHexString(bytes.AsSpan(0, Math.Min(bytes.Length, 96)))}";
                     if (ServerTrace.Packets) Console.WriteLine(line);
-                    else PacketSummaries.Value.Write(line);
+                    else if (ServerTrace.Summaries) PacketSummaries.Value.Write(line);
                 }
                 HistoryFor(ciphers).Sent(bytes);
                 if (Outgoing is { } outgoing) outgoing(ciphers, bytes);

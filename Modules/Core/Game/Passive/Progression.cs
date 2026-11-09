@@ -1616,7 +1616,7 @@ static partial class Game
                     leveled = true;
                     Console.WriteLine($"[gateway] {CharacterName(conn)}'s {ItemsFor(conn).GemName(after)} levels to {ItemsFor(conn).GemLevel(after)}");
                 }
-                else
+                else if (GameServer.Core.Diagnostics.ServerTrace.Enabled("gems"))
                     Console.WriteLine($"[gateway] {CharacterName(conn)}'s {ItemsFor(conn).GemName(after)} gains experience " +
                         $"+{after.GemExperience - before.GemExperience} ({after.GemExperience}, level {ItemsFor(conn).GemLevel(after)})");
             }

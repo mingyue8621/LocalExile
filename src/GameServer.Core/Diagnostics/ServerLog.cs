@@ -99,6 +99,10 @@ public static class ServerTrace
     public static readonly bool Packets = Enabled("packets");
     public static readonly bool Sync = Enabled("sync");
     public static readonly bool Projectiles = Enabled("projectiles");
+    /// <summary>Every message's one-line summary: the gateway's normal log, and by far its largest part. Off unless asked,
+    /// because a session writes thousands a minute and buries the lines that matter (a start, an error). Turn it back on
+    /// with Game_TRACE=summaries or Game_LOG_PACKETS=1 when a protocol problem needs the traffic.</summary>
+    public static readonly bool Summaries = Enabled("summaries") || Environment.GetEnvironmentVariable("Game_LOG_PACKETS") == "1";
 
     public static bool Enabled(string category) => On.Contains("all") || On.Contains(category);
 
