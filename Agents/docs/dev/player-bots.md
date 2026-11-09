@@ -78,30 +78,41 @@ skill (its hits were fists) and every other client drew it bare.
   `ControlledPlayers.BotSkin` and draws it in its own model entries. The class → candidates table and the picks are cached,
   since a town body is republished every tick.
 
-## Party combat
+## Party combat and temperament
 
 A follower runs on a real controlled-player connection (`ControlledPlayers.StepControlledPlayer`) and decides three
-times a second (`ControlledCombat`):
+times a second. What follows is its own judgement rather than an order from the leader (`ControlledMind`,
+`ControlledCombat`): five followers used to be five copies of one script.
 
-- **What to hit**: the rarest hostile within 60 cells of the leader and 65 of itself (normal < magic < rare < unique),
-  then the nearest. Invulnerable, asleep and dead bodies are skipped.
+- **Who it is**: a temperament grown from an FNV-1a hash of its name, so the same bot is the same person in every area
+  and session. *Charge* (55–87 cells from the leader), *caution* (drinks at 20–40% of its life, gives ground sooner),
+  *loyalty* (how readily it turns on what is on the player's back) and *talk* (whether it says anything).
+- **What to hit**: the hostile worth most — rarity first, then one on the leader's back (`+45..75` by loyalty) or on its
+  own (`+20`), then the nearest — inside 80 cells of itself and inside the leader's range. Invulnerable, asleep and dead
+  bodies are skipped. A plain monster another bot is already fighting is passed over while another target exists; rares
+  and uniques are shared.
 - **With what**: the gems that would actually hit (`SkillHitPlan.CanHit`, not a disabled gem instance), in socket order,
   keeping the ones whose reach covers the distance (`ControlledInPlaceReach`: weapon range for a melee skill, its radius
-  for a self-targeted one, 65 for a projectile). An area gem goes first when three monsters stand within 15 cells of the
+  for a self-targeted one, 80 for a projectile). An area gem goes first when three monsters stand within 15 cells of the
   target. A gem on cooldown hands the turn to the next one instead of standing still on it.
-- **Where**: when nothing reaches, it walks to just inside the longest reach, on walkable ground and inside the
-  leader's leash (`ControlledMoveFits`), instead of waiting for the monster to come to it.
-- **When to drink**: under 35% life it uses the first life flask of the bar that still has charges.
-- **Falling behind**: beyond the 60-cell leash it first runs after the leader, and only blinks back when the gap stops
-  closing for 1.5 s (the leader keeps running at the same speed, or the way is blocked). A leader that stops or turns
-  is caught on foot.
+- **Where**: when nothing reaches, it walks to just inside the longest reach, on walkable ground and inside the party
+  (`ControlledMoveFits`), instead of waiting for the monster to come to it. While it has a target the leash is the engage
+  one (90) and it holds its ground instead of running to the leader's formation cell.
+- **When to drink**: at its own line a life flask, and a mana flask once a fifth of the unreserved mana is left.
+- **Giving ground**: a bot that fights from a distance (reach ≥ 25) steps back out of an enemy that got inside 6–14 cells
+  of it, and further back under its life line. A melee bot stands and drinks instead.
+- **Falling behind**: beyond the leash (60, or 90 in a fight) it first runs after the leader, and only blinks back when
+  the gap stops closing for 1.5 s (the leader keeps running at the same speed, or the way is blocked). A leader that stops
+  or turns is caught on foot.
+- **Saying something**: a line in the area's local chat, at most one a minute per bot: a rare it meets, the player dropping
+  under 30% life, and — from a talkative one — something while nothing else happens.
 
-It still cannot pick a flask for its resists, kite, or use a movement skill to close a gap.
+It still cannot pick a flask for its resists or use a movement skill to close a gap.
 
 ## Not done yet
 
 Party combat uses the ordinary player pipeline; offscreen quests, loot and crafting remain simulated.
-Trading, chat and advanced tactical/ascendancy builds remain open. Current implementation status is in
+Trading, chat with other players and advanced tactical/ascendancy builds remain open. Current implementation status is in
 [NPCs and chat](../../status/npcs-and-chat.md).
 
 ## External party control

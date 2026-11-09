@@ -2,7 +2,12 @@ using GameServer.Core.World;
 
 static partial class Game
 {
+    /// <summary>How far behind it will still try to run after the leader before blinking back into the party: it keeps to
+    /// the leader's side unless it is fighting (ControlledEngageLeash).</summary>
     internal const double ControlledFollowerLeash = 60;
+    /// <summary>How far it may get from the leader while it is fighting: its 80-cell reach is measured from itself, so a
+    /// target at the edge of that would otherwise be untouchable without stepping outside the follow leash.</summary>
+    internal const double ControlledEngageLeash = 90;
     /// <summary>How far behind it will still try to run after the leader before blinking back into the party.</summary>
     internal const double ControlledCatchUpRange = 120;
     /// <summary>How long it keeps running while the gap is not closing; the leader's own speed means it may never close.</summary>
@@ -19,6 +24,10 @@ static partial class Game
         // The catch-up run after a leader that got away: when it started and how near it got (ControlledFollowing).
         public double CatchUpAt, CatchUpBest;
         public (int X, int Y) LeaderAt, LeaderGoal;
+        // A fight widens the leash (ControlledEngageLeash) until this passes; a bot that gives ground (ControlledBackOff)
+        // may do so again after KiteAt, and Backing says it stepped away rather than failed to find a cell.
+        public double EngageUntil, KiteAt;
+        public bool Backing;
         public uint IdleTurn;
         public uint Target;
     }
@@ -63,10 +72,14 @@ static partial class Game
         var here = conn.Walk.Position(now);
         var follow = leader.Walk.Position(now);
         double distance = Dist(here, follow);
-        if (distance > ControlledFollowerLeash && double.IsNaN(plan.FarSince)) plan.FarSince = now;
-        if (distance <= ControlledFollowerLeash) plan.FarSince = double.NaN;
-        // Brief gaps are caught on foot; a blink or an obstructed follower cannot stay off screen.
-        if (distance > 100 || distance > ControlledFollowerLeash && now - plan.FarSince >= 1.25)
+        // A bot in a fight is allowed the engage leash: it is 80 from itself to its target, and that target may stand a
+        // little away from the player. Once the fight is over the party tightens again.
+        double leash = now < plan.EngageUntil ? ControlledEngageLeash : ControlledFollowerLeash;
+        if (distance > leash && double.IsNaN(plan.FarSince)) plan.FarSince = now;
+        if (distance <= leash) plan.FarSince = double.NaN;
+        // Brief gaps are caught on foot; a blink or an obstructed follower cannot stay off screen. The blink distance keeps
+        // clear of the leash, so a fight at its edge never reads as the follower teleporting back.
+        if (distance > leash + 40 || distance > leash && now - plan.FarSince >= 1.25)
         {
             // Run after the leader before blinking: a follower appearing out of nowhere beside the player is what reads as
             // teleporting. While the gap keeps closing it keeps running; when it stops closing (the leader runs on at the
@@ -104,9 +117,17 @@ static partial class Game
             return true;
         }
         // Hysteresis: a moving leader is followed in legs, not by constantly finding a new formation cell.
+        // A bot in a fight holds its ground instead: it picked an enemy inside its own 80-cell reach, and walking to the
+        // leader's formation cell would take it out of that reach. The catch-up above still brings it back once the player
+        // is past the engage leash.
+        if (now < plan.EngageUntil && distance <= leash && !externalMovement)
+        {
+            plan.Following = false;
+            return false;
+        }
         bool moving = leader.Walk.Moving(now);
         double ahead = ControlledAhead(here, follow, leader.Walk.Destination);
-        if (moving && ahead >= 20 && distance <= ControlledFollowerLeash
+        if (moving && ahead >= 20 && distance <= leash
             && Math.Max(0, distance * distance - ahead * ahead) <= 20 * 20)
         {
             // Already ahead on the route: wait for the leader rather than running backwards to a formation point.
@@ -119,8 +140,8 @@ static partial class Game
             plan.Following = false;
             ScheduleControlledIdle(conn, plan, now);
         }
-        if (moving || distance > ControlledFollowerLeash) plan.Following = true;
-        if (externalMovement && distance <= ControlledFollowerLeash) return plan.Following;
+        if (moving || distance > leash) plan.Following = true;
+        if (externalMovement && distance <= leash) return plan.Following;
         if (!plan.Following) return false;
         if (now < plan.AttackUntil) return true;
         if (now >= plan.RepathAt && (!conn.Walk.Moving(now) || Dist(plan.LeaderAt, follow) >= 12
@@ -180,10 +201,12 @@ static partial class Game
         return length > 0 ? ((bot.X - leader.X) * dx + (bot.Y - leader.Y) * dy) / length : 0;
     }
 
+    /// <summary>Whether stopping to swing while the leader walks on still leaves the bot in the party afterwards: it may do
+    /// so from further out now that it fights at 80, but not from so far that the player is gone by the end of the swing.</summary>
     internal static bool ControlledFollowAttackFits(double gap, double leaderSpeed, double seconds, double ahead = 0)
     {
         double after = ahead - Math.Max(0, leaderSpeed) * seconds;
-        return gap <= 48 && Math.Max(0, gap * gap - ahead * ahead) + after * after <= 55 * 55;
+        return gap <= 65 && Math.Max(0, gap * gap - ahead * ahead) + after * after <= 70 * 70;
     }
 
     internal static void HoldControlledFollowerAttack(ClientState conn, double now, double seconds, uint target)

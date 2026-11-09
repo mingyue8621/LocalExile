@@ -63,15 +63,30 @@ static partial class Game
         if (await ExecuteControlledIntent(conn, leader, now, following)) return;
         var here = conn.Walk.Position(now);
         bool inTown = InTown(conn);
+        var plan = FollowerPlans.GetOrCreateValue(conn);
         // First the thing a player reaches for: a follower that stands in the fire until it dies is what reads as an idiot.
         if (!inTown && await DrinkControlledFlask(conn, now)) return;
-        // The rarest enemy first, then the nearest (ControlledCombat.ControlledTarget).
+        // The enemy it picks for itself: the rarest, then what is on the player's back (ControlledCombat.ControlledTarget).
         var enemy = inTown ? null : ControlledTarget(conn, leader, here, now);
-        if (enemy is not { } picked) { if (!following) IdleControlledFollower(conn, leader, now); return; }
-        var skills = ControlledSkills(conn);
-        if (skills.Count == 0) return;
+        if (enemy is not { } picked)
+        {
+            plan.EngageUntil = 0;                       // nothing to fight: the party tightens again
+            if (!following) IdleControlledFollower(conn, leader, now);
+            ControlledSmallTalkAt(conn, now);
+            return;
+        }
+        // It has picked a fight, so the leash widens for as long as it keeps one (ControlledFollowing).
+        plan.EngageUntil = now + 1.2;
         var at = picked.Monster.Walk.Position(now);
         double distance = Dist(here, at);
+        if (picked.Monster.Rarity >= MonsterRarity.Rare) ControlledWarn(conn, now, picked.Id, $"当心，{picked.Monster.Label}！");
+        if (leader.PlayerLife > 0 && leader.PlayerMaxLife > 0 && leader.PlayerLife / (double)leader.PlayerMaxLife < .3
+            && MindOf(conn).Talk > .7)
+            ControlledSay(conn, now, "你血不多了，退一下。", gap: 120);
+        var skills = ControlledSkills(conn);
+        if (skills.Count == 0) return;
+        // A crowd inside its reach is given ground, as a player kites (ControlledMind.ControlledBackOff).
+        if (ControlledBackOff(conn, leader, at, distance, skills.Max(s => s.Reach), now)) return;
         // A gem that reaches it, area first when a pack stands there, and one whose cooldown has recovered: a cooling gem
         // hands the turn to the next instead of standing still on it.
         var reaching = ControlledSkillsFor(skills, distance, ControlledPacked(conn, picked.Monster, now));
@@ -101,6 +116,7 @@ static partial class Game
         if (SkillsFor(conn).IsMelee(effect)) return WeaponFor(conn).Range;
         if (SkillsFor(conn).IsSelfTargeted(effect))
             return SkillRadius(conn, SupportedSkill(conn, skill).Stats, SkillsFor(conn).IsSpell(effect), effect);
-        return 65;
+        // A spell or an arrow reaches as far as the bot fights (ControlledSight), rather than the 65 an older check used.
+        return ControlledSight;
     }
 }

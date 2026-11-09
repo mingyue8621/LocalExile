@@ -14,9 +14,10 @@ static partial class Game
     /// character (the follower may not move mid-swing).</summary>
     internal sealed record ControlledSkill(ushort Id, int Effect, int Level, int Quality, double Reach, bool Area, double Seconds);
 
-    const double ControlledTargetRange = 60, ControlledTargetSlack = 5;
-    /// <summary>Under this share of its life a follower drinks, as a player would.</summary>
-    const double ControlledFlaskBelow = .35;
+    /// <summary>How far a bot fights at: its own reach, and with it what it sees an enemy in (live 2026-11-10: "make the
+    /// bots' attack distance 80 cells"). A follower used to stop at 60 of the leader, so a fight the player started from
+    /// the far side of a room left it standing.</summary>
+    const double ControlledSight = 80;
     /// <summary>A monster within this many cells of the target means there is a pack, so an area gem is worth it.</summary>
     const double ControlledPackRange = 15;
     const int ControlledPackSize = 3;
@@ -38,21 +39,35 @@ static partial class Game
         return list;
     }
 
-    /// <summary>The enemy to hit: the rarest first, then the nearest. Null when nothing hostile stands within the range the
-    /// old code used (60 of the leader, 65 of the follower).</summary>
+    /// <summary>The enemy this bot picks for itself: what is worth most first (a rare, then whatever is on the player's back
+    /// or its own), then the nearest. Null when nothing hostile stands inside its sight and inside how far it will go from
+    /// the leader (<see cref="ControlledLeaderRange"/>). It keeps off an enemy another bot is already fighting where it can,
+    /// so a party spreads over a pack instead of piling onto one skeleton.</summary>
     internal static (uint Id, SpawnedMonster Monster)? ControlledTarget(ClientState conn, ClientState leader, (int X, int Y) here, double now)
     {
         var leaderAt = leader.Walk.Position(now);
+        double leaderRange = ControlledLeaderRange(conn);
+        // Read the other bots' targets before taking the monster list's lock: the party list has a lock of its own, and the
+        // two must never be held in both orders.
+        var claimed = ControlledClaimedIds(conn, now);
         lock (conn.Monsters)
-            return conn.Monsters
+        {
+            var seen = conn.Monsters
                 .Where(p => p.Value is { Hostile: true, Dead: false, Life: > 0, Invulnerable: false, Asleep: false }
                     && !conn.AsleepMonsters.Contains(p.Key)
-                    && Dist(p.Value.Walk.Position(now), leaderAt) < ControlledTargetRange
-                    && Dist(p.Value.Walk.Position(now), here) < ControlledTargetRange + ControlledTargetSlack)
-                .OrderByDescending(p => (int)p.Value.Rarity)
-                .ThenBy(p => Dist(p.Value.Walk.Position(now), here))
-                .Select(p => ((uint Id, SpawnedMonster Monster)?)(p.Key, p.Value))
+                    && Dist(p.Value.Walk.Position(now), here) <= ControlledSight
+                    && Dist(p.Value.Walk.Position(now), leaderAt) <= leaderRange)
+                .Select(p => (Id: p.Key, Monster: p.Value, At: p.Value.Walk.Position(now)))
+                .ToList();
+            if (seen.Count == 0) return null;
+            var unclaimed = seen.Where(s => s.Monster.Rarity >= MonsterRarity.Rare || !claimed.Contains(s.Id)).ToList();
+            var pool = unclaimed.Count > 0 ? unclaimed : seen;
+            return pool
+                .OrderByDescending(s => ControlledWorth(conn, s.Monster, leader))
+                .ThenBy(s => Dist(s.At, here))
+                .Select(s => ((uint Id, SpawnedMonster Monster)?)(s.Id, s.Monster))
                 .FirstOrDefault();
+        }
     }
 
     /// <summary>Whether several monsters stand around this one: an area gem hits them all.</summary>
@@ -89,7 +104,8 @@ static partial class Game
     }
 
     /// <summary>Walk to just inside the reach of that enemy. <see cref="ControlledMoveFits"/> keeps the destination inside
-    /// the leader's leash and on walkable ground, so chasing never leaves the party or walks through a wall.</summary>
+    /// the leader's leash and on walkable ground, so chasing never leaves the party or walks through a wall. The leash is the
+    /// engage one: closing on a target at the edge of the bot's sight would otherwise be refused as too far from the player.</summary>
     internal static bool ApproachControlledTarget(ClientState conn, ClientState leader, (int X, int Y) monster, double reach, double now)
     {
         var plan = FollowerPlans.GetOrCreateValue(conn);
@@ -101,28 +117,35 @@ static partial class Game
         // A cell short of the reach, on the side it already stands: no walking into the monster.
         int step = Math.Max(2, (int)Math.Round(Math.Max(2, reach) - 3));
         var at = (X: monster.X + (int)Math.Round(dx / length * step), Y: monster.Y + (int)Math.Round(dy / length * step));
-        plan.Approaching = ControlledMoveFits(conn, leader, at.X, at.Y, now);
+        plan.Approaching = ControlledMoveFits(conn, leader, at.X, at.Y, now, ControlledEngageLeash);
         if (!plan.Approaching) return false;
         MoveControlledFollower(conn, at, now);
         return true;
     }
 
-    /// <summary>Drink the first life flask of the bar that still has charges, under <see cref="ControlledFlaskBelow"/> of
-    /// the character's life. False when there is nothing to drink, the bar is empty or it drank a moment ago.</summary>
+    /// <summary>Drink the first flask of the bar that still has charges: a life one under this bot's own line (a cautious
+    /// one drinks at 40% of its life, a bold one at 20%), a mana one when casting ran it dry. False when there is nothing to
+    /// drink, the bar is empty or it drank a moment ago.</summary>
     internal static async Task<bool> DrinkControlledFlask(ClientState conn, double now)
     {
         if (conn.PlayerLife == 0 || conn.PlayerMaxLife == 0) return false;
-        if (conn.PlayerLife / (double)conn.PlayerMaxLife > ControlledFlaskBelow) return false;
+        double below = .2 + .2 * MindOf(conn).Caution;
+        bool life = conn.PlayerLife / (double)conn.PlayerMaxLife <= below;
+        int mana = UnreservedMana(conn);
+        bool dry = mana > 0 && conn.PlayerMana * 5 < mana;
+        if (!life && !dry) return false;
         var plan = FollowerPlans.GetOrCreateValue(conn);
         if (now < plan.FlaskAt) return false;
-        plan.FlaskAt = now + 1.2;
         foreach (var held in ItemsOf(conn).Items(PlayerInventories.Flask))
         {
             if (ItemsFor(conn).ByHash(held.Item.TypeHash) is not { } type) continue;
-            if (ItemsFor(conn).FlaskOf(type) is not { LifePerUse: > 0 } use) continue;
+            if (ItemsFor(conn).FlaskOf(type) is not { } use) continue;
             if (held.Item.Charges < use.ChargesPerUse) continue;
+            if (life ? use.LifePerUse <= 0 : use.ManaPerUse <= 0) continue;
+            plan.FlaskAt = now + 1.2;
             await UseFlask(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers, conn, held.X);
-            Console.WriteLine($"[bots] {CharacterName(conn)} drinks a life flask: {conn.PlayerLife}/{conn.PlayerMaxLife}");
+            Console.WriteLine($"[bots] {CharacterName(conn)} drinks a {(life ? "life" : "mana")} flask: " +
+                $"{conn.PlayerLife}/{conn.PlayerMaxLife} life, {conn.PlayerMana}/{mana} mana");
             return true;
         }
         return false;

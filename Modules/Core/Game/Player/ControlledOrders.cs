@@ -65,12 +65,14 @@ static partial class Game
         }
     }
 
-    internal static bool ControlledMoveFits(ClientState conn, ClientState leader, int x, int y, double now)
+    /// <summary>Whether a step to this cell keeps the bot in the party, on the floor and reachable without leaving the
+    /// leader's radius. The leash is the follow one unless it is fighting (an approach or a back-off passes the engage one).</summary>
+    internal static bool ControlledMoveFits(ClientState conn, ClientState leader, int x, int y, double now,
+        double leash = ControlledFollowerLeash)
     {
         var at = (X: x, Y: y);
         var origin = leader.Walk.Position(now);
-        if (Dist(conn.Walk.Position(now), origin) > ControlledFollowerLeash || Dist(at, origin) > ControlledFollowerLeash)
-            return false;
+        if (Dist(conn.Walk.Position(now), origin) > leash || Dist(at, origin) > leash) return false;
         bool Floor(int gx, int gy) => gx >= 0 && gy >= 0 && gx < conn.Layout.GridW && gy < conn.Layout.GridH
             && conn.Layout.WalkableFor(gx, gy, 2) && !conn.Barrier.Contains((gx, gy));
         var bodies = conn.Blockers;
@@ -79,7 +81,7 @@ static partial class Game
         var path = ClientPathfinder.FindPath(conn.Walk.Position(now), at, Floor,
             conn.Layout.GridW, conn.Layout.GridH, bodies, 2);
         return path.Count > 1 && path[^1] == at && !path.Zip(path.Skip(1))
-            .Any(p => ClientPathfinder.Line(p.First, p.Second).Any(cell => Dist(cell, origin) > ControlledFollowerLeash));
+            .Any(p => ClientPathfinder.Line(p.First, p.Second).Any(cell => Dist(cell, origin) > leash));
     }
 
     static bool ControlledExternalMovement(ClientState conn, ClientState leader, double now) =>
