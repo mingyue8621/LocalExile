@@ -89,6 +89,11 @@ static partial class Game
                 $"0x0084 npc 0x{npcId:x} {npc.Npc.Name} talks on: NPCTalk row {page.Row} (index {page.Index}, DoNPCChat)");
             return true;
         }
+        // A call this layer cannot run is a module's: Niko's SendOpenScreen( DelveMapScreen, 1 ) and BeginDelve are the
+        // Delve module's (its chart and the mine encampment). Swallowing them ended the dialogue and did nothing — the
+        // option never reached the module that answers it (live 2026-11-09: "the NPC's quest cannot be taken").
+        if (talk.OpensScreen is { } unknown && !ScriptScreens.ContainsKey(unknown)) return false;
+        if (talk.Script.Contains("BeginDelve", StringComparison.Ordinal)) return false;
         if (!talk.FinishesChat && talk.AreaTransition is null && talk.OpensScreen is null) return false;
         conn.TalkingTo = 0;
         conn.InNpcTalk = false;

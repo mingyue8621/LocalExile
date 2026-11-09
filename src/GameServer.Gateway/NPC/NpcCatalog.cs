@@ -89,9 +89,11 @@ sealed class NpcCatalog
                 ? (m.Groups[1].Value, int.Parse(m.Groups[2].Value), double.Parse(m.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture))
                 : null;
 
-        /// <summary><c>triggerer.SendOpenScreen(&lt;screen&gt;)</c> with no window argument: the screen the row opens
-        /// (<c>PantheonScreen</c> on Sin's god rows). The passive tree and hideout rows have their own categories.</summary>
-        public string? OpensScreen => System.Text.RegularExpressions.Regex.Match(Scripts, @"SendOpenScreen\(\s*(\w+)\s*\)") is { Success: true } m
+        /// <summary><c>triggerer.SendOpenScreen(&lt;screen&gt;[, window])</c>: the screen the row opens
+        /// (<c>PantheonScreen</c> on Sin's god rows, Niko's <c>SendOpenScreen( DelveMapScreen, 1 )</c>). The second
+        /// argument is the window within it; a screen this layer does not know is left to a module
+        /// (NpcScripts.EndTalkScript). The passive tree and hideout rows have their own categories.</summary>
+        public string? OpensScreen => System.Text.RegularExpressions.Regex.Match(Scripts, @"SendOpenScreen\(\s*(\w+)\s*(?:,[^)]*)?\)") is { Success: true } m
             ? m.Groups[1].Value : null;
 
         /// <summary>A top-level <c>DirtyTransition();</c>: the NPC itself steps to its next Transitionable state (Dialla at
