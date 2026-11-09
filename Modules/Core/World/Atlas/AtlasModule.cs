@@ -197,6 +197,21 @@ static class AtlasFeature
 
     internal static async Task<int> EnsureUnlocked(ClientState conn)
     {
+        // These flags say the character has been through the Atlas: the Maven's map device, the voidstones and the
+        // three defeated endgame bosses. Handing them to every character at creation made the client treat all ten acts
+        // as unlocked — the World panel drew every area's pin from level 1 and its waypoint list looked fully open
+        // (live 2026-11-10). They now wait for Kitava in The Feeding Trough (EndGameAvailable earned, not the flag every
+        // login carries), and a character that has not finished the campaign has them taken back.
+        if (!conn.EarnedQuestFlag(Quests.EndGameAvailable))
+        {
+            if (!conn.PlayerSent) return 0;
+            List<string> stray;
+            lock (conn.Monsters) stray = [.. UnlockFlags.Where(conn.QuestFlags.Contains)];
+            if (stray.Count == 0) return 0;
+            var (staleRemote, staleStream, staleCiphers) = conn.Wire;
+            await SetQuestFlags(staleRemote, staleStream, staleCiphers, conn, stray, on: false);
+            return stray.Count;
+        }
         var missing = UnlockFlags.Where(f => !ClientHasQuestFlag(conn, f)).ToList();
         bool leagueChanged = ApplyLeagueFlags(conn);
         if (!conn.PlayerSent) return missing.Count + (leagueChanged ? 1 : 0);
