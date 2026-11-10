@@ -131,7 +131,7 @@ static partial class Game
         if (intent.Action == "pickup")
         {
             var ground = conn.Instance.Ground.Get(intent.Target);
-            if (ground is null || !conn.SeenGround.Contains(intent.Target)
+            if (ground is null || !SeenOnGround(conn, intent.Target)
                 || Dist((ground.GridX, ground.GridY), leader.Walk.Position(now)) > ControlledFollowerLeash
                 || !conn.Walk.InReachOf(here, (ground.GridX, ground.GridY), (int)PickupReach, PickupTolerance))
             {
@@ -256,7 +256,7 @@ static partial class Game
                     .Select(p => new { id = p.Key, name = p.Value.Label, position = Cell(p.Value.Walk.Position(now)) }).ToArray(),
                 flasks = ItemsOf(conn).Items(PlayerInventories.Flask).Select(p => new
                     { slot = p.X + 1, name = ItemsFor(conn).ByHash(p.Item.TypeHash)?.Name, charges = p.Item.Charges }).ToArray(),
-                loot = conn.Instance.Ground.All().Where(p => conn.SeenGround.Contains(p.Id)
+                loot = conn.Instance.Ground.All().Where(p => SeenOnGround(conn, p.Id)
                         && Dist((p.Item.GridX, p.Item.GridY), origin) <= ControlledFollowerLeash).Take(32)
                     .Select(p => new { id = p.Id, name = ItemsFor(conn).ByHash(p.Item.Item.TypeHash)?.Name,
                         position = Cell((p.Item.GridX, p.Item.GridY)), quantity = p.Item.Item.StackSize }).ToArray(),

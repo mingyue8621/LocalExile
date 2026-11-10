@@ -530,7 +530,8 @@ static partial class Game
         conn.Instance.Ground.Observe(conn);
         foreach (var (id, ground) in conn.Instance.Ground.All())
         {
-            conn.SeenGround.Add(id);
+            // The sync reads this set on its own thread: keeps the two from editing it at once (SharedGround.cs).
+            lock (conn.SeenGround) conn.SeenGround.Add(id);
             await Send(remote, stream, ciphers, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(WorldItemObject.MetadataPath), ground.Blob()),
                 $"0x02bb create world item 0x{id:x} left at ({ground.GridX}, {ground.GridY})");
             await Send(remote, stream, ciphers, InstanceProtocol.EnterWakeZone(id), null);
@@ -711,9 +712,10 @@ static partial class Game
         {
             // A stack goes onto the inventory's stacks of its type first, then into free cells; all of it or nothing. Nothing
             // awaits between the check, the take and the add, and only this connection changes the character's items.
-            PlayerInventories.Stacking stacked;
+            PlayerInventories.Stacking? picked = null;
             WorldItemObject? rest = null;
             uint restId = 0;
+            bool already = false;
             lock (conn.Monsters)
             {
                 if (HardcoreProgressBlocked(conn)) return;
@@ -722,29 +724,43 @@ static partial class Game
                     Console.WriteLine($"[gateway] {remote} world item 0x{id:x}: no room in the inventory for {ground.Item.StackSize}");
                     return;
                 }
-                if (conn.Instance.Ground.Take(id) is null) return;   // already picked up
-                stacked = KeepOnGroundIfNotSaved(conn, ground, () => items.AddStacked(PlayerInventories.MainInventory, ground.Item, ShapeOf));
-                if (stacked.Left > 0)
+                if (conn.Instance.Ground.Take(id) is null) already = true;   // already picked up
+                else
                 {
-                    // Fits said yes, so this is not expected; the rest goes back on the ground rather than vanish.
-                    rest = new WorldItemObject(ground.GridX, ground.GridY, ground.Item with { StackSize = (ushort)stacked.Left });
-                    restId = conn.Instance.Ground.Add(rest, conn, shared: true, justDropped: false);
+                    var stacked = KeepOnGroundIfNotSaved(conn, ground, () => items.AddStacked(PlayerInventories.MainInventory, ground.Item, ShapeOf));
+                    picked = stacked;
+                    if (stacked.Left > 0)
+                    {
+                        // Fits said yes, so this is not expected; the rest goes back on the ground rather than vanish.
+                        rest = new WorldItemObject(ground.GridX, ground.GridY, ground.Item with { StackSize = (ushort)stacked.Left });
+                        restId = conn.Instance.Ground.Add(rest, conn, shared: true, justDropped: false);
+                    }
                 }
             }
+            if (already)
+            {
+                // A pet or a second click took the stack first. The client still shows it, so its removal goes back here: the
+                // sync only removes what it still has when the pickup lands (see PickUpGold).
+                await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(id),
+                    $"0x02bd remove world item 0x{id:x} (already taken)");
+                return;
+            }
+            var taken = picked!;
             if (rest is not null)
             {
-                Console.WriteLine($"[gateway] {remote} world item 0x{id:x}: {stacked.Left} didn't fit, back on the ground as 0x{restId:x}");
+                Console.WriteLine($"[gateway] {remote} world item 0x{id:x}: {taken.Left} didn't fit, back on the ground as 0x{restId:x}");
                 await Send(remote, stream, ciphers, InstanceEntities.CreateObject(restId, InstanceEntities.ObjectTypeHash(WorldItemObject.MetadataPath), rest.Blob()),
                     $"0x02bb create world item 0x{restId:x} (the rest of 0x{id:x})");
             }
             await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(id), $"0x02bd remove world item 0x{id:x} (picked up from ({stop.X}, {stop.Y}))");
-            await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(row), items.NextRevision(row), stacked.RemovedIds, stacked.AddedItems),
-                $"0x00bf inventory 1: {ground.Item.StackSize} picked up ({stacked.Changed.Count} stack(s) grown, {stacked.Added.Count} new)");
+            await Send(remote, stream, ciphers, InstanceItems.InventoryChange(PlayerInventories.InventoryId(row), items.NextRevision(row), taken.RemovedIds, taken.AddedItems),
+                $"0x00bf inventory 1: {ground.Item.StackSize} picked up ({taken.Changed.Count} stack(s) grown, {taken.Added.Count} new)");
             return;
         }
-        InventoryItem? placed;
-        List<string> pickupFlags;
+        InventoryItem? placed = null;
+        List<string> pickupFlags = [];
         (byte X, byte Y) cell = (0, 0);
+        bool gone = false;
         lock (conn.Monsters)
         {
             if (HardcoreProgressBlocked(conn)) return;
@@ -757,22 +773,31 @@ static partial class Game
                 }
                 cell = free;
             }
-            if (conn.Instance.Ground.Take(id) is null) return;   // already picked up
-            // The start weapon stops waiting; the Put below saves both changes at once.
-            if (conn.Instance.IsStartWeapon(CharacterName(conn), id) && items.ClaimStartWeapon())
-                Console.WriteLine($"[gateway] {remote} start weapon picked up");
-
-            // A quest item sets its flags (grant_flag, extra_flag) with the pickup, in the same save.
-            pickupFlags = questFlags is null ? [] : QuestItems.PickupFlags(questFlags, f => ClientHasQuestFlag(conn, f));
-            placed = KeepOnGroundIfNotSaved(conn, ground, () =>
+            if (conn.Instance.Ground.Take(id) is null) gone = true;   // already picked up
+            else
             {
-                InventoryItem Put() => items.Put(row, new InventoryItem(items.NewItemId(), cell.X, cell.Y, ground.Item));
-                if (CharacterSaves.Load(CharacterName(conn))?.Tutorial is { } tutorial)
-                    foreach (bool support in new[] { false, true })
-                        if (conn.Instance.IsStartWeapon(TutorialObjects.DropKey(CharacterName(conn), tutorial, support), id))
-                            return TutorialObjects.Claim(CharacterName(conn), support, ground.Item, Put);
-                return questFlags is not null ? QuestItems.Claim(CharacterName(conn), questFlags, Put) : Put();
-            }, id);
+                // The start weapon stops waiting; the Put below saves both changes at once.
+                if (conn.Instance.IsStartWeapon(CharacterName(conn), id) && items.ClaimStartWeapon())
+                    Console.WriteLine($"[gateway] {remote} start weapon picked up");
+
+                // A quest item sets its flags (grant_flag, extra_flag) with the pickup, in the same save.
+                pickupFlags = questFlags is null ? [] : QuestItems.PickupFlags(questFlags, f => ClientHasQuestFlag(conn, f));
+                placed = KeepOnGroundIfNotSaved(conn, ground, () =>
+                {
+                    InventoryItem Put() => items.Put(row, new InventoryItem(items.NewItemId(), cell.X, cell.Y, ground.Item));
+                    if (CharacterSaves.Load(CharacterName(conn))?.Tutorial is { } tutorial)
+                        foreach (bool support in new[] { false, true })
+                            if (conn.Instance.IsStartWeapon(TutorialObjects.DropKey(CharacterName(conn), tutorial, support), id))
+                                return TutorialObjects.Claim(CharacterName(conn), support, ground.Item, Put);
+                    return questFlags is not null ? QuestItems.Claim(CharacterName(conn), questFlags, Put) : Put();
+                }, id);
+            }
+        }
+        if (gone)
+        {
+            // A pet or a second click took it first. The client still shows it, so its removal goes back here (see PickUpGold).
+            await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(id), $"0x02bd remove world item 0x{id:x} (already taken)");
+            return;
         }
         await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(id), $"0x02bd remove world item 0x{id:x} (picked up from ({stop.X}, {stop.Y}))");
         if (placed is null) return;
@@ -788,12 +813,22 @@ static partial class Game
     internal static async Task PickUpGold(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, uint id, WorldItemObject ground, string how)
     {
         uint total;
+        bool already;
         lock (conn.Monsters)
         {
             // A tick can resume from an earlier notification after the lethal contact committed migration.
             if (HardcoreProgressBlocked(conn)) return;
-            if (conn.Instance.Ground.Take(id) is null) return;   // already picked up
-            total = PersonalStashOf(conn).AddGold(ground.Item.StackSize);
+            already = conn.Instance.Ground.Take(id) is null;
+            total = already ? 0 : PersonalStashOf(conn).AddGold(ground.Item.StackSize);
+        }
+        if (already)
+        {
+            // Another pickup took it between the client's request and this lock — the party's pet, or a second click. The
+            // client still shows the pile, and nothing else would tell it: a client is only sent a removal for an item the
+            // sync still has when the pickup lands.
+            await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(id),
+                $"0x02bd remove world item 0x{id:x} (gold {how}: already taken)");
+            return;
         }
         await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(id), $"0x02bd remove world item 0x{id:x} (gold {how})");
         await Send(remote, stream, ciphers, InstanceEntities.Gold(total), $"0x02aa gold: {total} (+{ground.Item.StackSize} {how})");
