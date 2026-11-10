@@ -19,9 +19,10 @@ static class BotGear
     {
         [CharacterClass.Marauder] = [(["Two Hand Mace", "Two Hand Axe"], null), (["One Hand Mace", "One Hand Axe"], "Shield")],
         [CharacterClass.Ranger] = [(["Bow"], null)],
-        [CharacterClass.Witch] = [(["Wand"], "Shield"), (["Staff"], null)],
-        [CharacterClass.Duelist] = [(["One Hand Sword", "Thrusting One Hand Sword"], "Shield"), (["Two Hand Sword"], null)],
-        [CharacterClass.Templar] = [(["Sceptre"], "Shield"), (["Staff"], null)],
+        // The caster's six-socket weapon: a staff, with the wand-and-shield entry as the quarter-time alternative.
+        [CharacterClass.Witch] = [(["Staff"], null), (["Wand"], "Shield")],
+        [CharacterClass.Duelist] = [(["Two Hand Sword"], null), (["One Hand Sword", "Thrusting One Hand Sword"], "Shield")],
+        [CharacterClass.Templar] = [(["Staff"], null), (["Sceptre"], "Shield")],
         [CharacterClass.Shadow] = [(["Dagger"], null), (["Claw"], null)],
         [CharacterClass.Scion] = [(["One Hand Sword"], "Shield"), (["Two Hand Sword"], null)],
     };
@@ -39,7 +40,10 @@ static class BotGear
     public static List<string> Pick(CharacterClass cls, int level, Random random)
     {
         var gear = new List<string>();
-        var (main, off) = Weapons[cls][random.Next(Weapons[cls].Length)];
+        // The class's damage build comes first — the two-hander, the bow, the staff — because its six sockets are six
+        // gems (ControlledBuilds.SocketsFor). The one-handed entry is a quarter of the picks, for a bot with a shield.
+        var options = Weapons[cls];
+        var (main, off) = options[random.Next(4) == 0 && options.Length > 1 ? 1 : 0];
         if (Best(main, cls, level, random) is { } weapon) gear.Add(weapon.Id);
         if (off is not null && Best([off], cls, level, random, ArmourTag[cls]) is { } shield) gear.Add(shield.Id);
         else if (cls == CharacterClass.Shadow && Best(main, cls, level, random) is { } second) gear.Add(second.Id);

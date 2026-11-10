@@ -36,8 +36,18 @@ internal static class ControlledPlayerBuildChecks
                     var supported = Game.SupportedSkill(conn, active.Id);
                     Assert.True(supported.RequirementsMet, $"{name}: {active.Name} requirements");
                     Assert.True(Game.SupportedHitFor(conn, active.Id, suppress: false).MinTotal > 0, name);
-                    if (level >= 25) Assert.True(supported.Supports.Count == 2,
-                        $"{name}: {active.Name}, supports: {string.Join(", ", supported.Supports.Select(s => s.Effect.Id))}");
+                    // The link is as long as the weapon's sockets (ControlledBuilds.SocketsFor): six gems on a two-hander, a
+                    // bow or a staff, three on a one-hander. Some supports do not resolve for a given active gem, so the
+                    // count is a range — but a build that links two supports where six sockets stand is a quarter of its
+                    // damage (2026-11-10).
+                    if (level >= 25)
+                    {
+                        var weapon = Program.Items.ByHash(Game.ItemsOf(conn).Items(PlayerInventories.Weapon1).First().Item.TypeHash)!;
+                        int most = Game.SocketsFor(weapon) - 1;
+                        Assert.True(supported.Supports.Count >= 2 && supported.Supports.Count <= most,
+                            $"{name}: {active.Name} on {weapon.Class} ({most} supports at most), supports: " +
+                            $"{string.Join(", ", supported.Supports.Select(s => s.Effect.Id))}");
+                    }
                     var native = Game.PlayerForCreation(conn);
                     Assert.Contains(native.Skills!, s => s.Id == active.Id);
                     // The gear pass replaces every worn item. The weapon's gems have to survive it, and a weapon that lost

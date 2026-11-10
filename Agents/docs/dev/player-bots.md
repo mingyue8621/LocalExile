@@ -67,6 +67,14 @@ skill (its hits were fists) and every other client drew it bare.
   puts them on the character as real items at that level (`ControlledEquipment.EquipControlledGear`), replacing whatever
   the rows held, one row per piece (a dual wielder's second one-hander takes the off hand). The model, the weapon's damage
   and the armour then all come from the items.
+  The gear is **rare**, rolled by `Program.Rolls` (`ItemRolls.Roll`) from the ordinary affix pool at the item's level, with
+  the weapon's damage prefix guaranteed: `local_physical_damage_+%` for a weapon that hits, `spell_damage_+%` for a staff or
+  a wand (`ControlledEquipment.DamageAffix`). Quality 20 from level 20 on. The draw is seeded per character and level, so a
+  relog keeps the same gear and only a level change rolls again.
+- **Link**: `ControlledGems` gives one active gem plus as many supports as the weapon has sockets —
+  `ControlledBuilds.SocketsFor`: six for a two-hander, a bow or a staff, three for a one-hander. `BotGear.Pick` takes the
+  class's six-socket entry three times out of four, so a party is mostly six-links; only the Shadow (claws, daggers) stays
+  on three. Supports are tried in order and each must resolve for the active gem (`Supports.Resolve`).
   The pick also checks attribute requirements: `ControlledPlayers.GearFitsClass` answers with the strength, dexterity and
   intelligence the class's own allocation reaches at that level (`ControlledBuilds.ControlledAttributes`, cached per class
   and level), so a base whose `ComponentAttributeRequirements` exceed them is skipped rather than worn with "requirements

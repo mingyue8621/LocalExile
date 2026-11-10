@@ -91,13 +91,26 @@ static partial class Game
             return null;
         }
         if (Gem(skill) is not { } active) return [];
-        string[] candidates = spell ? ["Added Lightning Damage Support", "Faster Casting Support", "Controlled Destruction Support"]
-            : bow ? ["Added Cold Damage Support", "Faster Attacks Support", "Pierce Support"]
-            : ["Melee Physical Damage Support", "Faster Attacks Support", "Added Fire Damage Support"];
+        // The build's link, the way the ladder builds it: one active gem and as many supports as the weapon has sockets
+        // (six on a two-hander, a bow or a staff; three on a one-hander). The old list stopped at three gems in total,
+        // two supports, which is a quarter of an ordinary six-link's damage (2026-11-10: the party's bots took a boss
+        // down at ~1,300 damage a second between them).
+        string[] candidates = spell
+            ? ["Added Lightning Damage Support", "Controlled Destruction Support", "Faster Casting Support",
+               "Elemental Focus Support", "Concentrated Effect Support", "Increased Critical Strikes Support",
+               "Increased Critical Damage Support", "Faster Projectiles Support"]
+            : bow
+            ? ["Added Cold Damage Support", "Faster Attacks Support", "Elemental Damage with Attacks Support",
+               "Increased Critical Strikes Support", "Pierce Support", "Increased Critical Damage Support",
+               "Mirage Archer Support", "Added Fire Damage Support"]
+            : ["Melee Physical Damage Support", "Faster Attacks Support", "Added Fire Damage Support",
+               "Elemental Damage with Attacks Support", "Increased Critical Strikes Support", "Concentrated Effect Support",
+               "Increased Critical Damage Support", "Added Cold Damage Support"];
+        int sockets = SocketsFor(weapon);
         var gems = new List<Item> { active };
         foreach (string supportName in candidates)
         {
-            if (gems.Count >= 3) break;
+            if (gems.Count >= sockets) break;
             if (Gem(supportName) is not { } support) continue;
             int effect = Items.Gem(Items.ByHash(support.TypeHash)!)!.Variant(support.GemVariant).Effect;
             if (Supports.Resolve(Items.GemEffects(active).First(), [new(effect, Items.GemLevel(support), 0, gems.Count)], Skills,
@@ -105,6 +118,14 @@ static partial class Game
         }
         return gems;
     }
+
+    /// <summary>How many sockets a weapon's base class takes, so the link is as long as the item allows: six for the
+    /// two-handers, bows and staves, three for the one-handers (the client's own socket limits).</summary>
+    internal static int SocketsFor(ItemCatalog.BaseType weapon) => weapon.Class switch
+    {
+        "Two Hand Mace" or "Two Hand Axe" or "Two Hand Sword" or "Bow" or "Staff" => 6,
+        _ => 3,
+    };
 
     /// <summary>Those gems as sockets in the order they are linked.</summary>
     internal static ItemSocket[] SocketedGems(IReadOnlyList<Item> gems) =>

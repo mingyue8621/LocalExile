@@ -16,6 +16,9 @@ static partial class Game
         var items = ItemsOf(conn);
         var catalog = ItemsFor(conn);
         var used = new HashSet<byte>();
+        // One draw per character and level: the same bot wears the same gear after a relog, and rolls again only when it
+        // levels (a bot re-rolled on every join would change its weapon's affixes under the party's feet).
+        var rng = new Random(StableSeed(CharacterName(conn), level));
         int worn = 0, carried = 0;
         foreach (string id in ids)
         {
@@ -30,7 +33,16 @@ static partial class Game
                 gems = [.. SocketedGems(ControlledGems(
                     (GameServer.Core.Accounts.CharacterClass)SkillsFor(conn).ClassFor(conn.ClassRow).IntegerId, level, type))];
             foreach (var old in items.Items(row).ToList()) items.Remove(row, old.Id);
-            var fresh = ItemCatalog.Create(type) with { ItemLevel = (byte)Math.Clamp(level, 1, 100) };
+            var fresh = ItemCatalog.Create(type) with
+            {
+                ItemLevel = (byte)Math.Clamp(level, 1, 100),
+                // A bot's gear used to be white — base items with no affixes at all — so its weapon had only the base's
+                // own damage and its armour nothing at all. The ladder's gear is rare, and a rare weapon carries a damage
+                // prefix: that is most of an ordinary build's damage (2026-11-10).
+                Quality = (byte)(level >= 20 ? 20 : 0),
+            };
+            fresh = Program.Rolls.Roll(fresh, ItemRarity.Rare, rng,
+                guaranteed: DamageAffix(type, level, spell: type.Class is "Wand" or "Sceptre" or "Staff"), maxModLevel: level);
             if (gems.Count > 0) fresh = fresh with { Sockets = [.. gems], Links = [(byte)Math.Min(gems.Count, 6)] };
             items.Add(row, 0, 0, fresh);
             worn++;
@@ -38,6 +50,27 @@ static partial class Game
         }
         if (worn > 0) Console.WriteLine($"[bots] {CharacterName(conn)} wears {worn} piece(s) at level {level}, {carried} gem(s) in the weapon");
         EquipControlledFlasks(level, items, catalog);
+    }
+
+    /// <summary>The damage prefix a weapon of this base is guaranteed to carry: local physical damage for a weapon that
+    /// hits, spell damage for a caster's. The highest the item level allows. Null for armour and for a base no such
+    /// modifier fits (the roll then stays ordinary).</summary>
+    internal static ModCatalog.Mod? DamageAffix(ItemCatalog.BaseType type, int level, bool spell)
+    {
+        string stat = spell ? "spell_damage_+%" : "local_physical_damage_+%";
+        return Program.Items.Mods.All
+            .Where(m => m.Domain == 1 && m.GenerationType == ItemRolls.Prefix && m.Level <= level && !m.EssenceOnly
+                && m.WeightFor(type.Tags) > 0 && m.Stats.Any(s => s.Id == stat))
+            .OrderByDescending(m => m.Level)
+            .FirstOrDefault();
+    }
+
+    /// <summary>A draw stable for one character at one level (FNV-1a over its name, mixed with the level).</summary>
+    static int StableSeed(string name, int level)
+    {
+        uint hash = 2166136261;
+        foreach (char c in name) { hash ^= c; hash *= 16777619; }
+        return (int)(hash ^ (uint)level * 2654435761u);
     }
 
     /// <summary>The flasks a bot of this level carries: the best life and mana flask its level allows. A bot carried the
