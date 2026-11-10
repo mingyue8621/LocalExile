@@ -1236,7 +1236,8 @@ static partial class Game
                 centre, immediate: channelled, sequence: sequence, actionToken: actionToken, cooldownUse: cooldownUse,
                 criticalRoll: criticalRoll, channelGeneration: channelGeneration, targetId: targetId, repeat: repeat, swingAt: swingAt,
                 repeatDelay: repeat * repeatInterval, radiusMore: fistRadius, addedChaos: addedChaos,
-                damageMore: fistMore * (meleeRepeats > 0 ? MeleeRepeatDamageMore(conn, skillId, repeat) : 1)));
+                damageMore: fistMore * (meleeRepeats > 0 ? MeleeRepeatDamageMore(conn, skillId, repeat) : 1)
+                    * (spellRepeats > 0 ? SpellRepeatDamageMore(conn, skillId, repeat) : 1)));
             Hit(to);
             foreach (var area in cascadeAreas) Hit(area);
         }
@@ -1255,6 +1256,8 @@ static partial class Game
         ushort skillId, (ushort Id, int Effect, string Name, int Level, int Quality, uint Gem) gem, int action)
     {
         int generation = conn.ChannelGeneration;
+        // Focused Channelling pays by the second the channel has run, so the run's own start is what it counts from.
+        double channelStartedAt = conn.Clock.Elapsed.TotalSeconds;
         bool Running() => ChannelCurrent(conn, skillId, action, generation);
         try
         {
@@ -1290,7 +1293,8 @@ static partial class Game
                 if (!Running()) return;
                 var at = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
                 await AreaSkillHit(remote, stream, ciphers, conn, skillId, gem, at, at,
-                    immediate: true, sequence: conn.ChannelSkillSequence, actionToken: action, channelGeneration: generation);
+                    immediate: true, sequence: conn.ChannelSkillSequence, actionToken: action, channelGeneration: generation,
+                    damageMore: FocusedChannellingMore(conn, skillId, conn.Clock.Elapsed.TotalSeconds - channelStartedAt));
             }
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException) { }

@@ -67,6 +67,7 @@ static class AilmentPanelStats
         new("support_melee_physical_damage_poison_and_bleeding_damage_+%_final_from_melee_hits", Only: ["bleeding", "poison"],
             MeleeHit: true),
         new("support_fortify_ailment_damage_+%_final_from_melee_hits", MeleeHit: true),
+        new("support_ruthless_blow_ailment_damage_from_melee_hits_+%_final", MeleeHit: true),
     ];
 
     public static List<(string Stat, int Value)> Compute(Context context, DamagePacket raw, DamageConversion conversion,

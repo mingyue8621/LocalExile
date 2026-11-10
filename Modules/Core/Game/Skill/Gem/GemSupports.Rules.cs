@@ -191,6 +191,34 @@ static partial class Game
         return Stats.Key(stat) is uint key ? Math.Max(0, 1 + gem.Stats.GetValueOrDefault(key) / 100.0) : 1;
     }
 
+    // A spell's own repeats (Spell Echo and its Greater kind, Unleash): Greater Spell Echo pays 10% more damage with each
+    // repeat (poedb: "Supported Spells gain 10% more Damage per Repeat"), Unleash takes 45% less with every repeat it
+    // adds ("deal 45% less Damage when Repeating"). Both are stats of the linked gem, so they read from the gem's own
+    // stats rather than the character's.
+    internal static double SpellRepeatDamageMore(ClientState conn, ushort skillId, int repeat)
+    {
+        if (repeat <= 0) return 1;
+        var gem = SupportedSkill(conn, skillId);
+        int Per(string name) => Stats.Key(name) is uint key ? gem.Stats.GetValueOrDefault(key) : 0;
+        return Math.Max(0, 1 + (double)Per("support_greater_spell_echo_spell_damage_+%_final_per_repeat") * repeat / 100.0)
+            * Math.Max(0, 1 + Per("support_spell_rapid_fire_repeat_use_damage_+%_final") / 100.0);
+    }
+
+    /// <summary>Focused Channelling's ceiling: "deal 9% more Damage per second Channelling, up to 60%" — the support's
+    /// stat carries the per-second share, its own 60% cap is the one the stat's name states.</summary>
+    internal const double FocusedChannellingCap = 60;
+
+    // Focused Channelling: a channel that has run for whole seconds deals more damage with every second it keeps running.
+    internal static double FocusedChannellingMore(ClientState conn, ushort skillId, double seconds)
+    {
+        if (seconds < 1) return 1;
+        var gem = SupportedSkill(conn, skillId);
+        int perSecond = Stats.Key("support_focus_channel_damage_+%_final_per_second_channelling_up_to_60%") is uint key
+            ? gem.Stats.GetValueOrDefault(key) : 0;
+        if (perSecond <= 0) return 1;
+        return Math.Max(0, 1 + Math.Min(perSecond * Math.Floor(seconds), FocusedChannellingCap) / 100.0);
+    }
+
     // Hallow Support: a melee hit inflicts Hallowing Flame, and the next attack against that enemy gains its share of
     // the attack's physical damage as extra fire (the sweep applies and removes it per target).
     internal static void HallowOnMeleeHit(ClientState conn, SpawnedMonster m, IReadOnlyDictionary<uint, int>? skill, double now)
