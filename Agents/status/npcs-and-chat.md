@@ -157,6 +157,8 @@
   队长在线时队伍状态可跨模块重载存活。屏幕外的任务仍为模拟；交易、升华构建与高级战术 AI 尚未做
   （聊天只做了一半：机器人会在区域本地聊天里偶尔说一两句，但不会读也不会回）。
   见 [玩家机器人](../docs/dev/player-bots.md)。
+- Direct vendor equipment purchases validate placement, preserve payment on failure and refresh equipped items; 3.29.3c belt purchase/swap protocol controls pass; rendered UI checks remain open.
+
 - Faustus's Currency Exchange at official prices works through `/exchange` (orders, claims, cancelling; live 2026-11-08).
   Spreads by volume, a market of 6 steps, fills limited per hour, orders filling while away and with time are written and not yet played.
   Faustus stands in every hideout; his dialogue option there is not yet played.

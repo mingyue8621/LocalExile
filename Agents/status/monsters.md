@@ -125,6 +125,8 @@
   Garukhan 1.7×、Vilenta 2.0×；Arakaali 的 4.8× 与 Piety 的野兽 5.8× 会被压到上限。法术命中（`SkillCatalog.HitDamage`）
   读技能自身的 `spell_minimum/maximum_base_{type}_damage`，不做封顶，因为那是客户端的真实数值。
   尚未用真实客户端核对。
+- The campaign Trinity has native attacks and two scorpion phases; exact official AI weights remain unverified.
+  Docs: [Act 9](../docs/game/campaign/act9.md).
 - Doedre: cauldron and effluent modes; AI tuning provisional ([Act 8](../docs/game/campaign/act8.md)).
 
 - Vaal Oversoul: campaign encounter; AI timing uncalibrated ([Act 2](../docs/game/campaign/act2.md)).
@@ -332,3 +334,18 @@
   未摆放：Marceus the Defaced（某个格子的雕像刷新器）、太阳神庙二层的三个旗帜（布局从不摆放的房间）与 Thistlesage
   （没有房间点名他的怪群）（[14](../docs/protocol/14-monster-packs.md) §3）。
   Boss 的后续形态（Abberath2、Shakari2、Malachai 的第三形态、The Depraved Trinity）交给尚未创建它们的战斗或任务。
+- Area monsters: pack counts, magic/rare chances and rare mod counts are our own numbers;
+  Act 1 Twilight Strand caps new populations at a provisional 45 including Hillock and the tutorial zombie.
+  The reference capture misses its opening, so this is calibration rather than a verified official total;
+  74 monster mods need systems the server lacks (auras on allies, monster skills, ailments on the player …) and do
+  not roll;
+  Drowned ignore their ground types; how near the player must come before an emerge monster rises is our choice;
+  the boss life bar and boss stages exist for Hillock only (`BossFights.cs`;
+  other bosses with `BossHealthBar` get the bar too); monsters respawn on every entry;
+  a new (area, seed) needs a `-Walkmaps` visit for its unique boss ([14](../docs/protocol/14-monster-packs.md) §4).
+  Act 2's bandit lords (Kraityn, Alira, Oak) are created hostile without their help-or-kill dialogue
+  ([17](../docs/protocol/17-npcs.md)).
+  Not placed: Marceus the Defaced (a tile's statue spawner), The Solaris Temple Level 2's three Banners (a room the
+  layouts never place) and Thistlesage (no room names his pack) ([14](../docs/protocol/14-monster-packs.md) §3).
+  A boss's later form (Abberath2, Shakari2, Malachai's second form) is left to a fight or quest
+  that does not create it yet.

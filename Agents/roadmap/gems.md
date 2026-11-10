@@ -67,6 +67,24 @@ Nessa 所有页签上的宝石都是无限库存；在同一次实机核对里�
   核对改 mod 之后的原生刷新，以及受控的前后本地等级/品质变化。
 - **完成标准：** 连了 Arcane Surge 的 Fireball 显示该辅助的字母并支付乘算后的消耗，像 Faster Casting 这样已建模的辅助
   会改变技能，且辅助导致的崩溃消失。
+- **Known:** the skill record has a support list ([11](../docs/protocol/11-skills.md) §3);
+  granting a support as a skill crashes the client ([13](../docs/protocol/13-items.md) §6).
+  GrantedEffects holds each support's compatible skill types and its skill-bar letter;
+  GrantedEffectsPerLevel its cost multiplier.
+- **Implemented:** linked native compatibility, complete support references, duplicate resolution and ordinary
+  damage, area, speed, critical, cost and reservation calculations ([25](../docs/protocol/25-gem-supports.md)).
+  Cyclone with Increased Area of Effect was checked with the real client.
+  Item-granted support references and local socketed-gem level/quality bonuses now share the resolver and calculations.
+  Item-support records, duplicate resolution, rolled levels and Delve more damage have automated coverage.
+- **Next:** implement remaining trigger payloads beyond CWDT projectile spells, attack repeats (Multistrike), Ice Nova's
+  repeated rings and Spell Echo's final-repeat stats (Greater and Awakened Spell Echo), projectile branching,
+  remaining totem payloads (Artillery/Focused Ballista, beams, channels and pulses; monsters do not attack totems;
+  [11](../docs/protocol/11-skills.md) §10g), mines, minions, leech and conditional effects; verify each against
+  native data and live behaviour.
+  Cyclone's item-granted badge letters/colours and supported panel values were checked with the real client.
+  Verify native refresh after mod changes and controlled before/after local level/quality changes.
+- **Done when:** Fireball linked with Arcane Surge shows the support's letter and pays the multiplied cost, a modelled
+  support such as Faster Casting changes the skill, and the support crash is gone.
 
 ### 宝石后续：品质、获取、腐化、额外等级
 
