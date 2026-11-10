@@ -1573,11 +1573,11 @@ static partial class Game
     }
 
     // A kill's experience goes to the gems too: every one socketed in an equipped item, in either weapon set, gains 10% of the
-    // player's gain (support gems too, a gem in an inactive item, at its last level or over its cap nothing), up to one
-    // point below the next level's threshold: the level is the client's own, derived from the experience alone, so that is
-    // what keeps a gem from levelling itself and leaves the "+" (C->S 0x31, Items.LevelUpGem) to the player, as the game
-    // does. The second stall is the character's requirement: a gem at the last level the character meets
-    // (SkillCatalog.MaxLevelAt) gains no more either. Written into the gem item inside the socket list, as the equipped
+    // player's gain (support gems too, a gem in an inactive item, at its last level or over its cap nothing), up to the
+    // threshold of the first level whose requirement the character does not meet â€” the gem's level stalls there, as the
+    // game's does (the client would level the gem to whatever its experience says, so the experience stops just below that
+    // threshold; a gem already past it, after /set_level down, keeps its level and experience and is disabled instead) and
+    // the last level's threshold. Written into the gem item inside the socket list â€” the equipped
     // item's own component has no skill gems. Sent as the socket's equipment row 0x00bf item change, the same item id removed
     // and added again (the replace idiom: an addition of a known id alone is dropped as a duplicate, so the client would keep
     // the stale gem), so the client's gem XP bar and tooltip follow; the next save keeps it.
@@ -1601,15 +1601,13 @@ static partial class Game
             var changed = items.ChangeSocketedGems((itemId, gem) =>
             {
                 if (IsInactive(conn, itemId) || ItemsFor(conn).ByHash(gem.TypeHash) is not { } baseType || ItemsFor(conn).Gem(baseType) is not { } type) return null;
-                // -1 is a corrupted gem over its cap (GemType.Level), and at its last level's threshold a gem gains no more.
-                int lastLevel = Math.Min(SkillsFor(conn).MaxLevelAt(type.Variant(gem.GemVariant).Effect, conn.Pools.Level), type.MaxLevel);
-                // The level is the client's own, derived from the experience alone (GemType.Level, 0x1424763d0): the experience
-                // stops one point below the *next* level's threshold, so the gem fills its bar and waits for the player's
-                // "+" (C→S 0x31, Items.LevelUpGem) at every level. Letting it run to the character's last level made the
-                // client level the gem on its own as the experience crossed each threshold, which the game does not.
-                int level = type.Level(gem.GemExperience);
-                int cap = level < lastLevel ? type.ExperienceFor(level + 1) - 1
-                    : lastLevel < type.MaxLevel ? type.ExperienceFor(lastLevel + 1) - 1 : type.ExperienceFor(type.MaxLevel);
+                // The experience stops one point below the next level's threshold, where the client draws the "+", so a
+                // kill never levels a gem: only the player's click (0x31, or Level Up All's 0x32) writes the threshold.
+                // A gem already above the highest level the character meets keeps its experience and gains nothing.
+                int level = ItemsFor(conn).GemLevel(gem);
+                if (level < 0) return null; // -1 is a corrupted gem over its cap (GemType.Level)
+                int allowed = Math.Min(SkillsFor(conn).MaxLevelAt(type.Variant(gem.GemVariant).Effect, conn.Pools.Level), type.MaxLevel);
+                int cap = type.ExperienceFor(Math.Min(level + 1, allowed + 1)) - 1;
                 if (gem.GemExperience < 0 || gem.GemExperience >= cap) return null;
                 return gem with { GemExperience = (int)Math.Min((long)gem.GemExperience + share, cap) };
             });
@@ -1621,7 +1619,7 @@ static partial class Game
                     leveled = true;
                     Console.WriteLine($"[gateway] {CharacterName(conn)}'s {ItemsFor(conn).GemName(after)} levels to {ItemsFor(conn).GemLevel(after)}");
                 }
-                else if (GameServer.Core.Diagnostics.ServerTrace.Enabled("gems"))
+                else
                     Console.WriteLine($"[gateway] {CharacterName(conn)}'s {ItemsFor(conn).GemName(after)} gains experience " +
                         $"+{after.GemExperience - before.GemExperience} ({after.GemExperience}, level {ItemsFor(conn).GemLevel(after)})");
             }

@@ -352,6 +352,8 @@
 - 条件性物品门控会喂给实机池与属性发布；Kintsugi 的受击、过期与生命周期已核对。
   武器/光环、被追踪事件、数值阈值与受支持的运行时状态门控有自动化覆盖。
   未被追踪、统计近期与复合运算符仍是部分实现（[13](../docs/protocol/13-items.md)）。
+- The mod SDK validates native character-build previews and commits confirmed imports after session drain; the optional POB mod and converter are external.
+
 - **On-kill explosions and attribute damage reduction (implemented 2026-11-04; native behavior checked with the
   official client 2026-11-05, server live check pending):** "Enemies you Kill Explode, dealing X% of their Life as
   Physical Damage" (the Crusader body-armour prefix and the synthesis implicit) deals X% of the killed monster's
