@@ -116,6 +116,7 @@ static partial class Game
         MonsterCatalog.Variety variety, (int X, int Y) at)
     {
         string area = conn.Layout.Id;
+        var added = new List<(Quests.AppearsRule Rule, NpcCatalog.Npc Npc, int X, int Y)>();
         foreach (var rule in QuestsOf(conn).AppearOnKill(area, variety.Id))
         {
             if (Npcs.Value.Find(rule.NpcType) is not { Supported: true } npc || npc.Id != rule.NpcType)
@@ -123,13 +124,29 @@ static partial class Game
                 Console.WriteLine($"[gateway] {remote} {rule.NpcType}: unknown or unsupported NPC");
                 continue;
             }
-            lock (conn.QuestNpcs)
-            {
-                if (conn.QuestNpcs.Any(c => c.Npc.Id == rule.NpcType && c.Id != 0)) continue;
-                var (x, y) = conn.Layout.Walkable is { } walks && !walks(at.X, at.Y) ? conn.Layout.Near(at) : at;
-                conn.QuestNpcs.Add(AppearingNpc(area, rule, npc, x, y));
-            }
+            var (x, y) = conn.Layout.Walkable is { } walks && !walks(at.X, at.Y) ? conn.Layout.Near(at) : at;
+            added.Add((rule, npc, x, y));
         }
-        await UpdateQuestNpcs(remote, stream, ciphers, conn, $"{variety.Name} died");
+        if (added.Count == 0) return;
+        // Every player in the instance sees the NPC a boss's death brings: the last hit is often a bot's, and the player
+        // who was fighting it stood in the same instance watching nothing appear (live 2026-11-10, Act 5's Innocence).
+        foreach (ClientState each in InstancePlayers(conn))
+        {
+            bool changed = false;
+            foreach (var (rule, npc, x, y) in added)
+                lock (each.QuestNpcs)
+                {
+                    if (each.QuestNpcs.Any(c => c.Npc.Id == npc.Id && c.Id != 0)) continue;
+                    each.QuestNpcs.Add(AppearingNpc(area, rule, npc, x, y));
+                    changed = true;
+                }
+            if (changed)
+                await UpdateQuestNpcs(each.Wire.Remote, each.Wire.Stream, each.Wire.Ciphers, each, $"{variety.Name} died");
+        }
     }
+
+    /// <summary>The connections whose players stand in the same instance, the one that ran the kill first.</summary>
+    static IEnumerable<ClientState> InstancePlayers(ClientState conn) => Program.InGame.Keys
+        .Where(c => ReferenceEquals(c.Instance, conn.Instance) && !c.Closed && !c.LeavingArea)
+        .OrderByDescending(c => ReferenceEquals(c, conn));
 }

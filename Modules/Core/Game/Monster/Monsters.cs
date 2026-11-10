@@ -165,6 +165,10 @@ static partial class Game
         // wand-armed monster's attack is a weapon projectile (SkillCatalog.WeaponProjectile: the Vaal archers' elemental
         // arrows), which the server flies itself: a predictive client draws no arrow of its own.
         var projectile = rangedAttack ? MavenNucleus.Shot(catalog, effect, variety.RangedWeapon) : null;
+        // The shared "Melee" row carries the ranged types too (every rig has that plain attack), so read as a ranged skill
+        // without a projectile it left the monster standing at the far reach "shooting" a swing the client never played: the
+        // Act 5 boss never attacked in either form (live 2026-11-10). With no projectile art it is a melee swing.
+        if (rangedAttack && projectile is null && catalog.IsMelee(effect)) rangedAttack = false;
         // A summoning skill (the Immolator's) brings its monsters whenever the player is within its aggro range, at its
         // own cast time; it deals no hit.
         var summon = variety.GrantedEffects is [int summonEffect, ..] ? catalog.MonsterSummon(summonEffect, level) : null;
@@ -218,6 +222,12 @@ static partial class Game
         var skill = effect >= 0
             ? catalog.FindByRow(attack.SkillId, effect, level,
                 attack.Projectile is null ? WithBehaviourVariation(conn, effect, attack.SkillStats()) : MonsterProjectileSkillStats(conn, effect, level, attack)) : null;
+        // A boss is worth a line: which effect it picked, how far it thinks it reaches and whether it has a skill the client
+        // can play at all — the Act 5 boss stood through the whole fight and this is what says why (live 2026-11-10).
+        if (variety.BossHealthBar)
+            Console.WriteLine($"[gateway] {remote} boss {variety}@{level}: effect {effect} ({catalog.EffectId(effect) ?? "none"}), "
+                + $"skill 0x{skillId:x4} {(skill is null ? "not built" : "built")}, reach {reach:0.#}, ranged {rangedAttack}, "
+                + $"projectile {(projectile is null ? "none" : projectile.Metadata)}, cast {attack.CastTime:0.###} s, swing {attack.Seconds:0.###} s");
         // A boss with stages also has the skill that changes them (Hillock's sword extract, BossFights). A scripted
         // encounter drives its own phases: the built-in stage would heal it and fight the controller for its actions.
         var stage = scripted ? null : BossFights.For(variety.Id);
