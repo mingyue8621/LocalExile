@@ -19,6 +19,13 @@ public sealed class GameModule : IModule
         Program.SetGameLogic(new GameLogic(module.Lifetime));
         module.OnTick((player, _) => global::DoedreSewers.Tick(Program.ConnOf(player)));
         module.Lifetime.Own(GameEvents.ObjectUse.Add("Game", global::DoedreSewers.Use));
+        // Malachai's death portal (Act 4): the second stage waits behind it instead of standing on the corpse.
+        module.Lifetime.Own(GameEvents.ObjectUse.Add("MalachaiPortal", global::Game.UseMalachaiPortal));
+        module.OnPlayerLeaving((player, _) =>
+        {
+            global::Game.LeavingMalachaiPortal(Program.ConnOf(player));
+            return Task.CompletedTask;
+        });
         module.Lifetime.Own(GameEvents.PlayerStatSources.Add("Game", global::DoedreSewers.PlayerStats));
         module.Lifetime.Own(global::DoedreSewers.CleanupOnUnload());
         module.OnPlayerLeaving((player, _) => global::DoedreSewers.Leaving(Program.ConnOf(player)));
