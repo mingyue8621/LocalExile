@@ -461,6 +461,7 @@ static partial class Game
             if (flags.Where(f => !Quests.IsInstanceFlag(f)).ToList() is { Count: > 0 } own)
                 await ConsumeQuestItemsAndSet(remote, stream, ciphers, conn, own, rule.ObjectType.Split('/')[^1]);
             byte level = (byte)Math.Clamp(Packs.For(area)?.AreaLevel ?? 1, 1, 100);
+            var bosses = Packs.For(area)?.Bosses ?? [];
             foreach (string id in QuestsOf(conn).SpawnsOnUse(area, rule.ObjectType))
             {
                 if (Monsters.Find(id) is not { Supported: true } variety || variety.Id != id)
@@ -471,8 +472,12 @@ static partial class Game
                 bool already;
                 lock (conn.Monsters) already = conn.Monsters.Values.Any(m => m.Variety?.Id == id && !m.Dead && m.Life > 0);
                 if (already) continue;
-                var (x, y) = conn.Layout.Walkable is { } walks && !walks(at.X, at.Y) ? conn.Layout.Near((at.X, at.Y)) : (at.X, at.Y);
-                Console.WriteLine($"[gateway] {remote} {rule.ObjectType.Split('/')[^1]} used: {variety.Name} appears at ({x}, {y})");
+                // An area boss stands where the rooms put it ("mapboss"), not at the object that woke it: Kitava rises at
+                // bossentry.arm's force:mapboss, 100 cells past the Sign of Purity's socket the player uses.
+                var spot = AreaPopulation.BossStanding(area, conn.Seed, bosses, variety.Row) ?? (at.X, at.Y);
+                var (x, y) = conn.Layout.Walkable is { } walks && !walks(spot.X, spot.Y) ? conn.Layout.Near((spot.X, spot.Y)) : (spot.X, spot.Y);
+                Console.WriteLine($"[gateway] {remote} {rule.ObjectType.Split('/')[^1]} used: {variety.Name} appears at ({x}, {y})" +
+                    (spot == (at.X, at.Y) ? "" : $", the area's boss point, not the object's ({at.X}, {at.Y})"));
                 await SpawnMonster(remote, stream, ciphers, conn, variety, level, MonsterRarity.Unique, x, y);
             }
         }

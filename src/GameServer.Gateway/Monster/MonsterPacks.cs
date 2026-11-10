@@ -207,6 +207,29 @@ static class AreaPopulation
         return m.Groups[1].Success ? [.. m.Groups[1].Value.Split('&').Select(int.Parse)] : [];
     }
 
+    /// <summary>Where one of the area's own bosses stands, if the rooms mark a point for it: its numbered point
+    /// ("mapboss2" for the second of WorldAreas Bosses), or the unnumbered one ("force:mapboss") when the area has a
+    /// single boss. Null when the area does not list the variety or has no point for it. A quest that brings a boss the
+    /// area leaves out (Quests.QuestSpawned) places it here rather than at the object that woke it: The Cathedral
+    /// Rooftop's Sign of Purity socket is 100 cells from where Kitava rises (bossentry.arm's force:mapboss, under the
+    /// fight's camera zoom), and The Harbour Bridge's fight starter stands between Lunaris's and Solaris's points.</summary>
+    public static (int X, int Y)? BossStanding(string areaId, uint seed, IReadOnlyList<int> bosses, int varietyRow) =>
+        BossStanding(LoadPoints(areaId, seed, []), bosses, varietyRow);
+
+    /// <summary><see cref="BossStanding(string, uint, IReadOnlyList{int}, int)"/> among room points already fitted.</summary>
+    internal static (int X, int Y)? BossStanding(IReadOnlyList<RoomPoint> points, IReadOnlyList<int> bosses, int varietyRow)
+    {
+        int index = -1;
+        for (int i = 0; i < bosses.Count; i++)
+            if (bosses[i] == varietyRow) { index = i; break; }
+        if (index < 0) return null;
+        if (points.FirstOrDefault(p => BossPoint(p.Name) is { Count: > 0 } rows && rows.Contains(index + 1)) is { } numbered)
+            return (numbered.X, numbered.Y);
+        if (bosses.Count == 1 && points.FirstOrDefault(p => BossPoint(p.Name) is { Count: 0 }) is { } plain)
+            return (plain.X, plain.Y);
+        return null;
+    }
+
     /// <summary>Server-side spawner objects of a room that stand for one of the area's unique bosses (their .ot names no
     /// monster: the official server turns them into it), and that boss's MonsterVarieties Id. The Quay's boss.arm:
     /// TolmanBossSpawner, Tolman in the stocks beside Clarissa, who breaks out (its "spawning" states 1 … 7).</summary>
