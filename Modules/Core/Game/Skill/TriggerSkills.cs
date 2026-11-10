@@ -19,7 +19,7 @@ static partial class Game
     }
     static readonly ConditionalWeakTable<ClientState, DamageTakenTriggers> DamageTriggers = new();
 
-    internal static string? TriggerOnlyReason(SupportedGem gem)
+    internal static string? TriggerOnlyReason(ClientState conn, SupportedGem gem)
     {
         if (gem.Supports.Any(s => s.Effect.Id == "SupportCastWhenDamageTaken"))
             return "this skill can only trigger when damage is taken";
@@ -27,11 +27,17 @@ static partial class Game
             return "this skill can only trigger on a linked attack critical strike";
         if (GolemStat(gem.Stats, "cast_spell_while_linked_skill_channelling") != 0)
             return "this skill can only trigger while a linked skill is channelled";
-        if (GolemStat(gem.Stats, "spell_uncastable_if_triggerable") != 0
-            || gem.Supports.Any(s => s.Effect.Added.Contains(36)))
+        if (GolemStat(gem.Stats, "spell_uncastable_if_triggerable") != 0 || TriggeredSpell(conn, gem))
             return "this trigger has no server executor; manual use is unavailable";
         return null;
     }
+
+    /// <summary>A spell that a trigger support carries: the game keeps it out of the caster's hands
+    /// (spell_uncastable_if_triggerable). An attack stays usable by hand — Manaforged Arrows and Cast on Crit link an
+    /// attack that the player still fires, only its triggered copy waiting for an executor.</summary>
+    static bool TriggeredSpell(ClientState conn, SupportedGem gem) =>
+        SkillsFor(conn).IsSpell(gem.Effect) && !SkillsFor(conn).IsAttack(gem.Effect)
+        && gem.Supports.Any(s => s.Effect.Added.Contains(36));
     static bool SameTriggerSource(SupportedGem a, SupportedGem b) => a.Effect == b.Effect && a.Level == b.Level
         && a.Quality == b.Quality && a.Host == b.Host && a.Group == b.Group && (a.SourceGem is null ? b.SourceGem is null
             : b.SourceGem is not null && ReferenceEquals(PlayerInventories.GemIdentity(a.SourceGem), PlayerInventories.GemIdentity(b.SourceGem)))

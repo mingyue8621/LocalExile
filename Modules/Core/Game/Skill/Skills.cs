@@ -981,9 +981,11 @@ static partial class Game
         var gem = SupportedSkill(conn, skillId);
         if (gem.Effect != effect || gem.SourceGem is null && !gem.Granted) return "skill is unavailable";
         if (GolemStat(gem.Stats, "cannot_cast_curses") != 0) return "this curse is triggered by Hextouch";
-        if (gem.Supports.Any(s => s.Effect.Added.Contains(36))
-            && !TriggeredSpellExecutable(conn, skillId, gem)) return "this trigger payload has no server executor";
-        if (!triggered && TriggerOnlyReason(gem) is { } trigger) return trigger;
+        // Only a spell a trigger support carries is refused by hand; an attack that one links (Manaforged Arrows, Cast on
+        // Crit's attack-side supports) is still used by hand, and just its triggered copy waits for an executor.
+        if (TriggeredSpell(conn, gem) && !TriggeredSpellExecutable(conn, skillId, gem))
+            return "this trigger payload has no server executor";
+        if (!triggered && TriggerOnlyReason(conn, gem) is { } trigger) return trigger;
         if ((ActorSkillInstanceDisabled(conn, effect, skillId) ?? WeaponRestricted(conn, effect)
                 ?? GemRequirementsUnmet(conn, gem.SourceGem)) is { } disabled)
             return disabled;

@@ -1,4 +1,4 @@
-using GameServer.Core.Protocol.Instance;
+﻿using GameServer.Core.Protocol.Instance;
 using GameServer.Core.Protocol.Login;
 using League = GameServer.Core.Accounts.League;
 namespace GameServer.Gateway.Tests;
@@ -24,7 +24,7 @@ public class DamageTakenTriggerTests
             {
                 var effect = Game.Supports.Effects.Single(e => e.Id == triggerId);
                 var applied = Game.Supports.Resolve(gem.Effect, [new(effect.Row, 1, 0, 1)], Game.SkillsFor(conn));
-                Assert.Contains("trigger", Game.TriggerOnlyReason(Game.SupportedSkill(conn, gem.Id) with { Supports = applied }) ?? "");
+                Assert.Contains("trigger", Game.TriggerOnlyReason(conn, Game.SupportedSkill(conn, gem.Id) with { Supports = applied }) ?? "");
             }
         });
     }
@@ -226,8 +226,8 @@ public class DamageTakenTriggerTests
             var pulse = Game.GemSkillEffects(conn).Single(s => s.Name == "Freezing Pulse");
             var source = Assert.IsType<Game.LinkedTriggerSource>(Game.CaptureCriticalTriggerSource(conn, attack.Id));
             Assert.Equal(new[] { fireball.Id, pulse.Id }, source.Spells.Select(s => s.Skill));
-            Assert.Contains("critical strike", Game.TriggerOnlyReason(Game.SupportedSkill(conn, fireball.Id))!);
-            Assert.Null(Game.TriggerOnlyReason(Game.SupportedSkill(conn, attack.Id)));
+            Assert.Contains("critical strike", Game.TriggerOnlyReason(conn, Game.SupportedSkill(conn, fireball.Id))!);
+            Assert.Null(Game.TriggerOnlyReason(conn, Game.SupportedSkill(conn, attack.Id)));
             using var listener = new System.Net.Sockets.TcpListener(System.Net.IPAddress.Loopback, 0); listener.Start();
             using var writer = new System.Net.Sockets.TcpClient(); writer.Connect((System.Net.IPEndPoint)listener.LocalEndpoint);
             using var reader = listener.AcceptTcpClient();
