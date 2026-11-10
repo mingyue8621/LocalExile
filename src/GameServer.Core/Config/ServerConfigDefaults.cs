@@ -75,10 +75,16 @@ AuthControl.Port = 20495
 #        The IP address clients are sent to reach the Gateway (at login and on
 #        every area change): this machine's address as the players see it.
 #        Default: 127.0.0.1 [Game_GATEWAY_HOST]
+#
+#    Console.Port
+#        The launcher's console: chat commands run on the running Gateway
+#        (on the character in game), on 127.0.0.1 only.
+#        Default: 20499 [Game_CONSOLE_PORT]
 
 Gateway.BindAddress = 127.0.0.1
 Gateway.Port = 6112
 Gateway.PublicAddress = 127.0.0.1
+Console.Port = 20499
 
 ###############################################################################
 # CHAT SERVER (optional, shared between Gateways)

@@ -143,6 +143,8 @@ GameTables.Release();
 GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
 listener.Start();
 Console.WriteLine($"[gateway] listening on {bind}:{port}");
+// The launcher's console (ConsoleChannel.cs): chat commands run here, on the character in game, without the game client.
+ConsoleChannel.Start();
 
 using var cts = new CancellationTokenSource();
 Console.CancelKeyPress += (_, e) => { e.Cancel = true; cts.Cancel(); };

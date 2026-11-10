@@ -16,15 +16,21 @@ partial class Program
         var commands = new ChatCommands
         {
             Send = (bytes, log) => Send(remote, stream, ciphers, bytes, log),
-            // S→C 0x17 chat lines in the player's chat panel, one per line of the text (an empty line as a space).
-            Reply = async text =>
-            {
-                foreach (string line in text.Split('\n').Select(l => l.Length == 0 ? " " : l))
-                    await Send(remote, stream, ciphers, InstanceChat.ChatLine(line), $"0x0017 chat line \"{line}\"");
-            },
+            Reply = null!,
             ModCommand = (name, args) => ServerHooks.RunCommand(PlayerOf(conn), name, args),
             ModUsages = () => ServerHooks.Commands,
-        }
+        };
+        // S→C 0x17 chat lines in the player's chat panel, one per line of the text (an empty line as a space). A console
+        // request (ConsoleChannel.cs) runs without a client reading that panel, so its lines go to its Echo as well.
+        commands.Reply = async text =>
+        {
+            foreach (string line in text.Split('\n').Select(l => l.Length == 0 ? " " : l))
+            {
+                commands.Echo?.Invoke(line);
+                await Send(remote, stream, ciphers, InstanceChat.ChatLine(line), $"0x0017 chat line \"{line}\"");
+            }
+        };
+        commands
         .Add("module", "/module (the modules loaded when the Gateway started, from the folders in Modules/: version, kind and hooks, and why others did not load)", async _ =>
         {
             var modules = ServerModules.Mods();

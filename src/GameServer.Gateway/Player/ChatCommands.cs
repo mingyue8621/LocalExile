@@ -9,8 +9,13 @@ sealed class ChatCommands
     /// <summary>Sends one S→C message (bytes, log line).</summary>
     public required Func<byte[], string, Task> Send { get; init; }
 
-    /// <summary>Tells the player something (chat lines, one per line of the text).</summary>
-    public required Func<string, Task> Reply { get; init; }
+    /// <summary>Tells the player something (chat lines, one per line of the text). Set after the object is built, since
+    /// its lines also go to <see cref="Echo"/>.</summary>
+    public required Func<string, Task> Reply { get; set; }
+
+    /// <summary>Every reply line, for a tool that runs a command without a client and takes what it answered (the
+    /// launcher's console channel, ConsoleChannel.cs). Null unless one such request is running.</summary>
+    public Action<string>? Echo { get; set; }
 
     /// <summary>The loaded mods' commands (ModHost), run when none of ours has the name: false when no mod has it either.
     /// Asked at every use, so a mod's reload changes them on a connection that is already open.</summary>

@@ -45,6 +45,9 @@ public static class ServerConfig
     public static int ControlPort => Port("Game_AUTH_CONTROL_PORT", "AuthControl.Port", 20495);
     public static IPAddress GatewayBind => Address("Game_BIND", "Gateway.BindAddress", "127.0.0.1");
     public static int GatewayPort => Port("Game_GATEWAY_PORT", "Gateway.Port", 6112);
+    /// <summary>The launcher's console channel: chat commands run on the running Gateway instead of the game client
+    /// (Gateway's ConsoleChannel, Agents/docs/dev/console-channel.md). 127.0.0.1 only, whatever Game_BIND says.</summary>
+    public static int ConsolePort => Port("Game_CONSOLE_PORT", "Console.Port", 20499);
     public static string GatewayPublicAddress => Text("Game_GATEWAY_HOST", "Gateway.PublicAddress", "127.0.0.1");
     public static IPAddress ChatBind => Address("Game_CHAT_BIND", "Chat.BindAddress", "0.0.0.0");
     public static int ChatPort => Port("Game_CHAT_PORT", "Chat.Port", 6113);
