@@ -333,7 +333,10 @@ static partial class Game
                 KingPhaseLocked = !friendly && KingInMists.IsBoss2(variety),
                 KingGrace = !friendly && KingInMists.IsBoss(variety),
                 FetishGrace = !friendly && KingInMists.IsFetish(variety),
-                LifePhases = !friendly && brine ? new([75, 50, 25]) : null,
+                // The Brine King's three immunity thresholds, and Malachai's one: cannot_drop_below_%_life 70, where the
+                // first form submerges instead of dying (MalachaiPortal).
+                LifePhases = !friendly && brine ? new([75, 50, 25])
+                    : !friendly && variety.Id == MalachaiFirst ? new([MalachaiSubmergePercent]) : null,
                 EntranceGrace = !friendly && (VaalOversoul.IsBoss(variety) || DoedreSewers.IsBoss(variety)),
             }, emerge, waits);
             if (owned is not null && conn.Monsters.TryGetValue(id, out var added)) owned(id, added);

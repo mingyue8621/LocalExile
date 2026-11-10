@@ -314,16 +314,16 @@ static partial class Game
         if (QuestsOf(conn).AppearOnKill(area, variety.Id).Count > 0) await QuestNpcsAppear(remote, stream, ciphers, conn, variety, at);
         if (QuestsOf(conn).SecondForm(area, variety.Id) is { } next && Monsters.Find(next) is { Supported: true } form && form.Id == next)
         {
-            // Malachai's fall opens his death portal: the second stage waits behind it (MalachaiPortal). Every other boss's
-            // later form appears where the first fell — on the connection that runs the instance's monsters, or it stands
-            // where it appeared and never acts (SharedMonsters: an instance monster's AI runs on the runner).
-            if (!(OpensPortal(variety.Id) && await OpenMalachaiPortal(remote, stream, ciphers, conn, at, form.Id, m.Level)))
-            {
-                Console.WriteLine($"[gateway] {remote} {m.Label} died: its second form {form.Name} appears");
-                var owner = conn.Instance.World.Runner is { Closed: false } runner && !ReferenceEquals(runner, conn) ? runner : conn;
-                await SpawnMonster(owner.Wire.Remote, owner.Wire.Stream, owner.Wire.Ciphers, owner, form, m.Level, MonsterRarity.Unique, at.X, at.Y);
-            }
+            // Every boss's later form appears where the first fell — on the connection that runs the instance's monsters,
+            // or it stands where it appeared and never acts (SharedMonsters: an instance monster's AI runs on the runner).
+            // Malachai is not one of these: his first form submerges at 70% instead of dying, and the second is raised
+            // behind his rift (MalachaiPortal).
+            Console.WriteLine($"[gateway] {remote} {m.Label} died: its second form {form.Name} appears");
+            var owner = conn.Instance.World.Runner is { Closed: false } runner && !ReferenceEquals(runner, conn) ? runner : conn;
+            await SpawnMonster(owner.Wire.Remote, owner.Wire.Stream, owner.Wire.Ciphers, owner, form, m.Level, MonsterRarity.Unique, at.X, at.Y);
         }
+        // Malachai's second form leaves the death portal the campaign's last fight ends with.
+        if (variety.Id == MalachaiSecond) await OpenMalachaiDeathPortal(conn, at);
         // A room NPC this death frees (Quests.NpcRule.FreedBy): its last Transitionable state (UpdateQuestNpcs, QuestNpcs.cs).
         bool frees;
         lock (conn.QuestNpcs) frees = conn.KilledVarieties.Add(variety.Id) && QuestsOf(conn).Frees(area, variety.Id);

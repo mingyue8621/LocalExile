@@ -19,8 +19,10 @@ public sealed class GameModule : IModule
         Program.SetGameLogic(new GameLogic(module.Lifetime));
         module.OnTick((player, _) => global::DoedreSewers.Tick(Program.ConnOf(player)));
         module.Lifetime.Own(GameEvents.ObjectUse.Add("Game", global::DoedreSewers.Use));
-        // Malachai's death portal (Act 4): the second stage waits behind it instead of standing on the corpse.
-        module.Lifetime.Own(GameEvents.ObjectUse.Add("MalachaiPortal", global::Game.UseMalachaiPortal));
+        // Malachai (Act 4): the first form submerges at 70% instead of dying, the second rises behind his rift with the
+        // three hearts that keep him alive, and his fall leaves the death portal.
+        module.OnTick((player, _) => global::Game.MalachaiTick(Program.ConnOf(player)));
+        module.Lifetime.Own(GameEvents.ObjectUse.Add("MalachaiPortal", global::Game.MalachaiUse));
         module.OnPlayerLeaving((player, _) =>
         {
             global::Game.LeavingMalachaiPortal(Program.ConnOf(player));

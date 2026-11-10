@@ -1973,6 +1973,9 @@ static partial class Game
         if (m.StageRunning || m.KingPhaseLocked)
             return ((uint)Math.Max(m.KingPhaseLocked ? (long)m.MaxLife * 50 / 100 : 1,
                 (long)m.Life - damage), false);
+        // An encounter's own cannot-die (Malachai while his three hearts stand, .ot set_cannot_die): it takes damage
+        // down to its last point of life and no further.
+        if (m.CannotDie) return ((uint)Math.Max(1, (long)m.Life - damage), false);
         // A quest threshold (Kitava): the hit that reaches it leaves the monster alive; it never dies.
         if (m.Threshold is { } threshold)
         {

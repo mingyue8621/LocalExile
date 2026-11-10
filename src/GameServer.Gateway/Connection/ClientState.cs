@@ -152,6 +152,9 @@ sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange, int s
     public bool CannotBeStunned { get; init; }
     /// <summary>The humanoid King's life cannot reach 0 before the three fetishes hand the fight to the treant.</summary>
     public bool KingPhaseLocked { get; init; }
+    /// <summary>Its life cannot reach 0 while the encounter's own condition holds (Malachai's three hearts, .ot
+    /// set_cannot_die): a hit takes it down to 1 and no further.</summary>
+    public bool CannotDie;
     /// <summary>The treant's emergence grace: hits do nothing until KingInMists clears it.</summary>
     public bool KingGrace;
     /// <summary>The humanoid's fetish channel: no damage, ailment, leech or hit reaction until the ritual ends.</summary>
