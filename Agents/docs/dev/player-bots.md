@@ -95,9 +95,13 @@ times a second. What follows is its own judgement rather than an order from the 
   keeping the ones whose reach covers the distance (`ControlledInPlaceReach`: weapon range for a melee skill, its radius
   for a self-targeted one, 80 for a projectile). An area gem goes first when three monsters stand within 15 cells of the
   target. A gem on cooldown hands the turn to the next one instead of standing still on it.
-- **Where**: when nothing reaches, it walks to just inside the longest reach, on walkable ground and inside the party
-  (`ControlledMoveFits`), instead of waiting for the monster to come to it. While it has a target the leash is the engage
-  one (90) and it holds its ground instead of running to the leader's formation cell.
+- **Where it stands**: in the trail behind the leader, 9, 13 or 17 cells back (each bot keeps its own rank, so the queue is
+  a column rather than a rank), and never inside the corridor the leader is walking down (26 cells ahead, 5 to either
+  side). A follower that ends up ahead of a moving leader steps 7 cells off the road and waits there instead of standing
+  in it: another player's body is a blocker the leader's own pathfinder has to walk round.
+- **Where it walks to fight**: when nothing reaches, it walks to just inside the longest reach, on walkable ground and
+  inside the party (`ControlledMoveFits`), instead of waiting for the monster to come to it. While it has a target the
+  leash is the engage one (90) and it holds its ground instead of running to the leader's formation cell.
 - **When to drink**: at its own line a life flask, and a mana flask once a fifth of the unreserved mana is left.
 - **Giving ground**: a bot that fights from a distance (reach ≥ 25) steps back out of an enemy that got inside 6–14 cells
   of it, and further back under its life line. A melee bot stands and drinks instead.

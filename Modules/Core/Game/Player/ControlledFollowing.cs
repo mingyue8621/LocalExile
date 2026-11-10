@@ -28,42 +28,65 @@ static partial class Game
         // may do so again after KiteAt, and Backing says it stepped away rather than failed to find a cell.
         public double EngageUntil, KiteAt;
         public bool Backing;
+        /// <summary>When it may step off the leader's route again (a follower that ended up ahead of it).</summary>
+        public double StepAsideAt;
         public uint IdleTurn;
         public uint Target;
     }
 
+    /// <summary>The cell this follower forms up on: behind the leader, off the line it is walking down, and never on top of
+    /// it. A follower used to take a cell <em>ahead</em> of a moving leader (18–30 cells along its route), so five of them
+    /// made a wall the player had to walk round (live 2026-11-10: "the bots surround me and block my path").</summary>
     internal static (int X, int Y) ControlledFollowerPoint(ClientState conn, ClientState leader, bool arrival = false, double? atTime = null)
     {
         double now = atTime ?? conn.Clock.Elapsed.TotalSeconds;
         var origin = leader.Walk.Position(now);
         var destination = leader.Walk.Destination;
         double dx = destination.X - origin.X, dy = destination.Y - origin.Y;
-        if (!leader.Walk.Moving(now) && arrival)
+        bool moving = leader.Walk.Moving(now) && (dx != 0 || dy != 0);
+        // Which way the formation lies: backwards along a walk, away from the doorway it followed the leader through, and
+        // otherwise the side it already stands on — a follower keeps its side of the leader instead of circling him.
+        var here = conn.Walk.Position(now);
+        double outward = Math.Atan2(here.Y - origin.Y, here.X - origin.X);
+        if (moving) outward = Math.Atan2(dy, dx) + Math.PI;
+        else if (arrival)
         {
             var entry = conn.Layout.AreaTransitions.Select(p => p.Transition)
                 .OrderBy(t => Dist(origin, (t.GridX, t.GridY))).FirstOrDefault();
             if (entry is not null && Dist(origin, (entry.GridX, entry.GridY)) < 50)
-                (dx, dy) = (origin.X - entry.GridX, origin.Y - entry.GridY);
+                outward = Math.Atan2(origin.Y - entry.GridY, origin.X - entry.GridX);
         }
-        bool forward = arrival || leader.Walk.Moving(now);
-        double heading = Math.Atan2(dy, dx) + (forward ? 0 : Math.PI);
-        // Try the front/behind formation first, then the other side of a narrow passage. Bodies are live inputs.
-        double side = (conn.PeerId % 5 - 2.0) * .22;
+        // A cell inside the corridor the leader is walking down is a body its own pathfinder has to go round.
+        double length = Math.Sqrt(dx * dx + dy * dy);
+        bool OnRoute(int x, int y)
+        {
+            if (!moving || length < 1) return false;
+            double ux = dx / length, uy = dy / length, ax = x - origin.X, ay = y - origin.Y;
+            double along = ax * ux + ay * uy;
+            return along > -3 && along < 26 && Math.Abs(ay * ux - ax * uy) < 5;
+        }
+        // Try the trail first, then either side of a narrow passage. Bodies are live inputs.
+        double side = (conn.PeerId % 5 - 2.0) * .3;
+        // Each bot prefers its own rank in the trail, so three of them walk at three distances instead of shoulder to
+        // shoulder: the queue behind a player is a column, not a rank.
+        int rank = (int)(conn.PeerId % 3);
+        int[] radii = moving ? [9, 13, 17] : [7, 11, 15];
         var bodies = conn.Blockers;
         bool Floor(int x, int y) => x >= 0 && y >= 0 && x < conn.Layout.GridW && y < conn.Layout.GridH
             && conn.Layout.WalkableFor(x, y, 2) && !conn.Barrier.Contains((x, y));
-        foreach (int radius in forward ? new[] { 30, 24, 18 } : new[] { 16, 22, 12 })
-            foreach (double turn in new[] { 0.0, .5, -.5, 1.0, -1.0, 1.5, -1.5, Math.PI })
+        foreach (int radius in radii.Skip(rank).Concat(radii.Take(rank)))
+            foreach (double turn in new[] { 0.0, .45, -.45, .9, -.9, 1.4, -1.4 })
             {
-                double angle = heading + side + turn;
+                double angle = outward + side + turn;
                 var at = (X: origin.X + (int)Math.Round(Math.Cos(angle) * radius),
                     Y: origin.Y + (int)Math.Round(Math.Sin(angle) * radius));
-                if (!Floor(at.X, at.Y) || ClientPathfinder.ObjectBlocks(bodies, at.X, at.Y, 3, 6)) continue;
+                if (OnRoute(at.X, at.Y) || !Floor(at.X, at.Y) || ClientPathfinder.ObjectBlocks(bodies, at.X, at.Y, 3, 6))
+                    continue;
                 var path = ClientPathfinder.FindPath(origin, at, Floor, conn.Layout.GridW, conn.Layout.GridH, [], 2);
                 if (path.Count > 1 && path[^1] == at) return at;
             }
-        // No room to form up: stay in the leader's reachable pocket rather than teleport across a wall.
-        return origin;
+        // No room to form up: stay where it is rather than crowding the leader's own cell.
+        return here;
     }
 
     internal static bool KeepControlledFollowerNear(ClientState conn, ClientState leader, double now, bool externalMovement = false)
@@ -127,12 +150,13 @@ static partial class Game
         }
         bool moving = leader.Walk.Moving(now);
         double ahead = ControlledAhead(here, follow, leader.Walk.Destination);
-        if (moving && ahead >= 20 && distance <= leash
-            && Math.Max(0, distance * distance - ahead * ahead) <= 20 * 20)
+        // Ahead of the leader on its own route: it steps off the road and waits beside it, rather than standing in the
+        // corridor (a body the player has to walk round) or running back through him.
+        if (moving && distance <= leash && ahead >= 4 && Math.Abs(LateralFromRoute(here, follow, leader.Walk.Destination)) < 5)
         {
-            // Already ahead on the route: wait for the leader rather than running backwards to a formation point.
             if (plan.Following) ScheduleControlledIdle(conn, plan, now);
             plan.Following = false;
+            StepOffRoute(conn, leader, now);
             return false;
         }
         if (plan.Following && !moving && distance <= 30)
@@ -184,6 +208,9 @@ static partial class Game
                 Y: here.Y + (int)Math.Round(Math.Sin(angle) * radius));
             if (Dist(at, leader.Walk.Position(now)) > ControlledFollowerLeash || !Floor(at.X, at.Y)
                 || ClientPathfinder.ObjectBlocks(bodies, at.X, at.Y, 3, 6)) continue;
+            // Never shuffle onto the player's own cell: a follower standing shoulder to shoulder is in the way the moment
+            // the player turns.
+            if (Dist(at, leader.Walk.Position(now)) < 6) continue;
             var path = ClientPathfinder.FindPath(here, at, Floor, conn.Layout.GridW, conn.Layout.GridH, bodies, 2);
             if (path.Count < 2 || path[^1] != at) continue;
             // Rounded path cells can briefly leave the circle even with both endpoints inside it.
@@ -199,6 +226,33 @@ static partial class Game
     {
         double dx = goal.X - leader.X, dy = goal.Y - leader.Y, length = Math.Sqrt(dx * dx + dy * dy);
         return length > 0 ? ((bot.X - leader.X) * dx + (bot.Y - leader.Y) * dy) / length : 0;
+    }
+
+    /// <summary>How far to the side of the leader's route a cell stands: one sign on one side, the other on the other.</summary>
+    internal static double LateralFromRoute((int X, int Y) cell, (int X, int Y) from, (int X, int Y) goal)
+    {
+        double dx = goal.X - from.X, dy = goal.Y - from.Y, length = Math.Sqrt(dx * dx + dy * dy);
+        if (length < 1) return 0;
+        return ((cell.X - from.X) * -dy + (cell.Y - from.Y) * dx) / length;
+    }
+
+    /// <summary>Steps off the road the leader is walking down, onto the side it already stands on, and waits there: a body
+    /// in the corridor is what the player's pathfinder has to walk round.</summary>
+    static void StepOffRoute(ClientState conn, ClientState leader, double now)
+    {
+        var plan = FollowerPlans.GetOrCreateValue(conn);
+        if (now < plan.StepAsideAt) return;
+        plan.StepAsideAt = now + 1.2;
+        var here = conn.Walk.Position(now);
+        var from = leader.Walk.Position(now);
+        var goal = leader.Walk.Destination;
+        double dx = goal.X - from.X, dy = goal.Y - from.Y, length = Math.Sqrt(dx * dx + dy * dy);
+        if (length < 1) return;
+        double side = LateralFromRoute(here, from, goal) >= 0 ? 1 : -1;
+        var at = (X: here.X + (int)Math.Round(-dy / length * side * 7),
+            Y: here.Y + (int)Math.Round(dx / length * side * 7));
+        if (!ControlledMoveFits(conn, leader, at.X, at.Y, now)) return;
+        MoveControlledFollower(conn, at, now);
     }
 
     /// <summary>Whether stopping to swing while the leader walks on still leaves the bot in the party afterwards: it may do

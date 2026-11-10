@@ -140,12 +140,14 @@
   观察者会获得实际获得的经验、等级属性与默认的升级闪光；队伍在活动状态下重载会保留已得经验。
   原生队伍菜单里的踢人会移除选中的机器人。
   跟随者在待机队长 60 格内安静站立，偶尔做小调整，并从入口前方的空格进入。
+  行走时它们排在队长身后 9/13/17 格（各占一档，纵队而不是横排），并避开队长正在走的走廊（前方 26 格、左右 5 格）；
+  已经跑到队长前面的会向侧面让开 7 格站到路边，而不是堵在路上——其他玩家的身体是玩家寻路要绕开的障碍。
   每个跟随者有自己的性格（按名字哈希固定）：冲劲决定它离队长多远去追怪（55~87 格），谨慎决定它多早喝药
   （生命 20%~40%）与被贴脸时是否后退，忠诚决定它多积极去打正在打你的怪，话痨决定它说不说话。
   它只打自己 80 格内（法术/箭矢的出手距离也是 80）且在队长范围内的敌人，优先稀有、其次打在队长身上的；
   普通怪与其他机器人分开打，稀有与首领共用目标。远程机器人被贴到 6~14 格会后退一段，近战机器人站着打。
   有目标期间它的跟随半径放宽到 90 格并原地守住，不会为了站队形而走出自己的射程。
-  移动中的跟随者会沿队长已下达的路线向前瞄准，并在可及范围内出手，不会为此偏离路线，也不会打断自己的挥击/施法。
+  移动中的跟随者会就近对可及的目标出手，有目标时原地守住，不会为此打断自己的挥击/施法。
   超过 60 格（战斗中 90 格）的间隙会获得短暂追赶宽限再传送；大幅跳变则立即把跟随者带回。
   共享死亡会在每个观察者那里隐藏尸体血条，包括被受控队员击杀的情况。
   可选的 [MCP 控制](../../Modules/PlayerBots/MCP.md) 提供按机器人的租约、观测与原生战术指令，同时保留普通跟随/回落行为。
@@ -195,7 +197,10 @@
   from chat, and an invite also matches a bot standing in the player's town that has not been published to them yet
   (a module reload clears that flag until the bot's next update).
   Followers stand calmly within 60 cells of an idle leader, with rare short adjustments, and enter on clear cells ahead of the entrance.
-  Moving followers aim ahead along the leader's ordered route and take reachable attacks without chasing off it or cancelling their own swing/cast.
+  On the move they take the trail 9, 13 or 17 cells behind the leader — one rank each, a column rather than a rank — and keep
+  out of the corridor the leader is walking down (26 cells ahead, 5 to either side); one that ends up ahead of a moving
+  leader steps 7 cells off the road and waits there, since a player's body is a blocker the leader's pathfinder walks round.
+  Moving followers take reachable attacks and hold their ground while they have a target, without cancelling their own swing/cast.
   Gaps over 60 cells get a short catch-up grace before relocation; large jumps return followers immediately.
   Shared deaths hide corpse health bars on each observer, including kills made by controlled party members.
   Optional [MCP control](../../Modules/PlayerBots/MCP.md) exposes per-bot leases, observations and native tactical orders with ordinary following/fallback.
