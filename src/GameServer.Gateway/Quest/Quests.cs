@@ -422,6 +422,20 @@ static partial class Quests
         public IReadOnlyList<string> SpawnsOnUse(string areaId, string objectType) =>
             [.. In<SpawnRule>(areaId).Where(r => r.ObjectType == objectType).Select(r => r.Variety)];
 
+        /// <summary>Every flag a use of the object sets, whatever its needs: whether the object already stands used. A
+        /// monster a <see cref="SpawnRule"/> brings comes back on entering the area while none of these is set (it was
+        /// never used) — Kitava's socket keeps <c>a5q6-DeliveredItem</c> once the Sign is in it.</summary>
+        public IReadOnlyList<string> UsedFlags(string areaId, string objectType) =>
+            [.. In<UsedRule>(areaId).Where(r => r.ObjectType == objectType).SelectMany(r => r.Flags).Distinct()];
+
+        /// <summary>The flags that say a fight with this monster is over: its kill (<see cref="KillRule"/>), its threshold
+        /// (<see cref="ThresholdRule"/>, Kitava leaving at half life) and the multi-kill rules it belongs to
+        /// (<see cref="KilledAllRule"/>, Act 8's Lunaris and Solaris). While none is set the monster is owed for the area.</summary>
+        public IReadOnlyList<string> FightOverFlags(string areaId, string varietyId) =>
+            [.. OnMonsterKilled(areaId, varietyId)
+                .Concat(ThresholdOf(areaId, varietyId)?.Flags ?? [])
+                .Concat(KilledAllOf(areaId, varietyId).SelectMany(r => r.Flags)).Distinct()];
+
         /// <summary>The monsters this area's quest objects bring, with the object that brings them: entering the area
         /// again puts one back when its object already stands in its used state but the monster was never killed
         /// (The Ancient Pyramid's altar keeps the Apex, so a use made once must not be lost).</summary>
@@ -569,6 +583,8 @@ static partial class Quests
     public static IReadOnlyList<string> HandsIn(string npcId, string option, int row = -1) => Everything.HandsIn(npcId, option, row);
     public static IReadOnlyList<string> SpawnsOnUse(string areaId, string objectType) => Everything.SpawnsOnUse(areaId, objectType);
     public static IReadOnlyList<SpawnRule> SpawnsOf(string areaId) => Everything.SpawnsOf(areaId);
+    public static IReadOnlyList<string> UsedFlags(string areaId, string objectType) => Everything.UsedFlags(areaId, objectType);
+    public static IReadOnlyList<string> FightOverFlags(string areaId, string varietyId) => Everything.FightOverFlags(areaId, varietyId);
     public static IReadOnlyList<string> OnCleared(string areaId, Func<string, bool> has) => Everything.OnCleared(areaId, has);
     public static bool WatchesClear(string areaId) => Everything.WatchesClear(areaId);
     public static ThresholdRule? ThresholdOf(string areaId, string varietyId) => Everything.ThresholdOf(areaId, varietyId);

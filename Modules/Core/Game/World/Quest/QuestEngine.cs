@@ -385,6 +385,31 @@ static partial class Game
             if (at.Count == 0) Console.WriteLine($"[gateway] {remote} quest object {rule.ObjectType}: no room or tile places it");
             foreach (var o in at) await CreateQuestObject(remote, stream, ciphers, conn, rule, o);
         }
+        // A quest object's use brings its monster, and that has to survive leaving the area: an object already standing used
+        // (its flags set) with no kill, threshold or multi-kill flag against the monster still owes it for this instance.
+        // Live 2026-11-11: the Sign went into Kitava's socket, the player relogged, and a5q6 could not be finished because
+        // nothing put him back. Entering also re-forms an Act 8 fight that only one of the two ended.
+        foreach (var rule in spawns)
+        {
+            string what = $"entering the area, {rule.ObjectType.Split('/')[^1]} already used";
+            if (!QuestsOf(conn).UsedFlags(area, rule.ObjectType).Any(f => ClientHasQuestFlag(conn, f))) continue;
+            if (QuestsOf(conn).FightOverFlags(area, rule.Variety).Any(f => ClientHasQuestFlag(conn, f)))
+            {
+                Console.WriteLine($"[gateway] {remote} {what}: {rule.Variety.Split('/')[^1]} is over, not brought back");
+                continue;
+            }
+            if (Monsters.Find(rule.Variety) is not { Supported: true } variety || variety.Id != rule.Variety)
+            {
+                Console.WriteLine($"[gateway] {remote} {what}: {rule.Variety} cannot be created");
+                continue;
+            }
+            // At the object when the rooms place it (its boss point wins inside SpawnQuestMonster), else where the player
+            // arrives: a boss is never dropped for want of a cell.
+            var at = placed.Of(rule.ObjectType).Select(o => (o.X, o.Y)).FirstOrDefault();
+            byte level = (byte)Math.Clamp(Packs.For(area)?.AreaLevel ?? 1, 1, 100);
+            await SpawnQuestMonster(remote, stream, ciphers, conn, variety, level,
+                at == default ? (conn.Layout.SpawnX, conn.Layout.SpawnY) : at, what);
+        }
         await HideCollectedQuestMarkers(remote, stream, ciphers, conn);
     }
 
@@ -461,7 +486,6 @@ static partial class Game
             if (flags.Where(f => !Quests.IsInstanceFlag(f)).ToList() is { Count: > 0 } own)
                 await ConsumeQuestItemsAndSet(remote, stream, ciphers, conn, own, rule.ObjectType.Split('/')[^1]);
             byte level = (byte)Math.Clamp(Packs.For(area)?.AreaLevel ?? 1, 1, 100);
-            var bosses = Packs.For(area)?.Bosses ?? [];
             foreach (string id in QuestsOf(conn).SpawnsOnUse(area, rule.ObjectType))
             {
                 if (Monsters.Find(id) is not { Supported: true } variety || variety.Id != id)
@@ -469,19 +493,26 @@ static partial class Game
                     Console.WriteLine($"[gateway] {remote} {rule.ObjectType}: {id} cannot be created");
                     continue;
                 }
-                bool already;
-                lock (conn.Monsters) already = conn.Monsters.Values.Any(m => m.Variety?.Id == id && !m.Dead && m.Life > 0);
-                if (already) continue;
-                // An area boss stands where the rooms put it ("mapboss"), not at the object that woke it: Kitava rises at
-                // bossentry.arm's force:mapboss, 100 cells past the Sign of Purity's socket the player uses.
-                var spot = AreaPopulation.BossStanding(area, conn.Seed, bosses, variety.Row) ?? (at.X, at.Y);
-                var (x, y) = conn.Layout.Walkable is { } walks && !walks(spot.X, spot.Y) ? conn.Layout.Near((spot.X, spot.Y)) : (spot.X, spot.Y);
-                Console.WriteLine($"[gateway] {remote} {rule.ObjectType.Split('/')[^1]} used: {variety.Name} appears at ({x}, {y})" +
-                    (spot == (at.X, at.Y) ? "" : $", the area's boss point, not the object's ({at.X}, {at.Y})"));
-                await SpawnMonster(remote, stream, ciphers, conn, variety, level, MonsterRarity.Unique, x, y);
+                await SpawnQuestMonster(remote, stream, ciphers, conn, variety, level, (at.X, at.Y), $"{rule.ObjectType.Split('/')[^1]} used");
             }
         }
         finally { await Send(remote, stream, ciphers, InstanceProtocol.ActionEnded(PlayerId), null); }
+    }
+
+    // A monster a quest object brings (Quests.SpawnRule): where the rooms put the area's own boss ("mapboss"), not at the
+    // object that woke it — Kitava rises at bossentry.arm's force:mapboss, 100 cells past the Sign of Purity's socket the
+    // player uses (live 2026-11-10) — and only once per instance.
+    internal static async Task SpawnQuestMonster(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
+        MonsterCatalog.Variety variety, byte level, (int X, int Y) at, string what)
+    {
+        bool already;
+        lock (conn.Monsters) already = conn.Monsters.Values.Any(m => m.Variety?.Id == variety.Id && !m.Dead && m.Life > 0);
+        if (already) return;
+        var spot = AreaPopulation.BossStanding(conn.Layout.Id, conn.Seed, Packs.For(conn.Layout.Id)?.Bosses ?? [], variety.Row) ?? at;
+        var (x, y) = conn.Layout.Walkable is { } walks && !walks(spot.X, spot.Y) ? conn.Layout.Near(spot) : spot;
+        Console.WriteLine($"[gateway] {remote} {what}: {variety.Name} appears at ({x}, {y})" +
+            (spot == at ? "" : $", the area's boss point, not the object's ({at.X}, {at.Y})"));
+        await SpawnMonster(remote, stream, ciphers, conn, variety, level, MonsterRarity.Unique, x, y);
     }
 
     // Sets the flags and takes the carried quest items whose remove_flag is among them (and clears their grant flags), in
