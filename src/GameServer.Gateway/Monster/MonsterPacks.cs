@@ -208,11 +208,12 @@ static class AreaPopulation
     }
 
     /// <summary>Where one of the area's own bosses stands, if the rooms mark a point for it: its numbered point
-    /// ("mapboss2" for the second of WorldAreas Bosses), or the unnumbered one ("force:mapboss") when the area has a
-    /// single boss. Null when the area does not list the variety or has no point for it. A quest that brings a boss the
-    /// area leaves out (Quests.QuestSpawned) places it here rather than at the object that woke it: The Cathedral
-    /// Rooftop's Sign of Purity socket is 100 cells from where Kitava rises (bossentry.arm's force:mapboss, under the
-    /// fight's camera zoom), and The Harbour Bridge's fight starter stands between Lunaris's and Solaris's points.</summary>
+    /// ("mapboss2" for the second of WorldAreas Bosses), or the area's single unnumbered one ("force:mapboss") for a boss
+    /// the numbered points leave (AreaPopulation.Plan assigns those there). Null when the area does not list the variety or
+    /// has no point for it. A quest that brings a boss the area leaves out (Quests.QuestSpawned) places it here rather than
+    /// at the object that woke it: The Cathedral Rooftop's Sign of Purity socket is 100 cells from where Kitava rises
+    /// (bossentry.arm's force:mapboss, under the fight's camera zoom), and The Harbour Bridge's fight starter stands between
+    /// Lunaris's and Solaris's points.</summary>
     public static (int X, int Y)? BossStanding(string areaId, uint seed, IReadOnlyList<int> bosses, int varietyRow) =>
         BossStanding(LoadPoints(areaId, seed, []), bosses, varietyRow);
 
@@ -225,9 +226,27 @@ static class AreaPopulation
         if (index < 0) return null;
         if (points.FirstOrDefault(p => BossPoint(p.Name) is { Count: > 0 } rows && rows.Contains(index + 1)) is { } numbered)
             return (numbered.X, numbered.Y);
-        if (bosses.Count == 1 && points.FirstOrDefault(p => BossPoint(p.Name) is { Count: 0 }) is { } plain)
-            return (plain.X, plain.Y);
+        // The unnumbered point takes the bosses the numbered ones leave (Plan assigns them all there, MemberSpacing apart):
+        // with one such point that is this boss, wherever it falls in the area's list. Several such points are a choice the
+        // plan makes by seed, so the object's own cell stays.
+        var plain = points.Where(p => BossPoint(p.Name) is { Count: 0 }).ToList();
+        if (plain.Count == 1 && !points.Any(p => BossPoint(p.Name) is { Count: > 0 } rows && rows.Contains(index + 1)))
+            return (plain[0].X, plain[0].Y);
         return null;
+    }
+
+    /// <summary>The boss points the area's rooms declare, from data/room-points.json alone (no placement and no level
+    /// generation): the client's own markers for where its unique bosses stand, with the room that carries each. The boss
+    /// audit lists them beside the spawn path's choice (Program's `values bosses`).</summary>
+    public static IReadOnlyList<(string Room, RoomPoint Point)> DeclaredBossPoints(string areaId)
+    {
+        if (RoomFits.Value is not { } rooms || !rooms.Areas.TryGetValue(areaId, out var paths)) return [];
+        var found = new List<(string, RoomPoint)>();
+        foreach (string path in paths)
+            if (rooms.Rooms.TryGetValue(path, out var room))
+                foreach (var p in room.Points)
+                    if (BossPoint(p.Name) is not null) found.Add((path, p));
+        return found;
     }
 
     /// <summary>Server-side spawner objects of a room that stand for one of the area's unique bosses (their .ot names no

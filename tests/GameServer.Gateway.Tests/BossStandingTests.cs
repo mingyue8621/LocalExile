@@ -26,8 +26,8 @@ public class BossStandingTests
         Assert.Equal((367, 482), AreaPopulation.BossStanding(points, [5642, 5666], 5666));
     }
 
-    /// <summary>A monster the area does not list as its boss, a numbered point that names another boss, and two bosses
-    /// with only an unnumbered point: none of them may take a point (the object's own cell stays).</summary>
+    /// <summary>A monster the area does not list as its boss, and a numbered point that names another boss: neither may
+    /// take that point (the object's own cell stays).</summary>
     [Fact]
     public void Only_the_areas_own_boss_with_a_point_for_it_takes_one()
     {
@@ -36,7 +36,16 @@ public class BossStandingTests
         Assert.Null(AreaPopulation.BossStanding(kitava, [], 5747));
         var bridge = new[] { At("mapboss1", 262, 468), At("mapboss2", 367, 482) };
         Assert.Null(AreaPopulation.BossStanding(bridge, [5642, 5666], 5747));
-        Assert.Null(AreaPopulation.BossStanding(new[] { At("force:mapboss", 4, 5) }, [5642, 5666], 5666));
+    }
+
+    /// <summary>The unnumbered point takes the bosses the numbered ones leave, however many there are: The Solaris Temple
+    /// Level 1 has two bosses and one "mapboss" (AreaPopulation.Plan stands both there, MemberSpacing apart). Two such
+    /// points are a choice the plan makes by seed, so neither is taken.</summary>
+    [Fact]
+    public void An_unnumbered_point_takes_the_bosses_the_numbered_ones_leave()
+    {
+        Assert.Equal((4, 5), AreaPopulation.BossStanding(new[] { At("force:mapboss", 4, 5) }, [5642, 5666], 5666));
+        Assert.Null(AreaPopulation.BossStanding(new[] { At("mapboss", 4, 5), At("force:mapboss", 9, 9) }, [5642], 5642));
     }
 
     /// <summary>Map points (mapboss1 without a variety list of its own, the map's own bosses) and a point that takes

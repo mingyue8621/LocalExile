@@ -73,6 +73,7 @@ This research does not change the production simulator or certify native/officia
 | [dev/modding.md](dev/modding.md) | mods in `Mods/Binaries/<id>/`: `mod.json`, writing one (LocalExile-Mods), the hooks, reloading, limits |
 | [dev/item-crafter.md](dev/item-crafter.md) | the item crafter hook for tools: the Gateway's `crafter` mode (bases, mod pools, stat descriptions) and `/item_give` |
 | [dev/console-channel.md](dev/console-channel.md) | the launcher's console: chat commands run on the running Gateway over `127.0.0.1:20499` (`who`, `run`), `data/console.json`, no game client needed |
+| [dev/boss-audit.md](dev/boss-audit.md) | `values bosses`: every campaign boss's client room point, spawn path, picked effect, projectile, cast/swing and action id, without starting a server |
 | [dev/player-bots.md](dev/player-bots.md) | the PlayerBots module: server-driven characters that play the campaign and visit towns, settings, logs, the client findings behind their walk and stance |
 | [dev/campaign-automation.md](dev/campaign-automation.md) | the campaign driver: `campaign.ps1`, the runner, quest step files and verbs, `/state`, `/kill`, `/quest_preset`, its own ports and client session |
 | [dev/headless-client.md](dev/headless-client.md) | cheap clients for agent sessions: the engine's Null renderer, per-client settings, frame cap, process limits, `nullifier.py`, measurements |
