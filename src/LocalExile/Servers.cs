@@ -57,12 +57,16 @@ sealed class Servers : IDisposable
         foreach (string argument in arguments) start.ArgumentList.Add(argument);
         Tools.Prepare(start);
         // Without Game_GATEWAY_ENTER the Gateway stops after creating the player and the client never enters the area.
-        foreach (var (key, value) in new Dictionary<string, string>
-        {
-            ["Game_GATEWAY_ENTER"] = "1", ["Game_PATCH_TCP_PORT"] = $"{ports.Patch}", ["Game_LOGIN_PORT"] = $"{ports.Login}",
-            ["Game_AUTH_CONTROL_PORT"] = $"{ports.Control}", ["Game_GATEWAY_PORT"] = $"{ports.Gateway}",
-            ["Game_PATCH_URL"] = $"http://127.0.0.1:{ports.PatchWeb}", ["Game_PACKET_DUMPS"] = Path.Combine("logs", "packets"),
-        }) start.Environment[key] = value;
+        start.Environment["Game_GATEWAY_ENTER"] = "1";
+        start.Environment["Game_PACKET_DUMPS"] = Path.Combine("logs", "packets");
+        // The servers read their addresses and ports from localexile.conf; --port-base gives them their own block.
+        if (ports.Base != 0)
+            foreach (var (key, value) in new Dictionary<string, string>
+            {
+                ["Game_PATCH_TCP_PORT"] = $"{ports.Patch}", ["Game_LOGIN_PORT"] = $"{ports.Login}",
+                ["Game_AUTH_CONTROL_PORT"] = $"{ports.Control}", ["Game_GATEWAY_PORT"] = $"{ports.Gateway}",
+                ["Game_PATCH_URL"] = $"http://127.0.0.1:{ports.PatchWeb}",
+            }) start.Environment[key] = value;
         var process = new Process { StartInfo = start };
         void Write(string? line) { if (line is not null) lock (output) output.WriteLine(line); }
         process.OutputDataReceived += (_, e) => Write(e.Data);
@@ -124,8 +128,12 @@ sealed class Servers : IDisposable
         int stopped = 0;
         string install = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
         string app = Path.Combine(install, "app") + Path.DirectorySeparatorChar;
-        string client = Path.Combine(install, "Client") + Path.DirectorySeparatorChar;
-        string self = Path.Combine(install, "LocalExile.exe");        foreach (var process in Process.GetProcesses())
+        // The client folder is the owner's setting (Client.Folder in localexile.conf, or Game_CLIENT_FOLDER), taken
+        // relative to the install so a linked client outside it is still recognised by its own path.
+        string client = Path.TrimEndingDirectorySeparator(
+            Path.GetFullPath(Path.Combine(install, GameServer.Core.ServerConfig.ClientFolder))) + Path.DirectorySeparatorChar;
+        string self = Path.Combine(install, "LocalExile.exe");
+        foreach (var process in Process.GetProcesses())
             using (process)
             {
                 string? path;
@@ -139,7 +147,7 @@ sealed class Servers : IDisposable
                 // A linked client's path is outside the install: it is told by its name.
                 bool ours = path.StartsWith(app, StringComparison.OrdinalIgnoreCase) || path.StartsWith(client, StringComparison.OrdinalIgnoreCase)
                     || path.Equals(self, StringComparison.OrdinalIgnoreCase)
-                    || (Path.GetFileName(path).Equals("Game.patched.exe", StringComparison.OrdinalIgnoreCase) && SameFile(path, Path.Combine(install, "Client", "Game.patched.exe")));
+                    || (Path.GetFileName(path).Equals("Game.patched.exe", StringComparison.OrdinalIgnoreCase) && SameFile(path, Path.Combine(client, "Game.patched.exe")));
                 if (!ours) continue;
                 process.Kill(entireProcessTree: true);
                 stopped++;

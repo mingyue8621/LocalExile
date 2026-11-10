@@ -145,6 +145,54 @@
   代码：`src/GameServer.Modding/`、`ModHost.cs`、`ModLoadContext.cs`、`ModScripts.cs`、`ServerLeagues.cs`、`Program.Mods.cs`、
   `Program.ModuleWorld.cs`、`Modules/`、`src/GameServer.Modding/Mod.props`。
   文档：[modding](../docs/dev/modding.md)。
+- Databases from SQL in git ([#734](https://github.com/LocalExile/LocalExile/issues/734),
+  [databases](../docs/dev/databases.md)): `auth.db`, `characters.db`, `client.db` (the client's 943 tables, 97 MB of
+  SQL, and the 14 generated files the servers read, 70 MB) and `world.db` (game content) are built and updated from
+  `sql/` by each server at startup, one transaction per
+  file, a changed merged file refused. `Config/localexile.conf` (written with the defaults on the first start) holds the addresses, ports and client folder. CI builds every
+  database from scratch and checks the SQL; the merge names pending updates. Verified: the Gateway starting on fresh
+  databases with the former seed's counts, every client table and generated file rebuilt identically, a real `saves.db`
+  migrated and played on. Not yet: the pending rename on `main` (set up with a deploy key, not yet run), and the generated files
+  served from `client.db` in a real-client session.
+  Code: `GameServer.Storage/SqlUpdater.cs`, `GameServer.Core/Tables/ClientTables.cs`, `GameServer.Core/Config/ServerConfig.cs`.
+- Linux: `live.ps1` and `extract-data.ps1` run under PowerShell 7 and the client under Proton
+  ([GettingStarted](../GettingStarted.md#linux)). Verified: the extraction, the three test suites, the servers with hot
+  reload, and the real client logging in and playing on the Coast. `build-release.ps1` under pwsh builds a linux-x64
+  package; its launcher sets up and runs the servers natively. The release workflow builds it beside the Windows one. Not yet:
+  `-Walkmaps`, named clients, and the client from a Linux release.
+  Code: `scripts/dev/platform-linux.ps1`.
+- Mods: the Gateway loads each `Mods/Binaries/<id>/` (a `mod.json` and an assembly, after the mods it depends on) into a
+  collectible load context of its own and reloads it, with its dependents, when its folder changes; `/mod`, `/mod_reload`,
+  `/mod_enable` and `/mod_disable` in chat (the last two last across restarts, in `mod-state.txt`; a running Gateway also
+  applies that file when a launcher rewrites it).
+  Loose `.cs` files in a mod's folder compile with Roslyn when it loads, so saving one reloads it; errors go to `/mod`, the log and chat.
+  Live: a script saved into a running Gateway's `Mods/Binaries/` loaded, and a broken edit reported its line.
+  Settings: a mod's or module's `settings.json` declares what can be tuned (ten types, defaults, limits); the user's values
+  are in `data/mods/` and `data/modules/`, checked, and a change reloads it ([modding](../docs/dev/modding.md), "Settings").
+  A user's modules per league are added and removed in `data/league-modules.json`, over the leagues' own lists.
+  Leagues ([modules](../docs/dev/modules.md)) are folders in `Leagues/`, read once at start: cards and check boxes as in the real create screen, a parent to migrate to, Void, and
+  modules listed per league in its `modules.json`. Characters of a deleted or ended league cannot be entered.
+  Not tried in the client: a blocked character.
+  Harvest, Heist and Delve are real modules with their own assemblies, which hot-reload, through `IPlayerWorld`.
+  Trades and parties, Atlas passives, the crafting bench, cosmetics, vendors, portals and the map device, tattoos, the campaign's quests (QuestObjects), hideout editing, chat commands and unique belts are Core modules too. The game\'s rules are the `Game` module; the Gateway keeps the framework, game data, saves and connection state. What an NPC's options do is the `npcdialogue` module. A module runs only for the players whose league lists it, so a hideout
+  without Harvest places no station. Not tried in the client after the move.
+  The seven example mods, all off by default, moved to [LocalExile-Mods](https://github.com/LocalExile/LocalExile-Mods)
+  (2026-11-07); Waypoint installs them. A release ships no mods.
+  Mods see only `GameServer.Modding`: chat commands, the player tick, client messages (a mod may take one), area
+  generated, monster killed, and drop, experience and stat modifiers; a mod that throws is logged and skipped.
+  `live.ps1` builds the projects in `Mods\Source\` into `Mods\Binaries\`.
+  Live: the running Gateway loaded the example mod by itself when it was first built.
+  Unit-tested (`ModHostTests`): every hook, two mods' modifiers together, a reload starting the state over, a
+  dependency arriving later and reloading its dependent, a failed load leaving no hook, the watcher, and the unloaded
+  context being freed.
+  Assemblies load from a private temporary disk copy rather than collectible memory streams; original build outputs
+  remain free, and collected contexts release their copied files. Loader and cleanup regressions cover this path.
+  Unit-tested as well: scripts (load, reload, compile errors, no server references, dependencies, unload), league modules
+  (fallback, required features, tunables, scoped hooks) and built-ins.
+  Missing: mods replacing catalog rows, and the hooks not yet tried with the client (drops, experience, stats, packets).
+  Code: `src/GameServer.Modding/`, `ModHost.cs`, `ModLoadContext.cs`, `ModScripts.cs`, `ServerLeagues.cs`, `Program.Mods.cs`,
+  `Program.ModuleWorld.cs`, `Modules/`, `src/GameServer.Modding/Mod.props`.
+  Docs: [modding](../docs/dev/modding.md).
 
 - 只读的天赋图谱工具会把钉死的 3.29.3b 拓扑与合并后的 PSG 导出为 `data/` 下的分析产物。
   解析与合并有往返、畸形输入与普通天赋树保持的自动化覆盖。
@@ -178,6 +226,20 @@
   （对着模拟服务端的跑测器测试、`test_client_control.py`、`CampaignCommandTests`）。
   代码：`scripts/dev/campaign/`、`Modules/Core/Player/Commands/Rules.Campaign.cs`、`CampaignState.cs`。
   文档：[剧情自动化](../docs/dev/campaign-automation.md)、[10](../docs/protocol/10-chat-and-commands.md)。
+- Campaign automation: `scripts/dev/campaign.ps1` starts the checkout's servers if needed (`-PortBase`), opens its
+  own session client (`-Session`, default `campaign`; `-Nullifier`), logs in, creates a fresh character (or continues
+  one) and plays the quest order through the control bridge with `/god immune`, teleports and `/kill`; quest progress
+  comes from the quest engine reacting to the real kills, pickups, object use and NPC talk. Resumable (done quests and
+  steps are skipped), with diagnostics and recoveries for stuck steps; servers on its ports that are not the
+  checkout's, a missing `Game_CHARACTERS_DB` (unless `-AllowDefaultSaves`), a Gateway on another save database and a second
+  run on the same session stop the run. Step files: Act 1 (a1q1-a1q9); the later acts' quests are "not implemented" until their act
+  is on the quest engine. Dev commands `/state`, `/kill`, `/quest_preset`, `/god immune`; `/tp` also finds the ids
+  `/state` reports and the objects quest rules watch.
+  The same driver played Acts 1-10 and the Epilogue live before the game moved into modules; on the quest engine's Act 1
+  it is checked offline only (runner tests against a simulated server, `test_client_control.py`,
+  `CampaignCommandTests`).
+  Code: `scripts/dev/campaign/`, `Modules/Core/Player/Commands/Rules.Campaign.cs`, `CampaignState.cs`.
+  Docs: [campaign automation](../docs/dev/campaign-automation.md), [10](../docs/protocol/10-chat-and-commands.md).
 
 - 调试辅助：带时间戳的服务端日志、带堆栈的完整异常（出错的报文处理函数会点名其消息）、每条 `DISCONNECT` 行的原因、
   最近 10 次完整运行的归档日志、每条连接最后的 256 个报文（出错或无法解释的断线后打印，可导出到 `logs\packets`、
@@ -226,6 +288,8 @@ Gateway 的测试集合现在默认串行运行，以便让真实的 socket 时�
 ## 工具
 
 PR 检查：扫描新增行里的隐藏文本，以及只有维护者能批准的改动文件（[docs](../docs/dev/pr-checks.md)）。
+Pull request checks: a scan of added lines for hidden text, the SQL rules and a from-scratch build of every database, and
+files only the maintainer approves ([docs](../docs/dev/pr-checks.md)).
 
 用来弄明白协议的一切都在仓库里：`scripts/re/` 下的 Ghidra、Frida 与 Python 脚本，`Tools/` 下我们自己的工具，
 以及第三方工具的安装方法在 [GettingStarted](../GettingStarted.md)（"Third-party tools"）。

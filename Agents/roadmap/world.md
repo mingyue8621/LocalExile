@@ -96,6 +96,33 @@
   从暮光海滩进狮眼守望用的是城镇里名为 `entrance1` 的点（`AreaLayout.OneWayArrivals`，
   [08](../docs/protocol/08-area-transitions.md) §3）：真实游戏里玩家会出现在大门靠城镇那一侧。
   其他单向链接在各自的命名入口点补上之前，会回落到该区域的出生点。
+- **Known:** items, equipment, the skill bar, experience and passives are saved per character in `data/characters.db`
+  ([saves](../docs/saves.md)) ([13](../docs/protocol/13-items.md) §7, [11](../docs/protocol/11-skills.md) §11,
+  [15](../docs/protocol/15-progression.md)), and every login starts at the last town's spawn point
+  ([09](../docs/protocol/09-area-change.md) §4).
+  This follows the real game on purpose: the area and position a character was in are not saved, because the real
+  client never logs anyone into them.
+  New characters start on The Twilight Strand and log in there until they enter a town;
+  the ground weapon, dying-exile/zombie skill-gem encounter and support chest are implemented and live-checked.
+  Tutorial popup acknowledgements and force walls 1/2 remain open, and placements still need local captures.
+  Hillock's death (quest a1q1) opens the gate into Lioneye's Watch ([12](../docs/protocol/12-quests.md) §6).
+  The death screen's "Resurrect in Town" goes to the last town, with a loading screen, and is not offered before the
+  character has one; "Resurrect at Checkpoint" goes next to the area's activated waypoint, else to the area's arrival
+  point ([09](../docs/protocol/09-area-change.md) §7).
+- **Done when** (low priority: the start and the gate work, these are visual): the Strand's gate plays its opening
+  when Hillock dies, the force wall blocks the way while he lives and the Doorman opens the door
+  ([12](../docs/protocol/12-quests.md) §6, "The gate's animation");
+  "Resurrect at Checkpoint" goes to the last activated checkpoint of the area, with no loading screen.
+  Waypoints are checkpoints, and the activated waypoint is done;
+  the separate `Metadata/MiscellaneousObjects/Checkpoint` objects are not placed yet, so "last activated" across
+  several checkpoints is open.
+  Dying in a boss arena revives just outside the arena's door, even with a checkpoint activated;
+  dying in a map revives in the hideout (hideouts exist, [21](../docs/protocol/21-hideouts.md); maps do not).
+- **One-way entries:** the arrival next to the exit back needs an exit back.
+  Lioneye's Watch from The Twilight Strand uses the town's named point `entrance1` (`AreaLayout.OneWayArrivals`,
+  [08](../docs/protocol/08-area-transitions.md) §3): in the real game the player comes out on the town side of the
+  gate.
+  Other one-way links fall back to the area's spawn until their named entrance points are added.
 
 ### 迷宫
 

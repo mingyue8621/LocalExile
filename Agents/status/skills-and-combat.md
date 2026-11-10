@@ -1385,6 +1385,31 @@
   既有的已释放流清理故障与分开的原生连接关闭仍记录在证据里。
   代码：`ItemWeaponStats.cs`、`DamageStats.cs`、`SkillCatalog.cs`、`SupportedAttackDamage.cs`。
   文档：[20](../docs/protocol/20-damage.md) §2a。
+- Weapon-local damage and timing: active weapons supply a typed packet with multiplicative physical quality,
+  local flat/increased damage, no-physical/quality-prohibition flags and local attack speed applied once.
+  Ordinary melee/ranged and supported attacks share the actual context; final per-type rows clear removed types.
+  Automated controls cover weapon swaps, inactive hand-local exclusion and shared conversion/Rage composition.
+  Pool/charge/timing conditions and shield base block also exclude inactive or disabled equipment.
+  Twenty-four native publication controls pass in Standard/Ruthless; the independent local-mod/quality tooltip
+  matches 36-70 physical damage and 1.80 attacks per second. Source/DLL hashes and inventories held.
+  Authoritative offhand alternation and alternative quality remain separate.
+  Local critical flat-before-increase ordering has automated coverage in the critical-strike implementation below;
+  the preceding native weapon checks do not validate that change.
+  Supported-contact composition retains automated coverage and needs its own native check.
+  A Core raw conversion-history seam is available with 21 new path cases and 12 existing packet controls passing.
+  The full Core suite passes 648 tests. `PlayerHitDamage` now resolves one visited-type increased bucket, inherited
+  support/aura more, final-destination prohibitions and common charge more across ordinary/supported hits.
+  It preserves explicit contexts, source precedence, no-conversion floating grouping and ranged release snapshots.
+  Forty-three new Gateway cases and 340 focused checks pass, followed by all 3602 Gateway tests and 37 Data tests.
+  Thirty-two native numeric controls pass across Standard/Ruthless: 24 original explicit-field controls and eight
+  ordinary-bow sparse-zero controls. The first sparse Standard baseline is retrospective; the next seven are
+  prospective. Actual natural getter zeros are distinct from explicit wire zeros or hidden-row rendering.
+  Four restoration/relog controls, 184 full item/socket acknowledgements, original-save preservation and 714 unchanged
+  source/runtime inputs pass. The client is closed and normal `data/characters.db` restored. Native publication does not
+  certify authoritative hit contact, critical-weighted DPS, conditional/endpoints/ailment/DoT or official rounding.
+  Existing disposed-stream cleanup faults and separate native connection closures remain recorded in the evidence.
+  Code: `ItemWeaponStats.cs`, `DamageStats.cs`, `SkillCatalog.cs`, `SupportedAttackDamage.cs`.
+  Docs: [20](../docs/protocol/20-damage.md) §2a.
 
 
 通用的[投射物框架](../docs/game/projectile-framework.md)拥有生产环境的宝石/弓路由与
