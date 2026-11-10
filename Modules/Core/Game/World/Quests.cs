@@ -195,6 +195,8 @@ static partial class Game
             && transition.DestinationHash16 == AreaTransitionCatalog.HashOf(MapDevice.CampaignMapArea)) return false;
         var quests = QuestsOf(conn);
         if (transition.QuestSource is { } source && quests.Includes(source) == transition.QuestReplaced) return false;
+        // An encounter's own gate (Malachai's way down to the depths waits for his first form to submerge).
+        if (GameEvents.TransitionHidden.For(conn).Any(hidden => hidden(conn, transition))) return false;
         return quests.Exists(transition.SourceType, f => ClientHasQuestFlag(conn, f))
             && (conn.ScriptShownTransitions.Contains(id) || TransitionFlag(conn, transition) is not { } flag || ClientHasQuestFlag(conn, flag));
     }

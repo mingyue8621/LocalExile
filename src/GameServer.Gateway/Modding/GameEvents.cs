@@ -68,6 +68,9 @@ static class GameEvents
     public static readonly GameEvent<Func<ClientState, Task<bool>>> RewardClosing = new();
     /// <summary>A league encounter may refuse unrelated travel while its gate is closed.</summary>
     public static readonly GameEvent<Func<ClientState, PendingTransfer, string?>> TravelRefusal = new();
+    /// <summary>An area transition an encounter keeps off the client until its own moment: Malachai's platform keeps the
+    /// way down to the depths shut while his first form stands. True hides it (Quests.TransitionShown).</summary>
+    public static readonly GameEvent<Func<ClientState, AreaTransitionObject, bool>> TransitionHidden = new();
     /// <summary>The Auth transfer answer, after failed-transfer recovery and before a successful ticket is sent.</summary>
     public static readonly GameEvent<Func<ClientState, PendingTransfer, ControlResponse, Task>> TransferResolved = new();
     /// <summary>The player came back at a checkpoint or in town: a league encounter may restart its run.</summary>

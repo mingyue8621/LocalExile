@@ -7,22 +7,23 @@ static partial class Game
 {
     // ---- Malachai, The Nightmare (Act 4, the Black Core inside The Harvest) ----
     //
-    // The official fight is two stages with a submerge between them (the client's .ot files and
+    // The official fight is two stages on two floors of the same area (the client's .ot files and
     // Agents/docs/game/campaign/act4.md §428-429):
-    //   * first form Metadata/Monsters/Malachai/MalachaiBoss: set_cannot_die and cannot_drop_below_%_life 70 — it
-    //     cannot be killed, and at 70% it submerges and the fight moves on;
-    //   * second form Metadata/Monsters/Malachai/MalachaiBoss2: initial_life_percentage 92, with three hearts
-    //     BeastHeart1/2/3 beside it (MV 4671-4673, NoAi, states idle -> vulnerable -> dead). The hearts heal him and
-    //     he cannot die until every one of them is down;
+    //   * first form Metadata/Monsters/Malachai/MalachaiBoss on the platform (room boss_1.arm, point mapboss1):
+    //     set_cannot_die and cannot_drop_below_%_life 70 — it cannot be killed at all, and at 70% it submerges;
+    //   * second form Metadata/Monsters/Malachai/MalachaiBoss2 in the room below (boss_2.arm, point mapboss2, 787
+    //     cells from the platform at seed 1): initial_life_percentage 92, with three hearts BeastHeart1/2/3 at the
+    //     room's own heart points (MV 4671-4673, NoAi, states idle -> vulnerable -> dead). Each standing heart heals
+    //     him, and he cannot die until all three are down;
     //   * when the second form falls, QuestObjects/Act4/MalachaiDeathPortal appears.
     //
-    // The depths' room (boss_2.arm, the mapboss2 point at 311,322) is not fitted into this server's map — the room
-    // set in data/room-points.json has no Belly entry at all — so "below" is a clearing on the same map, far enough
-    // from the platform to read as a different place. The rift itself is this module's object; it does not go
-    // through the area's transition table.
+    // The way down is the area's own transition (malachai_fight_v01_01_area_transition, an internal pair in the
+    // client's data whose other end is MalachaiDepthsReturn in boss_2.arm) — not a portal of this module's. It stays
+    // off the client until the first form submerges (GameEvents.TransitionHidden); before 0.8.29 the server both showed
+    // it from the moment the player entered and spawned a second gate of its own at 70%, which led nowhere.
     //
-    // The second form used to be spawned on top of the corpse the instant the first died (0.8.27), which is not the
-    // official order and read as "no second phase": the first form never dies here.
+    // Both rooms are fitted from data/room-points.json (Metadata/Terrain/Mountain/Belly/Rooms/Unique/boss_1.arm and
+    // boss_2.arm), so every point here is the client's own placement.
 
     internal const string MalachaiArea = "1_4_6_3";
     internal const string MalachaiFirst = "Metadata/Monsters/Malachai/MalachaiBoss";
@@ -33,7 +34,7 @@ static partial class Game
         "Metadata/Monsters/Malachai/BeastHeart2",
         "Metadata/Monsters/Malachai/BeastHeart3",
     ];
-    // The portal's own rig (the .ot's Animated animated_object), drawn on the area transition blob.
+    // The death portal's own rig (the .ot's Animated animated_object), drawn on the area transition blob.
     const string MalachaiPortalRig = "Metadata/Effects/Spells/monsters_effects/act4/Malachai/death_portal/rig.ao";
     /// <summary>cannot_drop_below_%_life on the first form: it submerges there instead of dying.</summary>
     const int MalachaiSubmergePercent = 70;
@@ -41,8 +42,12 @@ static partial class Game
     const int MalachaiSecondFormPercent = 92;
     /// <summary>What one standing heart gives him per second, in percent of his maximum life.</summary>
     const double MalachaiHeartHealPercent = 1.0;
-    /// <summary>How far the hearts stand from him.</summary>
-    const int MalachaiHeartDistance = 16;
+    /// <summary>How close a player must be to the depths point for the second stage to rise there (the room's own gate
+    /// lands 90 cells from mapboss2).</summary>
+    const int MalachaiArrivalRange = 150;
+    /// <summary>The depths' room as a radius around mapboss2: the area's gate whose far end lies inside it is the way
+    /// down (malachai_fight_v01_01_area_transition1 at boss_1's "telepad", 90 cells away).</summary>
+    const int MalachaiDepthsRadius = 150;
 
     sealed class MalachaiFight(uint bossId, SpawnedMonster boss, byte level)
     {
@@ -50,13 +55,15 @@ static partial class Game
         public uint BossId = bossId;
         public SpawnedMonster? Boss = boss;
         public byte Level = level;
-        /// <summary>1 while the first form stands, 2 once the rift has been used.</summary>
+        /// <summary>1 while the first form stands, 2 once a player reaches the room below.</summary>
         public int Stage = 1;
         public readonly List<uint> Hearts = [];
         public bool Submerged, Done;
+        /// <summary>The connections already told which gates stand (the way down is per-player).</summary>
+        public readonly HashSet<uint> GateSynced = [];
         public int StandingSeen = -1;
-        public uint PortalId;
-        public (int X, int Y) PortalAt, DepthsAt;
+        /// <summary>boss_2.arm's mapboss2 point: where the second form and his hearts belong.</summary>
+        public (int X, int Y) DepthsAt;
         public double HealAt;
     }
 
@@ -65,7 +72,7 @@ static partial class Game
     static bool IsMalachaiForm(MonsterCatalog.Variety? variety) =>
         variety is { } v && v.Id is MalachaiFirst or MalachaiSecond;
 
-    /// <summary>The encounter's loop: the first form's submerge at 70%, then the hearts healing the second.</summary>
+    /// <summary>The encounter's loop: the first form's submerge at 70%, the way down, then the hearts healing the second.</summary>
     internal static async Task MalachaiTick(ClientState conn)
     {
         if (conn.Layout.Id != MalachaiArea || !conn.PlayerSent || conn.Closed || conn.LeavingArea) return;
@@ -75,9 +82,21 @@ static partial class Game
             lock (conn.Monsters) found = conn.Monsters.FirstOrDefault(p => IsMalachaiForm(p.Value.Variety));
             if (found.Value is null) return;
             fight = MalachaiFights.GetValue(conn.Instance, _ => new(found.Key, found.Value, found.Value.Level));
+            double started = conn.Clock.Elapsed.TotalSeconds;
+            fight.DepthsAt = DepthsPoint(conn, found.Value.Walk.Position(started));
         }
         await fight.Gate.WaitAsync();
-        try { if (IsMonsterRunner(conn)) await Step(conn, fight); }
+        try
+        {
+            if (IsMonsterRunner(conn)) await Step(conn, fight);
+            // The platform's way down is the area's own transition: kept off every client while the first form stands
+            // (TransitionHidden), created for each of them the moment he submerges.
+            if (fight.GateSynced.Add(conn.PeerId))
+            {
+                var wire = conn.Wire;
+                await UpdateShownTransitions(wire.Remote, wire.Stream, wire.Ciphers, conn, "Malachai's state");
+            }
+        }
         finally { fight.Gate.Release(); }
     }
 
@@ -87,7 +106,12 @@ static partial class Game
         double now = conn.Clock.Elapsed.TotalSeconds;
         if (fight.Stage == 1)
         {
-            if (fight.Submerged) return;                        // down below: the second stage is the player's to raise
+            if (fight.Submerged)
+            {
+                // He is below: the second stage rises once a player follows him down through the platform's gate.
+                if (AtDepths(conn, fight.DepthsAt, now)) await RaiseSecondStage(conn, fight);
+                return;
+            }
             if (fight.Boss is not { } boss || boss.Dead || boss.Life == 0) { fight.Done = true; return; }
             bool begin;
             lock (conn.Monsters)
@@ -143,14 +167,22 @@ static partial class Game
             InstanceProtocol.LifeUpdate(fight.BossId, healed), null);
     }
 
-    /// <summary>At 70% the first form burrows away (ActBoss submerge, not a death) and leaves the rift the player
-    /// follows him down through.</summary>
+    /// <summary>Whether any player of the instance stands in the room below (the fight's second floor).</summary>
+    static bool AtDepths(ClientState conn, (int X, int Y) at, double now)
+    {
+        if (Dist(conn.Walk.Position(now), at) < MalachaiArrivalRange) return true;
+        foreach (var peer in conn.Instance?.PlayersExcept(conn.PeerId) ?? [])
+            if (peer.Current && peer.Life > 0 && Dist((peer.X, peer.Y), at) < MalachaiArrivalRange) return true;
+        return false;
+    }
+
+    /// <summary>At 70% the first form burrows away (ActBoss submerge, not a death) and the platform's own gate down to
+    /// boss_2.arm opens.</summary>
     static async Task Submerge(ClientState conn, MalachaiFight fight, double now)
     {
         if (fight.Submerged) return;
         fight.Submerged = true;
         var boss = fight.Boss!;
-        var at = boss.Walk.Position(now);
         // Off the field without being a corpse: no death, no drops, no kill flags — the mechanics table has him at
         // cannot_drop_below 70 and the second form is what ends the quest.
         lock (conn.Monsters)
@@ -163,35 +195,51 @@ static partial class Game
         var (remote, stream, ciphers) = (conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers);
         await Send(remote, stream, ciphers, InstanceProtocol.RemoveObject(fight.BossId),
             $"0x02bd {boss.Label} submerges at {boss.LifePhases?.Completed} stage ({MalachaiSubmergePercent}% life)");
-        fight.PortalAt = at;
-        fight.DepthsAt = DepthsPoint(conn, at);
-        fight.PortalId = await OpenRift(conn, at, fight.DepthsAt, "Malachai's rift");
-        await Send(remote, stream, ciphers,
-            InstanceChat.ChatLine("玛拉凯钻入地下。地面裂开一道口子——下去追他。"),
-            "0x0017 Malachai submerges, the rift opens");
+        // The area's own gate to the room below, off every client until now.
+        foreach (var player in MalachaiParty(conn))
+        {
+            var wire = player.Wire;
+            await UpdateShownTransitions(wire.Remote, wire.Stream, wire.Ciphers, player, "Malachai submerges");
+            await Send(wire.Remote, wire.Stream, wire.Ciphers,
+                InstanceChat.ChatLine("玛拉凯钻入地下。平台中间的裂口开了——下去追他。"),
+                "0x0017 Malachai submerges, the way down opens");
+        }
     }
 
-    static async Task<uint> OpenRift(ClientState conn, (int X, int Y) at, (int X, int Y) to, string note)
+    /// <summary>This connection and the rest of the instance's players (their own wire, their own gates).</summary>
+    static IEnumerable<ClientState> MalachaiParty(ClientState conn)
     {
-        uint id = conn.NextObjectId++;
-        // An AreaTransition object with the portal's rig: the layout's own gate blob, which the client draws and a
-        // click addresses; walking through is this module's (MalachaiUse), not the area's transition table.
-        var portal = new AreaTransitionObject(at.X, at.Y, conn.Layout.Hash, Model: MalachaiPortalRig) { TeleportTo = to };
-        await Send(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers,
-            InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(portal.Type), portal.Blob()),
-            $"0x02bb {note} 0x{id:x} at ({at.X}, {at.Y}) -> ({to.X}, {to.Y})");
-        await Send(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers, InstanceProtocol.EnterWakeZone(id),
-            $"0x01a9 {note} enters the wake zone");
-        return id;
+        yield return conn;
+        foreach (var peer in conn.Instance?.PlayersExcept(conn.PeerId) ?? [])
+            if (peer.Owner is { Closed: false, LeavingArea: false } owner && !ReferenceEquals(owner, conn)) yield return owner;
     }
 
-    /// <summary>Where the depths stand in for boss_2.arm: the area's own mapboss2 point when this map has one on
-    /// walkable ground and it is a real distance from the platform, else a clearing 18-40 cells out.</summary>
+    /// <summary>An encounter's gate the client must not show yet: the platform's way down while the first form stands.</summary>
+    internal static bool MalachaiGateHidden(ClientState conn, AreaTransitionObject transition)
+    {
+        if (conn.Layout.Id != MalachaiArea || conn.Instance is not { } instance) return false;
+        if (transition.TeleportTo is not { } to) return false;
+        if (!MalachaiFights.TryGetValue(instance, out var fight) || fight.Submerged) return false;
+        // boss_1's "telepad" pair: its far end stands in boss_2.arm, beside MalachaiDepthsReturn.
+        return fight.DepthsAt != default && Dist(to, fight.DepthsAt) < MalachaiDepthsRadius;
+    }
+
+    /// <summary>A named point of the area's fitted rooms (boss_2.arm and its heart points came from the client's own
+    /// placement). Null when this map has none by that name.</summary>
+    static (int X, int Y)? NamedRoomPoint(ClientState conn, string name)
+    {
+        foreach (var point in AreaPopulation.FitRooms(MalachaiArea, conn.Seed, [], "data").Points)
+            if (point.Name == name) return (point.X, point.Y);
+        return null;
+    }
+
+    /// <summary>Where the depths stand: boss_2.arm's own mapboss2 point, which the fit places in the room below the
+    /// platform (787 cells away at seed 1). Never the platform itself.</summary>
     static (int X, int Y) DepthsPoint(ClientState conn, (int X, int Y) from)
     {
-        if (conn.LaterFormPoints.GetValueOrDefault(MalachaiSecond) is var point && point != default && point != from
-            && Dist(point, from) > 12 && conn.Layout.WalkableFor(point.X, point.Y, 2) && !conn.Barrier.Contains(point))
-            return point;
+        if (NamedRoomPoint(conn, "mapboss2") is { } point && Dist(point, from) > 12)
+            return conn.Layout.WalkableFor(point.X, point.Y, 2) ? point : conn.Layout.Near(point);
+        // No fitted room: a clearing far enough from the platform.
         for (int r = 40; r >= 18; r--)
             for (int i = 0; i < 24; i++)
             {
@@ -204,44 +252,9 @@ static partial class Game
         return (from.X + 4, from.Y);
     }
 
-    /// <summary>C→S 0x24 on the rift: down to the depths, and the second form rises with his hearts. False when this is
-    /// not the rift (another object's use). The rift stays open so the rest of the party can follow.</summary>
-    internal static async Task<bool> MalachaiUse(ClientState conn, InstanceTransfer.UseSkillOnObject use, double requestedAt)
-    {
-        if (conn.Layout.Id != MalachaiArea || conn.Instance is not { } instance) return false;
-        if (!MalachaiFights.TryGetValue(instance, out var fight)) return false;
-        if (fight.PortalId == 0 || use.TargetId != fight.PortalId) return false;
-        if (!TryBeginObjectWalk(conn, requestedAt, fight.PortalAt.X, fight.PortalAt.Y, 3, out var walk)) return true;
-        var (action, now, here, stop, arrive) = walk;
-        var (remote, stream, ciphers) = (conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers);
-        if (!use.Started)
-            await Send(remote, stream, ciphers,
-                InstanceProtocol.ActionStarted(PlayerId, here.X, here.Y, fight.PortalAt.X, fight.PortalAt.Y, use.SkillId,
-                    use.Sequence, use.Flags, targetObjectId: use.TargetId),
-                $"0x01ab player steps into Malachai's rift 0x{use.TargetId:x}",
-                still: () => PlayerActionCurrent(conn, action));
-        if (arrive > now) await Task.Delay(TimeSpan.FromSeconds(arrive - now));
-        if (!PlayerActionCurrent(conn, action)) return true;
-        if (!PlayerWalk.InReach(stop, fight.PortalAt, 3, conn.Layout.Walkable)) return true;
-        await fight.Gate.WaitAsync();
-        try
-        {
-            double at = conn.Clock.Elapsed.TotalSeconds;
-            using (ProjectileMutation(conn))
-            {
-                Interlocked.Increment(ref conn.ActionCount);
-                conn.Walk.Teleport(fight.DepthsAt.X, fight.DepthsAt.Y, at);
-            }
-            await Send(remote, stream, ciphers, InstanceProtocol.Teleport(PlayerId, fight.DepthsAt.X, fight.DepthsAt.Y),
-                $"0x01b7 player through Malachai's rift to ({fight.DepthsAt.X}, {fight.DepthsAt.Y})");
-            if (fight.Stage == 1) await RaiseSecondStage(conn, fight);
-        }
-        finally { fight.Gate.Release(); }
-        return true;
-    }
-
-    /// <summary>The second form at its 92% starting life and his three hearts around it, on the connection that runs
-    /// the instance's monsters (SharedMonsters): spawned on the killer's connection, an instance boss never acts.</summary>
+    /// <summary>The second form at its 92% starting life and his three hearts at the room's own points, on the
+    /// connection that runs the instance's monsters (SharedMonsters): spawned on a party member's connection, an
+    /// instance boss never acts.</summary>
     static async Task RaiseSecondStage(ClientState conn, MalachaiFight fight)
     {
         if (fight.Stage != 1) return;
@@ -256,12 +269,12 @@ static partial class Game
             {
                 fight.BossId = id;
                 lock (conn.Monsters) conn.Monsters.TryGetValue(id, out fight.Boss);
-                Console.WriteLine($"[gateway] {remote} Malachai's second stage rises at " +
+                Console.WriteLine($"[gateway] {remote} Malachai's second stage rises in the depths at " +
                     $"({fight.DepthsAt.X}, {fight.DepthsAt.Y}) at {MalachaiSecondFormPercent}% life");
             }
         }
         // The three hearts: NoAi in the data (Metadata/Monsters/NoAi.ais), so they never chase or swing; they are his
-        // life. They stand in three directions around him.
+        // life, standing where boss_2.arm places them.
         for (int i = 0; i < MalachaiHearts.Length; i++)
         {
             if (Monsters.Find(MalachaiHearts[i]) is not { Supported: true } heart || heart.Id != MalachaiHearts[i])
@@ -275,14 +288,16 @@ static partial class Game
                 owned: (_, spawned) => { spawned.Aggro = false; spawned.LastTarget = null; });
             if (id != 0) fight.Hearts.Add(id);
         }
-        Console.WriteLine($"[gateway] {remote} Malachai's {fight.Hearts.Count} heart(s) stand at " +
-            $"({fight.DepthsAt.X}, {fight.DepthsAt.Y}): he cannot die while any of them beats");
+        Console.WriteLine($"[gateway] {remote} Malachai's {fight.Hearts.Count} heart(s) stand: he cannot die while any beats");
     }
 
     static (int X, int Y) HeartPoint(ClientState conn, (int X, int Y) center, int index)
     {
+        // The room's own heart points (boss_2.arm): each heart stands where the client places it, 48-70 cells out.
+        if (NamedRoomPoint(conn, MalachaiHearts[index]) is { } point && Dist(point, center) > 6)
+            return conn.Layout.WalkableFor(point.X, point.Y, 2) ? point : conn.Layout.Near(point);
         double angle = Math.PI * 2 * index / MalachaiHearts.Length;
-        for (int r = MalachaiHeartDistance; r >= 6; r--)
+        for (int r = 16; r >= 6; r--)
         {
             int x = center.X + (int)Math.Round(Math.Cos(angle) * r), y = center.Y + (int)Math.Round(Math.Sin(angle) * r);
             if (x < 2 || y < 2 || x >= conn.Layout.GridW - 2 || y >= conn.Layout.GridH - 2) continue;
@@ -296,10 +311,18 @@ static partial class Game
     /// text leaves its destination unverified; this map sends the player to the area's entrance.</summary>
     internal static async Task OpenMalachaiDeathPortal(ClientState conn, (int X, int Y) at)
     {
-        var to = (conn.Layout.SpawnX, conn.Layout.SpawnY);
+        var to = (X: conn.Layout.SpawnX, Y: conn.Layout.SpawnY);
         if (Dist(to, at) < 8) to = (at.X + 6, at.Y);
-        var id = await OpenRift(conn, at, to, "Malachai's death portal");
-        if (MalachaiFights.TryGetValue(conn.Instance, out var fight)) { fight.PortalId = id; fight.PortalAt = at; fight.DepthsAt = to; fight.Done = true; }
+        uint id = conn.NextObjectId++;
+        // An AreaTransition object with the death portal's rig: the layout's own gate blob, which the client draws and
+        // the area's transition handling moves the player through.
+        var portal = new AreaTransitionObject(at.X, at.Y, conn.Layout.Hash, Model: MalachaiPortalRig) { TeleportTo = to };
+        await Send(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers,
+            InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(portal.Type), portal.Blob()),
+            $"0x02bb Malachai's death portal 0x{id:x} at ({at.X}, {at.Y}) -> ({to.X}, {to.Y})");
+        await Send(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers, InstanceProtocol.EnterWakeZone(id),
+            "0x01a9 death portal enters the wake zone");
+        if (MalachaiFights.TryGetValue(conn.Instance, out var fight)) fight.Done = true;
     }
 
     internal static void LeavingMalachaiPortal(ClientState conn)
