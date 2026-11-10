@@ -37,6 +37,25 @@ static partial class Game
             carried += gems.Count;
         }
         if (worn > 0) Console.WriteLine($"[bots] {CharacterName(conn)} wears {worn} piece(s) at level {level}, {carried} gem(s) in the weapon");
+        EquipControlledFlasks(level, items, catalog);
+    }
+
+    /// <summary>The flasks a bot of this level carries: the best life and mana flask its level allows. A bot carried the
+    /// level-1 starter flasks (or none), so a fight longer than its mana lasted left it unable to swing a 12-mana Cleave:
+    /// five characters stood in front of a boss doing nothing (live 2026-11-10).</summary>
+    static void EquipControlledFlasks(int level, PlayerInventories items, ItemCatalog catalog)
+    {
+        var best = catalog.All
+            .Where(t => t.Class is "LifeFlask" or "ManaFlask" && t.DropLevel > 0 && t.DropLevel <= level)
+            .GroupBy(t => t.Class)
+            .Select(g => g.OrderByDescending(t => t.DropLevel).First())
+            .OrderBy(t => t.Class == "LifeFlask" ? 0 : 1)
+            .ToList();
+        if (best.Count == 0) return;
+        foreach (var old in items.Items(PlayerInventories.Flask).ToList()) items.Remove(PlayerInventories.Flask, old.Id);
+        byte slot = 0;
+        foreach (var type in best) items.Add(PlayerInventories.Flask, slot++, 0, ItemCatalog.Create(type));
+        Console.WriteLine($"[bots] flasks for level {level}: {string.Join(", ", best.Select(t => t.Name))}");
     }
 
     // The slot a base item is worn in: the hand that takes that weapon class, the shield or quiver hand, or the armour row

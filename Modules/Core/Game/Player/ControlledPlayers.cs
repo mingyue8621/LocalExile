@@ -87,19 +87,33 @@ static partial class Game
         if (skills.Count == 0) return;
         // A crowd inside its reach is given ground, as a player kites (ControlledMind.ControlledBackOff).
         if (ControlledBackOff(conn, leader, at, distance, skills.Max(s => s.Reach), now)) return;
-        // A gem that reaches it, area first when a pack stands there, and one whose cooldown has recovered: a cooling gem
-        // hands the turn to the next instead of standing still on it.
+        // A gem that reaches it, area first when a pack stands there, and one that is both off cooldown and affordable: a
+        // cooling gem hands the turn to the next instead of standing still on it.
         var reaching = ControlledSkillsFor(skills, distance, ControlledPacked(conn, picked.Monster, now));
-        var skill = reaching.FirstOrDefault(s => ControlledSkillReady(conn, s, now));
-        if (skill is null)
-        {
-            if (reaching.Count > 0) return;                       // all of them cooling: wait a tick
-            ApproachControlledTarget(conn, leader, at, skills.Max(s => s.Reach), now);
-            return;
-        }
+        var skill = reaching.FirstOrDefault(s => s.Mana <= conn.PlayerMana && ControlledSkillReady(conn, s, now));
         bool onTheMove = following || leader.Walk.Moving(now);
         double gap = Dist(here, leader.Walk.Position(now));
         double ahead = ControlledAhead(here, leader.Walk.Position(now), leader.Walk.Destination);
+        if (skill is null)
+        {
+            if (reaching.Count == 0)
+            {
+                ApproachControlledTarget(conn, leader, at, skills.Max(s => s.Reach), now);
+                return;
+            }
+            // Every gem that reaches is beyond its mana: the weapon's own attack costs none and still hits, as a player's
+            // fallback does. A party of bots used to stand in front of the boss with 3 to 10 mana, swinging at nothing
+            // (live 2026-11-10: Malachai taking ~1,300 damage a second from five characters).
+            if (reaching.Any(s => s.Mana <= conn.PlayerMana)) return;   // the rest is cooling: wait a tick
+            if (onTheMove && !ControlledFollowAttackFits(gap, leader.Walk.Moving(now) ? leader.Walk.Speed : 0, .6, ahead))
+                return;
+            HoldControlledFollowerAttack(conn, now, .6, picked.Id);
+            var bare = new LoginWriter().U16(InstanceTransfer.UseSkillOnObjectId).U32(picked.Id)
+                .U16(SkillCatalog.FirstSkillId).U16(0xffff).U16(onTheMove ? (ushort)1 : (ushort)0).ToArray();
+            await OnClientMessages(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers,
+                [(InstanceTransfer.UseSkillOnObjectId, bare)], [], conn);
+            return;
+        }
         if (onTheMove && !ControlledFollowAttackFits(gap, leader.Walk.Moving(now) ? leader.Walk.Speed : 0, skill.Seconds, ahead))
             return;
         HoldControlledFollowerAttack(conn, now, skill.Seconds, picked.Id);

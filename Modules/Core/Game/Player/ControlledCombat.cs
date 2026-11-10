@@ -10,9 +10,9 @@ static partial class Game
     // three cells away (live 2026-11-09: "not smart, like an idiot").
 
     /// <summary>A gem the follower can bring to bear, with what aiming it takes: the reach the server itself uses for a
-    /// hit in place (<see cref="ControlledInPlaceReach"/>), whether it covers an area, and how long its use occupies the
-    /// character (the follower may not move mid-swing).</summary>
-    internal sealed record ControlledSkill(ushort Id, int Effect, int Level, int Quality, double Reach, bool Area, double Seconds);
+    /// hit in place (<see cref="ControlledInPlaceReach"/>), whether it covers an area, how long its use occupies the
+    /// character (the follower may not move mid-swing), and what it costs.</summary>
+    internal sealed record ControlledSkill(ushort Id, int Effect, int Level, int Quality, double Reach, bool Area, double Seconds, int Mana);
 
     /// <summary>How far a bot fights at: its own reach, and with it what it sees an enemy in (live 2026-11-10: "make the
     /// bots' attack distance 80 cells"). A follower used to stop at 60 of the leader, so a fight the player started from
@@ -33,8 +33,11 @@ static partial class Game
                 ? SupportedAttackSeconds(conn, gem.Id) : (CastMs(conn, gem.Effect, gem.Id) ?? 750) / 1000.0;
             var supported = SupportedSkill(conn, gem.Id);
             bool area = SkillRadius(conn, supported.Stats, SkillsFor(conn).IsSpell(gem.Effect), gem.Effect) >= 12;
+            // What a use costs: a bot with 3 mana cannot pay a 12-mana Cleave, and stood there instead (ControlledPlayers
+            // falls back on the weapon's own attack then).
+            int mana = Stats.Key("mana_cost") is uint cost ? supported.Stats.GetValueOrDefault(cost) : 0;
             list.Add(new(gem.Id, gem.Effect, gem.Level, gem.Quality,
-                ControlledInPlaceReach(conn, gem.Id, gem.Effect), area, seconds));
+                ControlledInPlaceReach(conn, gem.Id, gem.Effect), area, seconds, mana));
         }
         return list;
     }

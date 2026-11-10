@@ -123,8 +123,13 @@ static partial class Game
         if (extraMods is not null) mods = mods with { Effects = mods.Effects.Plus(extraMods.Effects) };
         if (!friendly && MapModsOf(conn) is { } mapMods && MapMonsterEffects(mapMods) is { Count: > 0 } mapStats)
             mods = mods with { Effects = mods.Effects.Combine(mapStats) };
-        // The party bonus (Game.PartyBonus): each player beyond the first adds to the monsters' life by their rarity.
-        if (!friendly && PartyMonsterLife(conn, rarity) is int party and > 0)
+        // The party bonus (Game.PartyBonus): each player beyond the first adds to the monsters' life by their rarity. A
+        // unique does not take it: its variety's LifeMultiplier (Malachai 2210%) and the unique rarity's own
+        // monster_life_+%_final_from_rarity (+698%) already multiply, and a party of one player and four bots then turned
+        // an act boss into 857,000 life — 11 minutes of the party's damage, which reads as an unkillable boss (live
+        // 2026-11-10: Malachai at 398,592 with ~1,300 damage a second). The client's party rule is for players, each of
+        // whom brings a character's damage; a bot brings a fraction of one.
+        if (!friendly && rarity != MonsterRarity.Unique && PartyMonsterLife(conn, rarity) is int party and > 0)
             mods = mods with { Effects = mods.Effects.Combine(new Dictionary<string, int> { ["maximum_life_+%"] = party }) };
         // Full life: the client derives the base from the level (MonsterCatalog.BaseLife); the mods' maximum goes on its Stats.
         // A unique map boss also has the map's and the map-boss table's life and damage increases (MonsterMapBossDifficulty
