@@ -1,4 +1,4 @@
-using GameServer.Core.Protocol.Instance;
+﻿using GameServer.Core.Protocol.Instance;
 
 namespace GameServer.Gateway.Tests;
 
@@ -12,8 +12,9 @@ public class UniqueSocketTests
         foreach (string name in new[] { "Goldrim", "Lifesprig", "Wanderlust" })
         {
             var item = Assert.IsType<Item>(uniques.Create(name, new Random(17)));
-            Assert.Equal(2, item.Sockets.Count);
-            Assert.Equal(new byte[] { 2 }, item.Links);
+            // Sockets roll like any new item's: capped by the base and the item level, empty, and linked in groups.
+            Assert.InRange(item.Sockets.Count, 1, CurrencyEffects.LevelSocketLimit(Math.Max(1, (int)item.ItemLevel)));
+            Assert.Equal(item.Sockets.Count, item.Links!.Sum(group => (int)group));
             Assert.All(item.Sockets, socket => Assert.Null(socket.Gem));
         }
         // These layouts need their own implementation; the ordinary fallback must not invent two gem sockets.
@@ -30,10 +31,10 @@ public class UniqueSocketTests
         Assert.All(loyal.Sockets, socket => Assert.NotEqual(SocketColour.White, socket.Colour));
         Assert.Equal(1, ItemModStats.Local(loyal, items.Mods).GetValueOrDefault("local_socketed_gem_level_+"));
         Assert.NotEqual(0, ItemModStats.Sum([loyal], items.Mods).GetValueOrDefault("global_defences_+%"));
-        // Dialla's Malefaction has no fixed count: ordinary sockets, still never white.
+        // Dialla's Malefaction has no fixed count: ordinary rolled sockets, still never white.
         var dialla = Assert.IsType<Item>(uniques.Create("Dialla's Malefaction", new Random(17)));
-        Assert.Equal(2, dialla.Sockets.Count);
-        Assert.Equal(new byte[] { 2 }, dialla.Links);
+        Assert.InRange(dialla.Sockets.Count, 1, CurrencyEffects.LevelSocketLimit(Math.Max(1, (int)dialla.ItemLevel)));
+        Assert.Equal(dialla.Sockets.Count, dialla.Links!.Sum(group => (int)group));
         Assert.All(dialla.Sockets, socket => Assert.NotEqual(SocketColour.White, socket.Colour));
         foreach (var robe in new[] { loyal, dialla })
             Assert.Equal(1, ItemModStats.Local(robe, items.Mods).GetValueOrDefault("local_sockets_cannot_be_white"));

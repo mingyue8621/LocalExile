@@ -567,21 +567,27 @@ sealed class ItemCatalog
         return result;
     }
 
-    /// <summary>Two linked sockets for a type with a Sockets component: 3.29 white by default, each with the item-level
-    /// chance to roll a colour proportional to its attribute requirements (ComponentAttributeRequirements:
-    /// strength red, dexterity green, intelligence blue; SocketColours); no sockets for other types.
+    /// <summary>A new item's sockets: a base with the Sockets component gets a rolled count (the same roll a Jeweller's
+    /// Orb makes, capped by the class's socket_max setting and by the item level), linked in groups of one or two; each
+    /// socket is white or, at the item-level chance, its attribute's colour (ComponentAttributeRequirements: strength red,
+    /// dexterity green, intelligence blue; SocketColours). No sockets for other types.
     /// <paramref name="noWhite"/> is the hidden 3.29 property that forbids white sockets.</summary>
     public (IReadOnlyList<ItemSocket> Sockets, IReadOnlyList<byte>? Links) DefaultSockets(
         BaseType t, int itemLevel = 1, int quality = 0, Random? random = null, bool noWhite = false)
     {
         if (!t.Components.Contains("Sockets")) return ([], null);
         if (ResonatorSockets(t) > 0) return (ResonatorSocketList(t), null);
-        // 3.29: sockets are white by default; each has a chance to roll its attribute colour that rises with item level
-        // (SocketColours). Both sockets of a new item still start linked.
-        var requirements = Requirements(t);
         random ??= Random.Shared;
-        return ([new(SocketColours.Roll(requirements, itemLevel, quality, random, noWhite: noWhite)),
-                 new(SocketColours.Roll(requirements, itemLevel, quality, random, noWhite: noWhite))], [2]);
+        // The class's ceiling is the client's own socket_max_* setting (world.db's system_settings); with no settings
+        // loaded nothing would be socketable, so the widest ceiling stands in rather than stripping every item of sockets.
+        int capacity = SystemSettings.Default.Values.Count > 0
+            ? SystemSettings.Default.SocketMax(t.Class) : SocketLayout.MaximumSockets;
+        int maximum = Math.Min(capacity, CurrencyEffects.LevelSocketLimit(itemLevel));
+        if (maximum <= 0) return ([], null);
+        var (count, links) = CurrencyEffects.RollLayout(capacity, maximum, null, random);
+        var requirements = Requirements(t);
+        return ([.. Enumerable.Range(0, count).Select(_ =>
+            new ItemSocket(SocketColours.Roll(requirements, itemLevel, quality, random, noWhite: noWhite)))], links);
     }
 
     private Lazy<Dictionary<string, (int Str, int Dex, int Int)>> _requirements = null!;
