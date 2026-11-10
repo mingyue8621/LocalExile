@@ -14,7 +14,11 @@ static partial class Game
         string skill = characterClass switch
         {
             CharacterClass.Witch or CharacterClass.Templar => "Fireball",
-            CharacterClass.Ranger => "Split Arrow", CharacterClass.Marauder => "Ground Slam",
+            // The ladder's bow skill (poe.qq.com's s29 ranking, 2026-04-13: lightning arrow leads the ranger's actives).
+            // Split Arrow was the beginner gem, with a fraction of its clear.
+            // Lightning Arrow's gem drops at level 12; below that a bow user has Split Arrow and nothing else.
+            CharacterClass.Ranger => level >= 12 ? "Lightning Arrow" : "Split Arrow",
+            CharacterClass.Marauder => "Ground Slam",
             CharacterClass.Shadow => "Frost Blades", _ => "Cleave",
         };
         string weapon = spell ? "Wand" : bow ? "Bow" : characterClass == CharacterClass.Marauder ? "Two Hand Mace"
@@ -69,7 +73,11 @@ static partial class Game
         string skill = characterClass switch
         {
             CharacterClass.Witch or CharacterClass.Templar => "Fireball",
-            CharacterClass.Ranger => "Split Arrow", CharacterClass.Marauder => "Ground Slam",
+            // The ladder's bow skill (poe.qq.com's s29 ranking, 2026-04-13: lightning arrow leads the ranger's actives).
+            // Split Arrow was the beginner gem, with a fraction of its clear.
+            // Lightning Arrow's gem drops at level 12; below that a bow user has Split Arrow and nothing else.
+            CharacterClass.Ranger => level >= 12 ? "Lightning Arrow" : "Split Arrow",
+            CharacterClass.Marauder => "Ground Slam",
             CharacterClass.Shadow => "Frost Blades", _ => "Cleave",
         };
         var (str, dex, intel) = ControlledAttributes(characterClass, level);
@@ -91,21 +99,20 @@ static partial class Game
             return null;
         }
         if (Gem(skill) is not { } active) return [];
-        // The build's link, the way the ladder builds it: one active gem and as many supports as the weapon has sockets
-        // (six on a two-hander, a bow or a staff; three on a one-hander). The old list stopped at three gems in total,
-        // two supports, which is a quarter of an ordinary six-link's damage (2026-11-10: the party's bots took a boss
-        // down at ~1,300 damage a second between them).
+        // The ladder's ordinary links (poe.qq.com's s29 ranking, 2026-04-13), narrowed to the supports this server's
+        // damage pass actually applies (GemSupportDamage's more-damage list): physical melee stacks physical multipliers,
+        // the bow its element ones, the casters the elemental ones. Each is tried in order and must resolve for the
+        // active gem, so a base with fewer sockets simply links fewer.
         string[] candidates = spell
-            ? ["Added Lightning Damage Support", "Controlled Destruction Support", "Faster Casting Support",
-               "Elemental Focus Support", "Concentrated Effect Support", "Increased Critical Strikes Support",
-               "Increased Critical Damage Support", "Faster Projectiles Support"]
+            ? ["Controlled Destruction Support", "Elemental Focus Support", "Concentrated Effect Support",
+               "Efficacy Support", "Faster Casting Support", "Added Lightning Damage Support",
+               "Increased Critical Strikes Support", "Increased Critical Damage Support"]
             : bow
-            ? ["Added Cold Damage Support", "Faster Attacks Support", "Elemental Damage with Attacks Support",
-               "Increased Critical Strikes Support", "Pierce Support", "Increased Critical Damage Support",
-               "Mirage Archer Support", "Added Fire Damage Support"]
-            : ["Melee Physical Damage Support", "Faster Attacks Support", "Added Fire Damage Support",
-               "Elemental Damage with Attacks Support", "Increased Critical Strikes Support", "Concentrated Effect Support",
-               "Increased Critical Damage Support", "Added Cold Damage Support"];
+            ? ["Elemental Damage with Attacks Support", "Added Cold Damage Support", "Added Lightning Damage Support",
+               "Cruelty Support", "Increased Critical Strikes Support", "Pierce Support",
+               "Faster Attacks Support", "Increased Critical Damage Support"]
+            : ["Melee Physical Damage Support", "Brutality Support", "Pulverise Support", "Cruelty Support",
+               "Maim Support", "Faster Attacks Support", "Added Fire Damage Support", "Increased Critical Strikes Support"];
         int sockets = SocketsFor(weapon);
         var gems = new List<Item> { active };
         foreach (string supportName in candidates)
