@@ -11,7 +11,7 @@
 /// The auras' own stats come from the skill's EffectStats, as every other aura's do (AuraCatalog.RawStats), so no
 /// per-skill value is written here.
 /// </summary>
-static class VaalAuraCatalog
+public static class VaalAuraCatalog
 {
     public sealed record Definition(ushort BuffRow);
 

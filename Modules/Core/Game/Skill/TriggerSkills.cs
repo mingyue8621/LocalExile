@@ -1,25 +1,27 @@
 using System.Runtime.CompilerServices;
 using GameServer.Core.Protocol.Instance;
 
-static partial class Game
+public static partial class Game
 {
     sealed class DamageTakenTriggers(int epoch, object? rules)
     {
-        internal readonly int Epoch = epoch;
-        internal readonly object? Rules = rules;
-        internal readonly Dictionary<ushort, TriggerCounter> Counters = [];
-        internal readonly Queue<(ushort Skill, TriggerCounter Counter, (int X, int Y) Aim, double At)> Pending = [];
+        public readonly int Epoch = epoch;
+        public readonly object? Rules = rules;
+        public readonly Dictionary<ushort, TriggerCounter> Counters = [];
+        public readonly Queue<(ushort Skill, TriggerCounter Counter, (int X, int Y) Aim, double At)> Pending = [];
     }
     sealed class TriggerCounter(SupportedGem gem)
     {
-        internal readonly SupportedGem Gem = gem;
-        internal long Damage;
-        internal double ReadyAt;
-        internal bool Pending;
+        public readonly SupportedGem Gem = gem;
+        public long Damage;
+        public double ReadyAt;
+        public bool Pending;
     }
     static readonly ConditionalWeakTable<ClientState, DamageTakenTriggers> DamageTriggers = new();
 
-    internal static string? TriggerOnlyReason(ClientState conn, SupportedGem gem)
+
+    public static string? TriggerOnlyReason(ClientState conn, SupportedGem gem)
+
     {
         if (gem.Supports.Any(s => s.Effect.Id == "SupportCastWhenDamageTaken"))
             return "this skill can only trigger when damage is taken";
@@ -52,7 +54,7 @@ static partial class Game
         && TriggerPayloadAvailable(conn, gem);
 
     // Called only by accepted hit damage, before Ward/ES/Mana absorb it. DoT and costs never enter this hook.
-    internal static void RecordDamageTakenTriggers(ClientState conn, int damage, double at)
+    public static void RecordDamageTakenTriggers(ClientState conn, int damage, double at)
     {
         lock (conn.Monsters)
         {
@@ -96,7 +98,7 @@ static partial class Game
         }
     }
 
-    internal static void ReleaseDamageTakenTriggers(ClientState conn, ProjectileSession session)
+    public static void ReleaseDamageTakenTriggers(ClientState conn, ProjectileSession session)
     {
         lock (conn.Monsters)
         {

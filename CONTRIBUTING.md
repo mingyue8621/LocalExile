@@ -41,8 +41,10 @@ dotnet run --project src/GameServer.Patch -- gateway --login 127.0.0.1:20493
 | `GameServer.Core` | 协议、加密、账号、副本注册表 | |
 | `GameServer.Data` | GGPK / bundle / `.dat` 读取器 | |
 | `GameServer.Storage` | 账号与存档存储 | |
-| `GameServer.Modding` | mod 与模块所基于的 API | |
+| `GameServer.Modding` | mod 与模块所基于的加载器契约：`IMod`、`IModule`、`League` 与各自的上下文 | |
 | `LocalExile` | 发布包里给玩家的启动器（命令行） | |
-| `Modules/` | 游戏系统（NPC 对话、夺宝、劫盗、万神殿……），由网关装载 | |
+| `Modules/` | 游戏系统，只对在联盟里列出它的玩家装载：`Core/`（当前游戏）、`Legacy/`（GGG 过去的赛季）、`Custom/`（自定义联盟） | |
 | `Leagues/` | 赛季，每个赛季是一组模块 | |
-| `Mods/` | 玩家自己写的小改动，网关运行期间可热重载 | |
+| `Mods/` | 玩家自行选择安装的 mod（[LocalExile-Mods](https://github.com/LocalExile/LocalExile-Mods)），网关运行期间可热重载 | |
+
+某处改动该归哪一层，见 [AGENTS.md](AGENTS.md)（「代码放在哪一层」）。

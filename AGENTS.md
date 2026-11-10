@@ -14,6 +14,30 @@ LocalExile 是一个面向流放之路 3.29.3c 客户端的本地服务器，由
 值得在重启之前先试。配合使用的建议见[实测](Agents/docs/dev/live-testing.md)（「热重载」）。
 符合 [mod API](Agents/docs/dev/modding.md) 的功能也可以做成 [LocalExile-Mods](https://github.com/LocalExile/LocalExile-Mods) 里的一个 mod，构建即重载。网关是框架，游戏是[模块](Agents/docs/dev/modules.md)。
 
+
+## 代码放在哪一层
+
+每一处改动都属于四层中的一层。写代码之前先定好是哪一层，并在 Pull Request 说明里写出来。
+细节见[模块](Agents/docs/dev/modules.md)与 [mod](Agents/docs/dev/modding.md)。
+
+| 层 | 位置 | 是什么 |
+|---|---|---|
+| **框架** | `src/`（主要是网关） | 管道，不含游戏规则：连接、封包、消息循环、游戏数据与目录表、存档、连接状态，以及加载模块/联盟/模组的宿主。只有框架时服务器能启动，但没有游戏 |
+| **模块** | `Modules/Core/`、`Modules/Legacy/`、`Modules/Custom/` | 一套游戏系统，复刻官方或自定义。只对在联盟里列出它的玩家运行 |
+| **联盟** | `Leagues/<名称>/` | 一个名字、一个父联盟，和组成它规则的模块清单。任何人都能做自定义联盟 |
+| **模组** | [LocalExile-Mods](https://github.com/LocalExile/LocalExile-Mods)，装进 `Mods/` | 每个用户自行选择安装的自定义内容，对所有联盟生效：改变模块/联盟/框架的行为，或提供开发、测试、练习用的工具 |
+
+- **复刻 GGG 的服务器不需要任何模组。** GGG 服务器做的事都是模块，放在 `Core/`（当前游戏，多个联盟共用）或
+  `Legacy/`（GGG 过去的赛季与内容），由随附的联盟列出。复刻真实游戏永远不是模组。
+- **`Custom/` 模块是给自定义联盟用的。** 复刻 GGG 某个联盟的联盟只列 `Core/` 与 `Legacy/` 的模块。
+- **联盟从不列出、也不需要模组。** 联盟只有模块。它的 `parent` 决定角色去哪个联盟，不是继承。
+- **游戏规则永远不进框架。** 模块需要框架提供什么时，加一个通用的交接口（钩子或 `GameEvents` 条目），不点名任何模块、联盟或模组。
+- **开发与测试工具是模组。** dev 聊天命令是 LocalExile-Mods 里的 `gm-commands` 模组；
+  `Core/Player/Commands` 只放 GGG 服务器本身有的命令。
+- **模组能拿到模块能拿到的东西。** 网关与 Game 模块是 public 的，模组可以直接用服务器与游戏规则。
+  模组需要框架交出新东西时，在它自己的 LocalExile Pull Request 里加一个不点名任何模组的通用交接口；
+  功能逻辑、设置与默认值留在模组里。
+
 ## 规则
 
 - **客户端只通过 `scripts/dev/live.ps1` 启动，且除非各自有独立会话（`-Session`），一次只启动一个**

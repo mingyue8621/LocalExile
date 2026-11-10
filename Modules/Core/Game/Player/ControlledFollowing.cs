@@ -1,10 +1,11 @@
 using GameServer.Core.World;
 
-static partial class Game
+public static partial class Game
 {
+
     /// <summary>How far behind it will still try to run after the leader before blinking back into the party: it keeps to
     /// the leader's side unless it is fighting (ControlledEngageLeash).</summary>
-    internal const double ControlledFollowerLeash = 60;
+    public const double ControlledFollowerLeash = 60;
     /// <summary>How far it may get from the leader while it is fighting: its 80-cell reach is measured from itself, so a
     /// target at the edge of that would otherwise be untouchable without stepping outside the follow leash.</summary>
     internal const double ControlledEngageLeash = 90;
@@ -12,6 +13,7 @@ static partial class Game
     internal const double ControlledCatchUpRange = 120;
     /// <summary>How long it keeps running while the gap is not closing; the leader's own speed means it may never close.</summary>
     internal const double ControlledCatchUpSeconds = 1.5;
+
     static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ClientState, ControlledFollowing> FollowerPlans = new();
     sealed class ControlledFollowing
     {
@@ -34,10 +36,12 @@ static partial class Game
         public uint Target;
     }
 
+
     /// <summary>The cell this follower forms up on: behind the leader, off the line it is walking down, and never on top of
     /// it. A follower used to take a cell <em>ahead</em> of a moving leader (18–30 cells along its route), so five of them
     /// made a wall the player had to walk round (live 2026-11-10: "the bots surround me and block my path").</summary>
-    internal static (int X, int Y) ControlledFollowerPoint(ClientState conn, ClientState leader, bool arrival = false, double? atTime = null)
+    public static (int X, int Y) ControlledFollowerPoint(ClientState conn, ClientState leader, bool arrival = false, double? atTime = null)
+
     {
         double now = atTime ?? conn.Clock.Elapsed.TotalSeconds;
         var origin = leader.Walk.Position(now);
@@ -89,7 +93,7 @@ static partial class Game
         return here;
     }
 
-    internal static bool KeepControlledFollowerNear(ClientState conn, ClientState leader, double now, bool externalMovement = false)
+    public static bool KeepControlledFollowerNear(ClientState conn, ClientState leader, double now, bool externalMovement = false)
     {
         var plan = FollowerPlans.GetOrCreateValue(conn);
         var here = conn.Walk.Position(now);
@@ -185,7 +189,7 @@ static partial class Game
         plan.IdleAt = now + 14 + seed % 18;
     }
 
-    internal static void IdleControlledFollower(ClientState conn, ClientState leader, double now)
+    public static void IdleControlledFollower(ClientState conn, ClientState leader, double now)
     {
         var plan = FollowerPlans.GetOrCreateValue(conn);
         plan.Target = 0;
@@ -222,11 +226,12 @@ static partial class Game
         }
     }
 
-    internal static double ControlledAhead((int X, int Y) bot, (int X, int Y) leader, (int X, int Y) goal)
+    public static double ControlledAhead((int X, int Y) bot, (int X, int Y) leader, (int X, int Y) goal)
     {
         double dx = goal.X - leader.X, dy = goal.Y - leader.Y, length = Math.Sqrt(dx * dx + dy * dy);
         return length > 0 ? ((bot.X - leader.X) * dx + (bot.Y - leader.Y) * dy) / length : 0;
     }
+
 
     /// <summary>How far to the side of the leader's route a cell stands: one sign on one side, the other on the other.</summary>
     internal static double LateralFromRoute((int X, int Y) cell, (int X, int Y) from, (int X, int Y) goal)
@@ -257,13 +262,14 @@ static partial class Game
 
     /// <summary>Whether stopping to swing while the leader walks on still leaves the bot in the party afterwards: it may do
     /// so from further out now that it fights at 80, but not from so far that the player is gone by the end of the swing.</summary>
-    internal static bool ControlledFollowAttackFits(double gap, double leaderSpeed, double seconds, double ahead = 0)
+    public static bool ControlledFollowAttackFits(double gap, double leaderSpeed, double seconds, double ahead = 0)
+
     {
         double after = ahead - Math.Max(0, leaderSpeed) * seconds;
         return gap <= 65 && Math.Max(0, gap * gap - ahead * ahead) + after * after <= 70 * 70;
     }
 
-    internal static void HoldControlledFollowerAttack(ClientState conn, double now, double seconds, uint target)
+    public static void HoldControlledFollowerAttack(ClientState conn, double now, double seconds, uint target)
     {
         var plan = FollowerPlans.GetOrCreateValue(conn);
         plan.Target = target;
