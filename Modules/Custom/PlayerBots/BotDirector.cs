@@ -690,6 +690,12 @@ sealed partial class BotDirector
         bot.Combat = null;
     }
 
+    // A follower built for a new area costs the tick a few hundred milliseconds: its gear, its skills, its own view of the
+    // area. Four of them crossing into a map at the same moment stalled the tick for 3.2 s (live 2026-11-11), so they take
+    // turns instead of arriving in one tick.
+    DateTime _lastFollowerBuild;
+    static readonly TimeSpan FollowerBuildGap = TimeSpan.FromMilliseconds(300);
+
     async Task StepCombat(Bot bot)
     {
         lock (_bots) ExpireControl(bot);
@@ -701,6 +707,10 @@ sealed partial class BotDirector
         {
             StopCombat(bot);
             Hide(bot);
+            // One at a time: the next tick (or a later one) builds the rest, so the player's own entry into the area is not
+            // held up behind the whole party.
+            if (DateTime.UtcNow - _lastFollowerBuild < FollowerBuildGap) return;
+            _lastFollowerBuild = DateTime.UtcNow;
             // Levelled to the area it is about to fight in, and dressed for that level: its campaign level made it a spectator
             // in a high map (and a monster in a low one), and its gear came from the town it last quested in.
             if (AreaMonsterLevel(leader) is int areaLevel and > 0)
