@@ -20,7 +20,7 @@ public enum ExitKind
 /// number N, whether the description is enabled, the teleport's label key ("BrutusAreaName", "%areaname%" for the area's
 /// own name) and target cell, the room it stands in and why (for the log).</summary>
 public sealed record PlacedExit(PlacedTileObject Object, ExitKind Kind, int Number, bool Enabled, string? Label,
-    (int X, int Y)? Target, string? Room, string Why);
+    (int X, int Y)? Target, string? Room, string Why, bool ToBossRoom = false);
 
 /// <summary>A layout's named entrance point: where "entranceN" (enabled or not) sits, i.e. where a player arriving from
 /// Connections[N − 1] belongs.</summary>
@@ -112,6 +112,13 @@ public static class AreaExits
             foreach (var o in list) roomOf[o] = room;
         }
         ArriveByTheGateBack(exits, roomOf, rooms);
+        // A gate whose arrival is inside a boss room: that room's own points name the area's unique boss. A death inside
+        // the arena makes this gate the checkpoint from the outside (Player.Resurrect), so the pair records it here while
+        // the layout is still at hand.
+        for (int i = 0; i < exits.Count; i++)
+            if (exits[i] is { Kind: ExitKind.Teleport, Target: { } target } e
+                && rooms.Any(r => r.Contains(target.X, target.Y) && IsBossRoom(r)))
+                exits[i] = e with { ToBossRoom = true };
         // The objects' order (the client's tile order).
         var order = new Dictionary<PlacedTileObject, int>(ReferenceEqualityComparer.Instance);
         for (int i = 0; i < objects.Count; i++) order.TryAdd(objects[i], i);
@@ -320,6 +327,13 @@ public static class AreaExits
             if (back is not null) exits[i] = e with { Target = (back.Object.X, back.Object.Y) };
         }
     }
+
+    /// <summary>Whether a room stands the area's unique boss: its .arm names the point the Gateway spawns it at
+    /// ("mapboss", "mapboss1", "mapboss1&amp;2", "force:mapboss" for Kitava's arenas). Such a room is a boss arena: a gate
+    /// leading into it is the checkpoint from the outside (Player.Resurrect).</summary>
+    public static bool IsBossRoom(LayoutRoom room) =>
+        room.Points.Any(p => p.Name.StartsWith("mapboss", StringComparison.OrdinalIgnoreCase)
+            || p.Name.StartsWith("force:mapboss", StringComparison.OrdinalIgnoreCase));
 
     // Where "teleportN" takes the player: the slot of "telepadN" (in another room than the gate's when several rooms name
     // it), else that room's centre.

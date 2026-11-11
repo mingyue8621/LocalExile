@@ -73,6 +73,12 @@ public sealed record AreaLayout(ushort Hash, string Id, int GridW, int GridH, in
         gate is { } g && g.Area == Hash ? (g.X, g.Y)
             : waypointActivated && Waypoint is { } w ? Near((w.GridX, w.GridY)) : (SpawnX, SpawnY);
 
+    /// <summary>Where passing a gate leaves the checkpoint (<see cref="ClientState.Checkpoint"/>): a gate into a boss room
+    /// records the door on the outside, so a death inside the arena revives beside it rather than in the middle of the
+    /// fight; every other gate records its landing cell (the floor of the stairs just climbed).</summary>
+    public (int X, int Y) GateCheckpoint((int X, int Y) gate, (int X, int Y) landing, bool toBossRoom) =>
+        toBossRoom ? Near(gate) : landing;
+
     /// <summary>A walkable cell a few cells from (x, y), nearest first; (x + 8, y) without a walk map.</summary>
     public (int X, int Y) Near((int X, int Y) at)
     {

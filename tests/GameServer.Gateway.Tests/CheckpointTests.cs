@@ -37,4 +37,15 @@ public sealed class CheckpointTests
         Assert.Equal((617, 568), layout.Checkpoint(waypointActivated: false));
         Assert.Equal(layout.Near((600, 590)), layout.Checkpoint(waypointActivated: true));
     }
+
+    [Fact]
+    public void A_gate_into_a_boss_room_records_the_door_outside_not_the_landing()
+    {
+        var layout = Tower();
+        var gate = (3139, 720);      // bossentry1.arm's ladder, outside the arena
+        var landing = (2472, 444);   // the arena's telepad, where the gate drops the player
+        Assert.Equal(layout.Near(gate), layout.GateCheckpoint(gate, landing, toBossRoom: true));
+        // Any other gate records its landing, so the floor just reached is the one a death returns to.
+        Assert.Equal(landing, layout.GateCheckpoint(gate, landing, toBossRoom: false));
+    }
 }
