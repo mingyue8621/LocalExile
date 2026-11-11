@@ -149,7 +149,8 @@ public sealed class WorldOutput
         lock (sync)
         {
             ObjectDisposedException.ThrowIf(closed, this);
-            if (objects.ContainsKey(id)) throw new InvalidOperationException("World object ID is still reserved or published; await its removal before replacement.");
+            if (objects.TryGetValue(id, out var existing))
+                throw new InvalidOperationException($"World object ID 0x{id:x} is still {existing.State}; await its removal before replacement.");
             var birth = new WorldObject(this, id, false); objects.Add(id, birth); return birth;
         }
     }

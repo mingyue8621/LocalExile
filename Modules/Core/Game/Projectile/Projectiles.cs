@@ -197,8 +197,23 @@ public static partial class Game
                     }
                 }
                 if (create)
-                    await SendWorldCreate(Conn, id, () => Project() is { } records ? records.Single() : null,
-                        log, wake: wake, transport: (remote, stream, ciphers));
+                {
+                    try
+                    {
+                        await SendWorldCreate(Conn, id, () => Project() is { } records ? records.Single() : null,
+                            log, wake: wake, transport: (remote, stream, ciphers));
+                    }
+                    catch (InvalidOperationException ex)
+                    {
+                        // One object's id was already held by the world: this record cannot be sent, but it must not take
+                        // the session down with it — RunOutput's catch closes the connection on any exception, and every
+                        // fight was ending in a disconnect (live 2026-11-11). Log what was refused, drop the record, let
+                        // the flight carry on without its visual.
+                        Console.WriteLine($"[gateway] {remote} projectile create 0x{id:x} refused ({ex.Message});"
+                            + $" tracked={Conn.ProjectileObjects.Contains(id)} kind={(log ?? "?")}");
+                        completed = true;
+                    }
+                }
                 else if (!Conn.LockstepClient || !remove)
                     await SendWorldRecords(remote, stream, ciphers, Conn, id, Project, log);
                 else
