@@ -85,6 +85,25 @@ public static partial class Game
         string? log = null, Func<bool>? still = null, bool wake = false,
         (string Remote, NetworkStream Stream, ConnectionCiphers Ciphers)? transport = null)
     {
+        try
+        {
+            return await SendWorldCreateCore(conn, id, create, log, still, wake, transport);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.StartsWith("World object ID", StringComparison.Ordinal))
+        {
+            // The world still holds this id: the create cannot be sent, but a refused object must not take the session
+            // down with it — the projectile output's catch closed the connection on exactly this and every fight ended in
+            // a disconnect (live 2026-11-11). Report it and leave the object out; the caller sees "not sent".
+            Console.WriteLine($"[gateway] {(transport?.Remote ?? conn.Wire.Remote)} create 0x{id:x} refused ({ex.Message})"
+                + $"{ (log is null ? "" : "; " + log) }");
+            return false;
+        }
+    }
+
+    static async Task<bool> SendWorldCreateCore(ClientState conn, uint id, Func<byte[]?> create,
+        string? log, Func<bool>? still, bool wake = false,
+        (string Remote, NetworkStream Stream, ConnectionCiphers Ciphers)? transport = null)
+    {
         var wire = transport ?? conn.Wire;
         if (!conn.LockstepClient)
         {
