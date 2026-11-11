@@ -19,6 +19,10 @@ public static partial class Game
     {
         public bool Following;
         public double RepathAt, AttackUntil, IdleAt = double.NaN, FarSince = double.NaN;
+        /// <summary>When this follower last logged that it found nowhere to stand (so the log says why it is stuck).</summary>
+        public DateTime NoSpotLogged;
+        /// <summary>When it last logged why it is still far behind the leader.</summary>
+        public DateTime DiagLogged;
         // The fight's own timing: when it may look for a new approach spot (and whether the last one was walkable), and when
         // it may drink again (ControlledCombat).
         public double ApproachAt, FlaskAt;
@@ -85,20 +89,39 @@ public static partial class Game
         var bodies = conn.Blockers;
         bool Floor(int x, int y) => x >= 0 && y >= 0 && x < conn.Layout.GridW && y < conn.Layout.GridH
             && conn.Layout.WalkableFor(x, y, 2) && !conn.Barrier.Contains((x, y));
-        foreach (int radius in radii.Skip(rank).Concat(radii.Take(rank)))
-            // Behind the leader, never round at their side or in front: 0.8 rad is the widest a queue may fan out, or one
-            // of them ends up where the player is about to walk.
-            foreach (double turn in new[] { 0.0, .45, -.45, .8, -.8 })
+        bool TryPick(int[] tryRadii, double[] turns, bool avoidRoute, out (int X, int Y) pick)
+        {
+            for (int i = 0; i < tryRadii.Length; i++)
             {
-                double angle = outward + side + turn;
-                var at = (X: origin.X + (int)Math.Round(Math.Cos(angle) * radius),
-                    Y: origin.Y + (int)Math.Round(Math.Sin(angle) * radius));
-                if (OnRoute(at.X, at.Y) || !Floor(at.X, at.Y) || ClientPathfinder.ObjectBlocks(bodies, at.X, at.Y, 3, 6))
-                    continue;
-                var path = ClientPathfinder.FindPath(origin, at, Floor, conn.Layout.GridW, conn.Layout.GridH, [], 2);
-                if (path.Count > 1 && path[^1] == at) return at;
+                int radius = tryRadii[(i + rank) % tryRadii.Length];
+                foreach (double turn in turns)
+                {
+                    double angle = outward + side + turn;
+                    var at = (X: origin.X + (int)Math.Round(Math.Cos(angle) * radius),
+                        Y: origin.Y + (int)Math.Round(Math.Sin(angle) * radius));
+                    if ((avoidRoute && OnRoute(at.X, at.Y)) || !Floor(at.X, at.Y)
+                        || ClientPathfinder.ObjectBlocks(bodies, at.X, at.Y, 3, 6)) continue;
+                    var path = ClientPathfinder.FindPath(origin, at, Floor, conn.Layout.GridW, conn.Layout.GridH, [], 2);
+                    if (path.Count > 1 && path[^1] == at) { pick = at; return true; }
+                }
             }
-        // No room to form up: stay where it is rather than crowding the leader's own cell.
+            pick = (here.X, here.Y);
+            return false;
+        }
+        // The formation it would like, then nearer cells, and only as a last resort cells the leader's own pathfinder may
+        // have to go round. A follower that finds no spot at all stands still, which is exactly what reads as it having
+        // stopped following (live 2026-11-11: after a pack, in a doorway, it never moved again).
+        if (TryPick(radii, [0.0, .45, -.45, .8, -.8], true, out var chosen)) return chosen;
+        if (TryPick([9, 7, 11], [0.0, .4, -.4, .8, -.8], true, out chosen)) return chosen;
+        if (TryPick([9, 12, 7], [0.0, .45, -.45, .9, -.9], false, out chosen)) return chosen;
+        // Nowhere at all: say so, once every few seconds, rather than looking like a follower that simply gave up.
+        var plans = FollowerPlans.GetOrCreateValue(conn);
+        if (DateTime.UtcNow - plans.NoSpotLogged > TimeSpan.FromSeconds(5))
+        {
+            plans.NoSpotLogged = DateTime.UtcNow;
+            Console.WriteLine($"[bots] {CharacterName(conn)} found no cell to stand in near ({origin.X}, {origin.Y}): "
+                + $"it stands at ({here.X}, {here.Y}), {Dist(here, origin):0.0} cells behind");
+        }
         return here;
     }
 
@@ -108,6 +131,15 @@ public static partial class Game
         var here = conn.Walk.Position(now);
         var follow = leader.Walk.Position(now);
         double distance = Dist(here, follow);
+        // Far behind: say what holds it there, once every few seconds. Without this a stuck follower leaves nothing in the
+        // log at all, and "it stopped following" cannot be told apart from "it never tried".
+        if (distance > 40 && DateTime.UtcNow - plan.DiagLogged > TimeSpan.FromSeconds(5))
+        {
+            plan.DiagLogged = DateTime.UtcNow;
+            Console.WriteLine($"[bots] {CharacterName(conn)} diag: gap {distance:0.0} cells, leader moving {leader.Walk.Moving(now)}, "
+                + $"following {plan.Following}, engage {now < plan.EngageUntil}, attacking {now < plan.AttackUntil}, "
+                + $"walking {conn.Walk.Moving(now)}");
+        }
         // A bot in a fight is allowed the engage leash: it is 80 from itself to its target, and that target may stand a
         // little away from the player. Once the fight is over the party tightens again.
         double leash = now < plan.EngageUntil ? ControlledEngageLeash : ControlledFollowerLeash;
