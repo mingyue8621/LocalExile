@@ -36,6 +36,17 @@ public static class SavesMigration
         log ??= Console.WriteLine;
         using var claim = Claim(SaveDatabase.LegacyPath + ".migrating");
         if (!File.Exists(SaveDatabase.LegacyPath)) return;
+        // A file that is not a database holds no saves: a tool that touched the path, or a start that stopped before the
+        // first write, leaves an empty one. It must not stop the server the way a real pre-split saves.db does, and the
+        // next start would have to move it away by hand (live 2026-11-12: a 0-byte data/saves.db refused to start).
+        if (!IsDatabase(SaveDatabase.LegacyPath))
+        {
+            string aside = $"{SaveDatabase.LegacyPath}.empty-{DateTime.UtcNow:yyyyMMdd-HHmmss}";
+            log($"[migrate] {SaveDatabase.LegacyPath} is not a database (nothing to migrate): moved to {aside}");
+            try { File.Move(SaveDatabase.LegacyPath, aside, overwrite: true); }
+            catch (IOException ex) { log($"[migrate] {SaveDatabase.LegacyPath} could not be moved: {ex.Message}"); }
+            return;
+        }
         if (File.Exists(Characters) || File.Exists(Auth))
             throw new SqlUpdateException($"{SaveDatabase.LegacyPath} is from before the player databases were split, and " +
                 $"{Characters} or {Auth} is already there. Move the new ones away to migrate " +
@@ -45,6 +56,20 @@ public static class SavesMigration
     }
 
     static readonly string Characters = Path.Combine("data", "characters.db"), Auth = Path.Combine("data", "auth.db");
+
+    /// <summary>Whether the file starts with SQLite's own header: an empty or truncated file is not a database, and
+    /// reading it as one would only report a corruption that says nothing about the player's saves.</summary>
+    static bool IsDatabase(string path)
+    {
+        try
+        {
+            using var file = File.Open(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            Span<byte> header = stackalloc byte[16];
+            return file.Read(header) == header.Length && header.SequenceEqual("SQLite format 3\0"u8);
+        }
+        catch (IOException) { return false; }
+        catch (UnauthorizedAccessException) { return true; }   // let the open below speak for itself
+    }
 
     // An exclusive handle on the claim file, waited for while another server migrates (a large saves.db takes seconds).
     static FileStream Claim(string path)
