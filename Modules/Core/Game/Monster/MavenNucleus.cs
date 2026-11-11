@@ -52,11 +52,15 @@ public static partial class Game
         }
 
         /// <summary>The first granted effect the AI can actually use: skip teleports, daemons and the memory game, then
-        /// prefer a projectile the server can fly.</summary>
+        /// prefer a projectile the server can fly. A "GA" row is the hit a leap or a slam lands with, not an action of
+        /// its own: the Alpine Devil's first usable row is GAGoatmanLeapSlamDamage, whose action is GeometryAttack, and
+        /// Goatman2.act has Melee, LeapSlam and DodgeForward but no such name — the client logged
+        /// "PlayAnimation failed! [type: GroundSlam]" and the goat never swung (live 2026-11-10). Its MeleeAtAnimationSpeed
+        /// row is the swing every actor has, so it takes the payload's place; a phase that offers no melee keeps it.</summary>
         public static int CombatEffect(SkillCatalog skills, MonsterCatalog.Variety variety)
         {
             if (variety.GrantedEffects is not { Count: > 0 } effects) return -1;
-            int? fallback = null;
+            int? fallback = null, melee = null;
             foreach (int effect in effects)
             {
                 if (skills.IsMovement(effect)) continue;
@@ -72,10 +76,15 @@ public static partial class Game
                     || id.Contains("Souls", StringComparison.Ordinal))) continue;
                 if (!(skills.IsAttack(effect) || skills.IsSpell(effect) || skills.IsProjectile(effect))) continue;
                 if (Shot(skills, effect) is not null) return effect;
+                if (skills.IsMelee(effect)) melee ??= effect;
                 fallback ??= effect;
             }
+            if (fallback is { } chosen && melee is { } swing && IsPayload(skills.EffectId(chosen))) return swing;
             return fallback ?? effects[0];
         }
+
+        static bool IsPayload(string? effectId) =>
+            effectId is not null && effectId.StartsWith("GA", StringComparison.Ordinal);
 
         public static bool AttackIsRanged(SkillCatalog skills, int effect) =>
             effect >= 0 && (skills.IsRangedAttack(effect)
