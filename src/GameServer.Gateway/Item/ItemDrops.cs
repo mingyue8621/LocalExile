@@ -47,12 +47,20 @@ public sealed class ItemDrops(ItemCatalog catalog, ItemRolls? rolls = null, stri
     };
 
     /// <summary>The chances with item rarity: each × (1 + increased / 100) × the multiplier (a league's, a mod's), at most
-    /// 1. As in the game, more rarity makes every better rarity likelier, uniques too; past 1 the better one takes all.</summary>
-    public static Chances WithIncreasedRarity(Chances chances, int increased, double multiplier = 1)
+    /// 1. As in the game, more rarity makes every better rarity likelier, uniques too; past 1 the better one takes all.
+    /// The three extra multipliers scale one tier each on top of that (a mod's own settings; 1 leaves the tier as it was).</summary>
+    public static Chances WithIncreasedRarity(Chances chances, int increased, double multiplier = 1,
+        double magicMultiplier = 1, double rareMultiplier = 1, double uniqueMultiplier = 1)
     {
-        double factor = Math.Max(0, 100 + increased) / 100.0 * (double.IsFinite(multiplier) ? Math.Max(0, multiplier) : 1);
-        return new(Math.Min(1, chances.Unique * factor), Math.Min(1, chances.Rare * factor), Math.Min(1, chances.Magic * factor));
+        double factor = Math.Max(0, 100 + increased) / 100.0 * Share(multiplier);
+        return new(
+            Math.Min(1, chances.Unique * factor * Share(uniqueMultiplier)),
+            Math.Min(1, chances.Rare * factor * Share(rareMultiplier)),
+            Math.Min(1, chances.Magic * factor * Share(magicMultiplier)));
     }
+
+    // A multiplier a mod set: finite and not negative, so a typo cannot remove a tier or make it infinite.
+    static double Share(double multiplier) => double.IsFinite(multiplier) ? Math.Max(0, multiplier) : 1;
 
     // (BaseItemTypes Id, weight), each only from its own DropLevel: Scrolls of Wisdom most, then the basic orbs, down to the
     // Exalted and Divine Orbs and the Mirror of Kalandra.
@@ -227,7 +235,8 @@ public sealed class ItemDrops(ItemCatalog catalog, ItemRolls? rolls = null, stri
     /// In a map (<paramref name="mapTier"/> &gt; 0) the kill also rolls the base card and scarab chances from
     /// <c>drop_card_chance_pct</c>/<c>drop_scarab_chance_pct</c>, scaled by the quantity multiplier.</summary>
     public IReadOnlyList<Drop> Roll(int monsterLevel, MonsterRarity rarity, Random rng, int increasedRarity = 0,
-        double quantityMultiplier = 1, double rarityMultiplier = 1, int mapTier = 0)
+        double quantityMultiplier = 1, double rarityMultiplier = 1, int mapTier = 0,
+        double magicMultiplier = 1, double rareMultiplier = 1, double uniqueMultiplier = 1)
     {
         double quantity = double.IsFinite(quantityMultiplier) ? Math.Max(0, quantityMultiplier) : 1;
         int whole = (int)Math.Min(Math.Floor(quantity), int.MaxValue);
@@ -240,7 +249,8 @@ public sealed class ItemDrops(ItemCatalog catalog, ItemRolls? rolls = null, stri
             _ => rng.NextDouble() < 0.35 ? 1 : 0,
         };
         var chances = WithIncreasedRarity(RarityChances(rarity), increasedRarity,
-            rarityMultiplier * SystemSettings.Default.DropMultiplier("unique_rarity"));
+            rarityMultiplier * SystemSettings.Default.DropMultiplier("unique_rarity"),
+            magicMultiplier, rareMultiplier, uniqueMultiplier);
         var drops = new List<Drop>();
         for (int i = 0; i < count; i++)
         {

@@ -51,6 +51,16 @@ public sealed class DropRoll(ClientState conn, MonsterInfo monster)
     /// <summary>Scales how often equipment drops magic or rare (1: the server's own).</summary>
     public double Rarity { get; set; } = 1;
 
+    /// <summary>Scales magic equipment's chance on top of <see cref="Rarity"/> (1: unchanged). A mod that wants the three
+    /// tiers set apart sets these three instead of <see cref="Rarity"/>.</summary>
+    public double MagicRarity { get; set; } = 1;
+
+    /// <summary>Scales rare equipment's chance on top of <see cref="Rarity"/> (1: unchanged).</summary>
+    public double RareRarity { get; set; } = 1;
+
+    /// <summary>Scales unique equipment's chance on top of <see cref="Rarity"/> (1: unchanged).</summary>
+    public double UniqueRarity { get; set; } = 1;
+
     /// <summary>Scales the gold pile (1: the server's own).</summary>
     public double Gold { get; set; } = 1;
 
