@@ -1141,15 +1141,18 @@ public static partial class Game
         // Death may have published false full-pool conditions while the player ticker kept its pre-death chance.
         // Publish the restored life/ES conditions explicitly even when that cached chance is unchanged.
         await SendCharacterStats(remote, stream, ciphers, conn, "resurrected");
-        // The checkpoint: the area's waypoint once activated, else where the player entered the area, as in the real game
-        // before any checkpoint is activated. Checkpoint objects and boss arenas (revive at the arena's door) are not done.
+        // The checkpoint: the last gate of this area the player came through (a boss arena's door, a tower's stairs),
+        // else the area's waypoint once activated, else where the player entered the area. The gate wins: it is the
+        // checkpoint the player touched last, so a death in the boss room revives at its door, not at the area's entrance
+        // (live 2026-11-11: every act's boss sent the player back to the first floor).
         bool activated;
         lock (conn.Waypoints)
             activated = WaypointCatalog.Areas.Find(conn.Layout.Hash) is { } entry && conn.Waypoints.Contains(entry.Id);
-        var (x, y) = conn.Layout.Checkpoint(activated);
+        bool gate = conn.Checkpoint is { } at && at.Area == conn.Layout.Hash;
+        var (x, y) = conn.Layout.Checkpoint(activated, conn.Checkpoint);
         conn.Walk.Teleport(x, y, conn.Clock.Elapsed.TotalSeconds);
         await SendWorldRecord(remote, stream, ciphers, conn, PlayerId, InstanceProtocol.Teleport(PlayerId, x, y),
-            $"0x01b7 player to the checkpoint ({x}, {y}): {(activated && conn.Layout.Waypoint is not null ? "the activated waypoint" : "the arrival point")}");
+            $"0x01b7 player to the checkpoint ({x}, {y}): {(gate ? "the last gate of this area" : activated && conn.Layout.Waypoint is not null ? "the activated waypoint" : "the arrival point")}");
         await SendWorldRecord(remote, stream, ciphers, conn, PlayerId, InstanceEntities.StatsUpdate(PlayerId, [(StatKeys.HideMiniLifeBar, 0)]),
             "0x01b3 player hide_mini_life_bar = 0");
         await GameEvents.RunResurrected(conn);

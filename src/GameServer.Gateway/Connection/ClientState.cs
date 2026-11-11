@@ -1070,6 +1070,10 @@ public sealed partial class ClientState(AreaLayout layout, uint ticket, uint see
     public ulong InstanceNumber { get; init; }
     /// <summary>Arrive at this cell instead of the spawn (back through a town portal).</summary>
     public (int X, int Y)? ArriveAt;
+    /// <summary>The last gate of this area the player came through (its landing cell, with the area it belongs to): where
+    /// "Resurrect at Checkpoint" revives. A gate is a checkpoint — a map's boss arena door, the tower's stairs — so a death
+    /// in the boss room revives at its door instead of the area's entrance (live 2026-11-11).</summary>
+    public (ushort Area, int X, int Y)? Checkpoint;
     /// <summary>Where ReturnPortal leads: 0 the hideout (a map's own portal, or a Portal Scroll's in a map), else a town's
     /// WorldAreas HASH16 (a Portal Scroll's anywhere else).</summary>
     public ushort ReturnPortalTo;

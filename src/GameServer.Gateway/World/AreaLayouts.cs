@@ -65,10 +65,13 @@ public sealed record AreaLayout(ushort Hash, string Id, int GridW, int GridH, in
         return (SpawnX, SpawnY);
     }
 
-    /// <summary>Where "Resurrect at Checkpoint" revives: next to the area's waypoint once the character has activated it
-    /// (waypoints are checkpoints), else where the player entered the area (the spawn, set to the arrival on entry).</summary>
-    public (int X, int Y) Checkpoint(bool waypointActivated) =>
-        waypointActivated && Waypoint is { } w ? Near((w.GridX, w.GridY)) : (SpawnX, SpawnY);
+    /// <summary>Where "Resurrect at Checkpoint" revives: the last gate of this area the player came through (a boss arena's
+    /// door, a tower's stairs: <paramref name="gate"/>, its landing cell and the area it belongs to), else next to the area's
+    /// waypoint once the character has activated it (waypoints are checkpoints), else where the player entered the area
+    /// (the spawn, set to the arrival on entry).</summary>
+    public (int X, int Y) Checkpoint(bool waypointActivated, (ushort Area, int X, int Y)? gate = null) =>
+        gate is { } g && g.Area == Hash ? (g.X, g.Y)
+            : waypointActivated && Waypoint is { } w ? Near((w.GridX, w.GridY)) : (SpawnX, SpawnY);
 
     /// <summary>A walkable cell a few cells from (x, y), nearest first; (x + 8, y) without a walk map.</summary>
     public (int X, int Y) Near((int X, int Y) at)

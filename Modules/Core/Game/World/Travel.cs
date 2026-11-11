@@ -141,8 +141,10 @@ public static partial class Game
                 if (!PlayerActionCurrent(conn, action)) return;
                 conn.Walk.Teleport(tx, ty, ProjectileWorldTime(conn));
             }
+            // A gate is a checkpoint: this is where a death revives (the boss arena's door, not the area's entrance).
+            conn.Checkpoint = (conn.Layout.Hash, tx, ty);
             await SendWorldRecord(remote, stream, ciphers, conn, PlayerId, InstanceProtocol.Teleport(PlayerId, tx, ty),
-                $"0x01b7 player through the gate 0x{use.TargetId:x} to ({tx}, {ty}), destination gate at ({pair.X}, {pair.Y})",
+                $"0x01b7 player through the gate 0x{use.TargetId:x} to ({tx}, {ty}), destination gate at ({pair.X}, {pair.Y}): checkpoint",
                 still: () => PlayerActionCurrent(conn, action));
             return;
         }
