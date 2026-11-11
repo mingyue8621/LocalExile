@@ -25,15 +25,11 @@ public sealed class GameModule : IModule
         // and the second rises in the room below with the three hearts that keep him alive.
         GameEvents.Tick.Add(id, (conn, _) => global::Game.MalachaiTick(conn));
         GameEvents.TransitionHidden.Add(id, global::Game.MalachaiGateHidden);
-        // Kitava (Act 5): at 50 % the first form gives way to the second, whose chest opens three times for the heart that
-        // has to be destroyed between them (KitavaFight.cs).
-        GameEvents.Tick.Add(id, (conn, _) => global::Game.KitavaTick(conn));
-        // The rooftop's own portal stands only once the fight is over (it is the way back down).
-        GameEvents.TransitionHidden.Add(id, global::Game.KitavaPortalHidden);
+        // Kitava (Act 5): at 50 % the first form gives way to the second, whose chest opens for the heart that has to be
+        // destroyed between them (KitavaActFive.cs). The rooftop's own portal and the ladder are its GateShown (Quests.cs).
         GameEvents.PlayerLeaving.Add(id, (conn, _) =>
         {
             global::Game.LeavingMalachaiPortal(conn);
-            global::Game.LeavingKitava(conn);
             return Task.CompletedTask;
         });
         module.Lifetime.Own(global::DoedreSewers.CleanupOnUnload());
@@ -45,6 +41,12 @@ public sealed class GameModule : IModule
         GameEvents.ObjectUse.Add(module.Manifest.Id, global::DepravedTrinity.Use);
         GameEvents.PlayerStatSources.Add(module.Manifest.Id, global::DepravedTrinity.PlayerStats);
         GameEvents.PlayerLeaving.Add(id, (conn, _) => global::DepravedTrinity.Leaving(conn));
+        GameEvents.Tick.Add(id, (conn, _) => global::KitavaActFive.Tick(conn));
+        module.Lifetime.Own(global::KitavaActFive.CleanupOnUnload());
+        GameEvents.PlayerLeaving.Add(id, (conn, _) => global::KitavaActFive.Leaving(conn));
+        GameEvents.Tick.Add(id, (conn, _) => global::KitavaActTen.Tick(conn));
+        module.Lifetime.Own(global::KitavaActTen.CleanupOnUnload());
+        GameEvents.PlayerLeaving.Add(id, (conn, _) => global::KitavaActTen.Leaving(conn));
         module.Lifetime.Own(global::VaalOversoul.CleanupOnUnload());
         GameEvents.PlayerLeaving.Add(id, (conn, _) => global::VaalOversoul.Leaving(conn));
         GameEvents.PlayerStatSources.Add(module.Manifest.Id, global::BrineKing.PlayerStats);
@@ -84,6 +86,7 @@ public sealed class GameLogic(IModuleLifetime? lifetime = null) : IGameLogic, IC
     {
         Rules.RefuseInterruptedHardcoreDeath(conn);
         level = Rules.PrepareCharacterForArea(remote, conn, level);
+        global::KitavaActTen.ConfigurePortal(conn);
         // Restore mode vitals before any admitted-area send can fail and enter save cleanup.
         Rules.InitializeCharacterVitals(conn);
         return level;

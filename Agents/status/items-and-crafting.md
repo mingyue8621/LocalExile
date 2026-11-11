@@ -307,7 +307,7 @@
   entry; every league has its own stash and gold, Standard keeps the account's stash from before (`AccountStash.Key`);
   monsters drop piles of gold (normal 40%, magic 75%, rare and unique always;
   (3 + 1.2 × level) × 1/2/5/15, our own numbers, `ItemDrops.Gold`), and picking one up adds it to the gold;
-  gold within 15 cells of the player is picked up by itself (player tick, `GoldAutoLootRange`);
+  gold within the configured radius (default 20 cells) is picked up in full without late-drop ghosts;
   older per-character gold moves into the account at login; `/gold <±amount>`.
   Code: `InstanceEntities.Gold`, `AccountStash`, Gateway.
   Docs: [04](../docs/protocol/04-player-entity.md) §6.
@@ -644,3 +644,209 @@
   护甲片、磨刀石、机会石、瓦尔宝珠、四种腐化灵液与余烬、Enkindling 宝珠、Instilling 宝珠、玻璃吹制宝珠、破碎石、
   卡兰德的镜子、Hinekora's Lock、宝石匠的棱镜、神圣石与悔恨宝珠之外的通货；辅助宝石与连接
   （[13](../docs/protocol/13-items.md) 的 "Open"）。
+- Ruthless uses native mod/flask alternatives, reduced tunable drops and vendor returns, and refuses bench crafting.
+  Entering town or a hideout does not refill its pools/flasks; supported vendors refill them instead.
+  Active utility flasks cannot gain charges, and native Ruthless durations/Onslaught values apply.
+  Automated pool-restoration and session-ownership checks cover area changes, reconnects and vendor refill persistence.
+  Drop, recipe, bench and flask-rule calculations have automated coverage; full retail balance remains partial.
+  See [league modes](../docs/game/league-modes.md).
+- Essence crafting (2026-10-25, automated verification; real-client use pending): all 105 craftable essences resolve
+  their exact class-specific guaranteed mod from Essences.dat, including tier-8 and Desolation.
+  Normal/rare eligibility, random-mod level caps, fractures, metamod refusal and repeated consumption from the Essence
+  tab are covered.
+  Uses the existing currency path for ordinary and Shift application.
+  See [13](../docs/protocol/13-items.md).
+- Quiver eligibility fix (2026-10-25, awaiting client confirmation): active bows publish `main_hand_weapon_type = 9`,
+  required by the client's inventory gate; every hand now sends its weapon type (see "Client weapon-type stats" in
+  [13](../docs/protocol/13-items.md)).
+- **Jeweller's Orb: verified live (2026-10-21).** Normal use and Shift share the currency handler; rerolls counts
+  1/2/3/4/6 and link groups, limited by class, dimensions and item level, and consumes one orb.
+  3.29: sockets the reroll keeps retain their colours and only the added sockets are white.
+  Socketed gems, unsupported targets and maximum base capacity are refused without spending an orb.
+  The live-found refusal of level-1 boots/gloves with two sockets is fixed and verified live.
+  Count and link probabilities are approximate; special socket overrides are not modelled.
+  See [13](../docs/protocol/13-items.md), "Jeweller's Orb".
+- **Socket colours (3.29; verified live 2026-10-26).** Item sockets generate white and may roll a
+  colour in proportion to the base's attribute requirements, with the chance rising with item level; a gem in a
+  matching red/green/blue socket gets +10% quality (the stat path is in [25](../docs/protocol/25-gem-supports.md)).
+  Chromatic Orbs force one socket non-white and roll the rest, with item quality raising their chance; the bench's
+  "At Least Two/Three/Four Non-White Sockets" crafts (`NN`/`NNN`/`NNNN`) reroll until they guarantee that many; Vaal
+  corruption colours one white socket. `/item`, drops and shops use the same generator, and the start weapon's two
+  linked sockets are white.
+  The probabilities are an approximation (5% non-white at item level 1, +0.25 points per level up to 30% at 100, and
+  +0.25 points per 1% quality for Chromatic/bench); `SocketColours`, [13](../docs/protocol/13-items.md),
+  "Socket colours (3.29)".
+  Not modelled: Tainted Chromatic/Jeweller's Orbs, Orb of Binding, the Locus of Corruption, the 25-roll bench reward,
+  special item overrides.
+- **Orb of Alchemy:** a modifiable normal item becomes an identified rare with 4-6 weighted affixes (CoE's 2/3, 1/4,
+  1/12; jewels 3-4 with two per side) and a rare name. Flasks are magic-only; unknown/unsupported/unmodifiable,
+  non-normal, corrupted/mirrored and empty-pool targets are refused before spending.
+  CoE count/jewel checks, ordinary/Shift inventory/stash dispatch and save reloads have automated coverage.
+  The old live check (2026-10-21) predates these rules; native re-acceptance is pending.
+  See [13](../docs/protocol/13-items.md), "Orb of Alchemy", and [evidence](../docs/re/alchemy-coe.md).
+- **Chaos Orb:** a modifiable rare item's unprotected affixes are rerolled (CoE 4/5/6 counts, jewels 3-4 with two per
+  side; new tiers, new rare name); prefix/suffix metamod locks keep their side. Flasks are magic-only; non-rare,
+  unmodifiable/unsupported and empty-pool targets are refused before spending.
+  CoE count/metamod checks, ordinary/Shift inventory/stash dispatch and save reloads have automated coverage.
+  The old live check (2026-10-21) predates these rules; native re-acceptance is pending.
+  See [13](../docs/protocol/13-items.md), "Chaos Orb", and [evidence](../docs/re/chaos-coe.md).
+- **Divine Orb (verified live, 2026-10-21):** keeps the affixes, tiers and order and rerolls only values.
+  Shift works. See [13](../docs/protocol/13-items.md), "Divine Orb".
+- **Orb of Scouring (verified live, 2026-10-21):** a magic / rare / unique item becomes normal, only base mods stay.
+  See [13](../docs/protocol/13-items.md), "Orb of Scouring".
+- **Orb of Transmutation:** normal to identified magic, targeting 1-2 weighted affixes at equal probability.
+  Unknown, unsupported, unmodifiable and empty-pool bases are refused before spending.
+  CoE count/pool comparisons, ordinary/Shift inventory/stash dispatch and save reloads have automated coverage.
+  Framed native wand/flask upgrades, repeat/unmodifiable refusal and relog passed on 2026-10-29.
+  Fresh native Shift/stash and manual currency UI checks remain separate.
+  See [13](../docs/protocol/13-items.md), "Orb of Transmutation", and [evidence](../docs/re/transmutation-coe.md).
+- **Orb of Alteration:** a modifiable magic item gets 1-2 new weighted affixes (one prefix, one suffix at most),
+  with the same admission as the other affix currencies: unknown/unsupported/`Unmodifiable` bases, corrupted/mirrored
+  items and empty pools are refused before spending.
+  CoE count/flask checks, ordinary/Shift inventory/stash dispatch and save reloads have automated coverage.
+  The old live check (2026-10-21) predates these admission rules; native re-acceptance is pending.
+  See [13](../docs/protocol/13-items.md), "Orb of Alteration", and [evidence](../docs/re/alteration-coe.md).
+- **Orb of Augmentation:** +1 weighted affix on a magic item, up to one prefix and one suffix, with the same admission
+  checks as Transmutation: a known, serializable, non-`Unmodifiable` base with Mods; corrupted/mirrored, full items
+  and open sides without ordinary affixes are refused before spending.
+  CoE beta pool and simulated-probability checks, ordinary/Shift inventory/stash dispatch and save reloads have
+  automated coverage. The old live check (2026-10-21) predates these admission checks; native re-acceptance is pending.
+  See [13](../docs/protocol/13-items.md), "Orb of Augmentation", and
+  [evidence](../docs/re/augmentation-coe.md).
+- **Regal Orb:** a modifiable magic item becomes rare, affixes kept, +1 weighted affix from the rare pool (max three
+  of each side), rare name. Flasks are refused (magic-only), as are unmodifiable/unsupported bases and no-fit targets,
+  without spending.
+  CoE rare-pool/apply checks, ordinary/Shift inventory/stash dispatch and save reloads have automated coverage.
+  The old live check (2026-10-21) predates these admission rules; native re-acceptance is pending.
+  See [13](../docs/protocol/13-items.md), "Regal Orb", and [evidence](../docs/re/regal-coe.md).
+- **Exalted Orb:** +1 weighted affix on a modifiable rare item, up to 6 (three per side; jewels two per side), name
+  kept. Flasks, unmodifiable/unsupported bases, non-rare and full targets are refused before spending.
+  CoE pool/jewel checks, ordinary/Shift inventory/stash dispatch and save reloads have automated coverage.
+  The old live check (2026-10-21) predates these rules; native re-acceptance is pending.
+  See [13](../docs/protocol/13-items.md), "Exalted Orb", and [evidence](../docs/re/exalted-coe.md).
+- **Orb of Annulment:** removes one random unprotected affix from a magic or rare item; rarity, name, implicits and
+  the other affixes stay. Metamod/fractured filters exclude protected affixes; corrupted/mirrored/unsupported/
+  `Unmodifiable` and no-eligible-explicit targets are refused before spending.
+  CoE rarity/metamod checks, ordinary/Shift inventory/stash dispatch and save reloads have automated coverage.
+  The old live check (2026-10-21) predates these rules; native re-acceptance is pending.
+  See [13](../docs/protocol/13-items.md), "Orb of Annulment", and [evidence](../docs/re/annulment-coe.md).
+- **Armourer's Scrap:** quality scales with item level, up to 20%; the revised scaling is not yet verified live.
+  See [13](../docs/protocol/13-items.md), "Armourer's Scrap".
+- **Blacksmith's Whetstone:** quality scales with item level, up to 20%; the revised scaling is not yet verified live.
+  See [13](../docs/protocol/13-items.md), "Blacksmith's Whetstone".
+- **Gemcutter's Prism (no test, not checked live):** +1% gem quality, up to 20% ([13](../docs/protocol/13-items.md)).
+- **Ancient Orb:** reforges an uncorrupted unique piece of equipment as another of its item class, by the uniques' drop
+  weights, keeping item level, quality, sockets and links. Only uniques of the same inventory size; no corrupted or Replica
+  results (`UniqueCatalog.Reforge`). Not checked in game yet.
+- **Orb of Chance:** the documented local rule: a normal weapon / armour piece → rare (30%, 4-6 affixes) or magic
+  (2-4 affixes, at most two per side), identified. Corrupted/mirrored/unsupported/`Unmodifiable` and empty-pool
+  targets are refused before spending.
+  CoE beta has no Chance handler, so official unique/rarity outcomes remain separate work.
+  Ordinary/Shift inventory/stash dispatch and save reloads have automated coverage; native re-acceptance is pending.
+  See [13](../docs/protocol/13-items.md), "Orb of Chance", and [admission](../docs/re/chance-coe.md).
+- **Vaal Orb and corruption:** the local rule corrupts a modifiable weapon, armour piece or jewellery (Base +0xc7
+  bit 0, saved); normal / magic → rare with 4-6 affixes, a rare item gets 1-5 or all affixes rerolled, one white socket
+  is coloured. Corrupted/mirrored/unique, unsupported/`Unmodifiable` and empty-pool targets are refused before
+  spending; a corrupted item takes no currency but Wisdom.
+  CoE's official Vaal outcome table remains separate work; the admission and boundary are documented.
+  Ordinary/Shift inventory/stash dispatch and save reloads have automated coverage; native re-acceptance is pending.
+  See [13](../docs/protocol/13-items.md), "Vaal Orb and corruption", and [admission](../docs/re/vaal-coe.md).
+- **Eldritch Ichors (Lesser, Greater, Grand, Exceptional):** add the tier's Eater of Worlds implicit to body armour,
+  boots, gloves or helmet, replacing every other implicit except Searing Exarch ones; normal/magic/rare only.
+  Unique/corrupted/mirrored, non-armour and unsupported/unmodifiable targets are refused before spending.
+  CoE base-key/tier/presence checks, all four tier suffixes and ordinary/Shift inventory/stash dispatch have automated
+  coverage. A separate Eldritch dominance state and the Ember/Conflict family remain separate, and native tooltip
+  acceptance is pending.
+  See [13](../docs/protocol/13-items.md), "Eldritch Ichors", and [evidence](../docs/re/eldritch-ichor-coe.md).
+- **Eldritch Embers (Lesser, Greater, Grand, Exceptional):** the Searing Exarch mirror of the Ichors; add the tier's
+  Exarch implicit to body armour, boots, gloves or helmet, keep Eater implicits and remove the other implicits;
+  normal/magic/rare only. Unique/corrupted/mirrored, non-armour and unsupported/unmodifiable targets are refused.
+  CoE base-key/tier/presence checks, all four tier suffixes and ordinary/Shift inventory/stash dispatch have automated
+  coverage. A separate Eldritch dominance state and the Orb of Conflict remain separate, and native tooltip
+  acceptance is pending.
+  See [13](../docs/protocol/13-items.md), "Eldritch Embers", and [evidence](../docs/re/eldritch-ember-coe.md).
+- **Cartographer's Chisel, Eldritch Chaos/Exalted Orb and Orb of Unmaking (added 2026-11-05, not checked live):** the
+  chisels now reach the existing map-quality effect through their `CurrencyItems.Action` (`add_map_alt_quality`), so a
+  chisel or a Maven's Chisel adds 20% of its AlternateQualityTypes row to a map. Eldritch Chaos and Eldritch
+  Exalted Orb reroll an existing rare's explicits (as Chaos/Exalted do) only when the item carries an Eater of Worlds or
+  Searing Exarch implicit, which stays. Orb of Unmaking, used from the bag (C→S 0x58), refunds every allocated Atlas
+  passive of all three presets and is consumed; with nothing allocated it stays. The three local rules are not the
+  official ones. Two Gateway tests cover the chisel's admission and the Eldritch admission.
+  Code: `CurrencyEffects.Chisel/TryAction`, `EldritchChaos/EldritchExalted`, `Game.UseOrbOfUnmaking`.
+- **Orb of Binding, the Eldritch Orb of Annulment and the Tainted (Scourge) family (added 2026-11-05, not checked live):**
+  Orb of Binding turns a normal uncorrupted weapon or armour piece that can hold four sockets into a rare (as Alchemy) with
+  four linked sockets whose colours come from the base's requirements. The Eldritch Orb of Annulment follows the two other
+  Eldritch orbs: an Annulment on an item carrying an Eater of Worlds or Searing Exarch implicit, which stays. The seven
+  Tainted currencies this class applies (Chaos, Exalted, Chromatic, Fusing, Jeweller's, Armourer's Scrap, Blacksmith's
+  Whetstone) apply to a corrupted item and leave it corrupted; tainted quality currency adds 1%. The item is handed with its
+  corruption cleared and the result is corrupted again, so a non-corrupted item is refused before spending, as is anything
+  the ordinary effect refuses. Tainted Mythic, Tainted Divine Teardrop, Tainted Catalyst, Tainted Oil and Tainted Blessing
+  are separate. Local rules, not the official ones. Two Gateway tests cover the Binding admission and the Tainted/Eldritch
+  admission.
+  Code: `CurrencyEffects.Binding/EldritchAnnulment/Tainted`, `Game.CurrencyResult`.
+- **Enkindling Orb:** a utility flask of any rarity gets one of the five GenerationType 21 enchantments (increased
+  effect / duration / Charge Recovery / maximum Charges, or reduced Charges per use, all with `Gains no Charges during
+  Effect`) with the game's 250/100/100/100/100 weights. Life/mana, corrupted/mirrored, non-flask and
+  unsupported/unmodifiable targets are refused before spending. An existing Enkindling is replaced; an existing
+  Instilling and the flask's explicit affixes, quality, charges, rarity and name stay. Harvest/bench flask
+  enchantments (GenerationType 3, family `FlaskEnchantment`) are removed. The `Gains no Charges during Effect`
+  drawback is enforced by `FlaskEnchantments.BlocksGain` through `CanGainFlaskCharges` for kills, hits, crits, the
+  every-3-seconds recovery, refills and projectiles while the effect runs; expired effects and pause are covered.
+  CoE pool/weights and native coexistence checks have automated coverage; see
+  [13](../docs/protocol/13-items.md), "Enkindling Orb and Instilling Orb", and
+  [evidence](../docs/re/enkindling-coe.md).
+- **Instilling Orb:** the Searing Exarch counterpart: a utility flask gets one of the fifteen spawnable GenerationType
+  22 trigger enchantments (charges full, frozen/chilled/shocked/ignited/bleeding/poisoned, block, savage hit, guard or
+  travel skill, rare/unique hit, adjacent flask, effect end, life flask), equal weight. The sixteenth row
+  (`Used when you lose a Guard Skill Buff`) has spawn weight 0 in 3.29.3b and is excluded, as are the bench recipes.
+  An existing Instilling is replaced; an existing Enkindling and the rest of the item stay. See
+  [13](../docs/protocol/13-items.md), "Enkindling Orb and Instilling Orb", and
+  [evidence](../docs/re/instilling-coe.md).
+- **Visual client acceptance (2026-10-30):** the main successful uses of all implemented currencies were checked in
+  the 3.29.3b client: Transmutation, Augmentation, Regal, Alteration, Alchemy, Exalted, Chaos, Vaal, Chance,
+  Annulment, all four Eldritch Ichors and all four Eldritch Embers, Enkindling and Instilling. Vaal turned normal
+  items rare (yellow) and the tooltip showed `Corrupted`; the Eater/Exarch implicit names, values and tiers were
+  visible. Enkindling and Instilling both appeared on one flask, repeated use replaced only its own type, and magic
+  explicit affixes stayed. No visual defects were found. Vaal on jewels remains outside the local rule; official
+  jewel/Vaal outcomes are separate work. Stash/Shift and the remaining refusal paths stay under automated coverage.
+- **Glassblower's Bauble:** quality scales with item level, up to 20%; the revised scaling is not yet verified live.
+  See [13](../docs/protocol/13-items.md), "Glassblower's Bauble".
+- **Fracturing Orb (verified live, 2026-10-21; rules rechecked 2026-10-30):** one random explicit mod of a rare item
+  with 4+ explicit mods is fractured and kept by every other currency, Scouring included; shown fractured (magic
+  properties u8 +0x7a). The admission checks now also require a supported non-`Unmodifiable` base whose
+  `ItemClasses.CanBeFractured` is set, and refuse corrupted/mirrored/already-fractured items; metamod-protected mods
+  stay eligible; influenced and synthesised items are refused. Veiled modifiers are not modelled. Native 2026-10-30: a four-mod rare wand
+  was fractured, a second use was refused without spending. See [13](../docs/protocol/13-items.md), "Fracturing Orb",
+  and [the game rules](../docs/re/fracturing-mirror-mechanics.md).
+- Mirror copies non-unique equipment, flasks and T1–16 maps onto the cursor ([13](../docs/protocol/13-items.md)).
+- **Hinekora's Lock (server rules verified live, 2026-10-31):** applying the Lock through C→S 0x71 to a rare item
+  sets the Mods flag bit 8 (0x0100) and a non-zero seed; the client shows the purple glow and the Lock tooltip text. When a currency is
+  used on the item the client sends C→S 0x29d (u16 key, currency/target ids) and S→C 0x2a0 answers with the preview
+  item (keyA = request key, status 0 = preview, 0x04FA = failure); the next 0x71 commits exactly that preview,
+  consumes the currency and clears the state. Normal, magic, gem, corrupted, mirrored, unmodifiable and
+  already-foreseeing targets are refused without spending; bench/Harvest/essence and every successful currency clear
+  the state. The client's
+  preview branch is the item popup's foresight element (`HinekoraForesightPopupIcon`, `HinekorasLockFutureSight`);
+  status 0 shows it and any non-zero status plays `HinekorasLockFail`. The committed result matches the preview byte
+  for byte. See [13](../docs/protocol/13-items.md), "Hinekora's Lock", and
+  [the evidence](../docs/re/hinekora-lock.md).
+- **Orb of Fusing: verified live (2026-10-21).** Captured 0x71/0x72 packets feed the same handler.
+  Only links change; sockets, colours, gems and item properties stay intact.
+  Refuses fewer than two sockets and protects fully linked 5/6-socket items; 2-4 sockets remain rerollable.
+  Quality favours longer groups without being consumed.
+  Link/quality probabilities are approximate, and special overrides/corruption are not modelled.
+  See [13](../docs/protocol/13-items.md), "Orb of Fusing".
+- Currency metamods: Scouring/Chaos/Divine/Annul respect prefix/suffix locks;
+  annul and affix additions respect attack/caster restrictions.
+  Scouring retains quality and refuses uniques.
+  Real-data regression tests cover both lock directions.
+
+## Not working yet
+
+- Most uniques and special mods (#60), and chancing; Mageblood and normal Crown of Eyes have definitions;
+  currency other than Scroll of Wisdom, Chromatic Orb, Jeweller's Orb, Orb of Fusing, Orb of Alchemy, Chaos Orb,
+  Divine Orb, Orb of Scouring, Orb of Transmutation, Orb of Alteration, Orb of Augmentation, Regal Orb, Exalted Orb,
+  Orb of Annulment, Armourer's Scrap, Blacksmith's Whetstone, Orb of Chance, Vaal Orb, the four Eldritch Ichors and
+  Embers, Enkindling Orb, Instilling Orb, Glassblower's Bauble, Fracturing Orb, Mirror of Kalandra, Hinekora's
+  Lock, Gemcutter's Prism, Sacred Orb and Orb of Regret; support gems and links ([13](../docs/protocol/13-items.md)
+  "Open").

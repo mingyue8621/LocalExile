@@ -68,6 +68,38 @@
     这是本移植唯一对不上的 seed 1 轨迹。
 - 每日迷宫的布局是 [迷宫](#迷宫) 的第 1 步。
 - **完成标准：** 任意种子都能拿到其布局，不需要抓取。
+- **Known:** the port reproduces the client's generator for every recorded trace and logged load
+  ([re/011](../docs/re/011-level-generation.md), [status/world.md](../status/world.md)).
+  `/tour <file>` with `live.ps1 -Walkmaps` records new (area, seed) loads; `levelgen tourlist` writes the lists.
+- **Start:** the supported areas get random seeds, and a 5-seed tour of them found 4 loads the port gets wrong
+  (1_2_15 at `0x14211bc2d`, 1_2_14_2 at `0x1420386d8`, [re/011](../docs/re/011-level-generation.md) §8 Random seeds)
+  and 202 seeds it cannot generate (the Gateway plays a new instance at such a seed at a replacement seed it can,
+  `ServerLevels.PlayableSeed`; fixing the generator errors gives those seeds back).
+- **To be implemented with their leagues (out of scope for now):** the 202 areas whose level the client builds from
+  data the server sends (`data/areas-unavailable.txt`). They come with each league's server side, not with the
+  generator:
+  - Delve (82): the mine cells and biomes (`Delve_*`); the client needs the server's cell data.
+    An initial Delve_Main block, hub entrance and mine return gate now work with native generation and captured movement.
+    The initial Crawler has attached wheels, engine idle and a torch; the hub's native equipment console is placed.
+    Equipment and completed chart points/edges persist per account/league; each trip saves one destination and parks
+    for manual selection. Unfinished trips reset on interruption/death.
+    Escort pacing, depth levels/packs/rewards, exact gradual
+    sulphite debit, native walking/combat and the full chart inside the mine are implemented.
+    Directional checkpoint connections now replace the entrance layout after the first trip.
+    Remaining: native topology validation and diverse physical biomes beyond the captured Mines checkpoint rooms,
+    original biome populations, node-specific rewards/waves, darkness stacks/resistance and consumable use.
+    Restore laid trails on reentry, finish shared sulphite migration and equipment cable visual tiers.
+    This does not add Delve to the server level generator's supported areas.
+  - Heist (80): the contract and blueprint areas; the layout comes from the heist plan.
+  - Synthesis (24): the memories (`Synthesis_Main*`, `Synthesis_Single*`).
+  - Incursion (10): the temples (`Incursion_Temple*`); the client needs the room hash of the opened and upgraded
+    rooms ("Unknown Incursion Temple room hash").
+  - Sanctum (4): the floors (`SanctumCellar`, `SanctumCrypt`, `SanctumNave`, `SanctumVaults`); the client rebuilds
+    the floor graph from the rooms the server sends.
+  - Deepwater (2): the 3.29 league's DeepwaterEncounter and DeepwaterEncounterVoyage, built from a biome grid the
+    server sends; the only seed-1 traces the port does not match.
+- The daily Labyrinth layout is step 1 of [The Labyrinth](#the-labyrinth).
+- **Done when:** any seed gets its layout without a capture.
 
 ## 3. 玩法
 

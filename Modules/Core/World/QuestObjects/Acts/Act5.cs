@@ -139,11 +139,11 @@ sealed class Act5 : Act
             // (KitavaKey.it: grant a5q6-HaveItem, extra a5q6-SeenItem, remove a5q6-DeliveredItem); SeenItem lifts the Ruined
             // Square's flame wall (18 CathedralRoofBlockers, object_size 4) and opens the rooftop (EndQuestFlags). The Sign in
             // its socket (bossentry.arm, placed from the server's own rooms) wakes Kitava there (the area does not place him:
-            // Quests.QuestSpawned). Kitava never dies: the fight is his two forms and the heart between them, and the
-            // module runs it (KitavaFight.cs: the 50 % gate ends the first form, three more gates open his chest for
+            // Quests.QuestSpawned). Kitava never dies: the fight is his forms, the heart between them and the Sign, and the
+            // module runs it (KitavaActFive.cs: the 50 % gate ends the first form, the second opens his chest for
             // KitavaHeart, and after the last one his X blast destroys the Sign). The threshold stays as the fight's
             // declared end — Quests.FightOverFlags keeps the boss from coming back once a5q6-CompletedBoss is set, and the
-            // module sets that flag itself when the heart phase ends (QSR 38: −30%, Game.ResistancePenaltyAct5). Sin and
+            // module sets that flag itself when the fight ends (QSR 38: −30%, Game.ResistancePenaltyAct5). Sin and
             // Lilly (lilly.ot serialisation_start_flag a5q6-CompletedBoss) wait on sin_dock.arm, and Lilly's "Sail to
             // Wraeclast" (893) moves the player to Lioneye's Watch.
             new Quest("a5q6")

@@ -1,4 +1,4 @@
-﻿using System.Net.Sockets;
+using System.Net.Sockets;
 using System.Text.Json;
 using GameServer.Core.Protocol.Instance;
 using GameServer.Core.Protocol.Login;
@@ -493,7 +493,14 @@ public static partial class Game
                     Console.WriteLine($"[gateway] {remote} {rule.ObjectType}: {id} cannot be created");
                     continue;
                 }
-                await SpawnQuestMonster(remote, stream, ciphers, conn, variety, level, (at.X, at.Y), $"{rule.ObjectType.Split('/')[^1]} used");
+                bool already;
+                lock (conn.Monsters) already = conn.Monsters.Values.Any(m => m.Variety?.Id == id && !m.Dead && m.Life > 0);
+                if (already) continue;
+                var (x, y) = conn.Layout.Id == KitavaActFive.Area && variety.Id == KitavaActFive.First
+                    ? KitavaActFive.SpawnPoint(conn, (at.X, at.Y))
+                    : conn.Layout.Walkable is { } walks && !walks(at.X, at.Y) ? conn.Layout.Near((at.X, at.Y)) : (at.X, at.Y);
+                Console.WriteLine($"[gateway] {remote} {rule.ObjectType.Split('/')[^1]} used: {variety.Name} appears at ({x}, {y})");
+                await SpawnMonster(remote, stream, ciphers, conn, variety, level, MonsterRarity.Unique, x, y);
             }
         }
         finally { await SendWorldRecord(remote, stream, ciphers, conn, PlayerId, InstanceProtocol.ActionEnded(PlayerId), null); }
