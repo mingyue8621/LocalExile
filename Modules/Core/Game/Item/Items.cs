@@ -615,7 +615,11 @@ public static partial class Game
         foreach (var (id, ground) in conn.Instance.Ground.All())
         {
             // The sync reads this set on its own thread: keeps the two from editing it at once (SharedGround.cs).
-            lock (conn.SeenGround) conn.SeenGround.Add(id);
+            // An item this connection was already shown is left alone: creating it again is what the world refuses
+            // ("still Ready"), and one tower session logged 3,536 such refusals before this check.
+            bool seen;
+            lock (conn.SeenGround) seen = !conn.SeenGround.Add(id);
+            if (seen) continue;
             await SendWorldCreate(remote, stream, ciphers, conn, id, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(WorldItemObject.MetadataPath), ground.Blob()),
                 $"0x02bb create world item 0x{id:x} left at ({ground.GridX}, {ground.GridY})");
             await SendWorldRecord(remote, stream, ciphers, conn, id, InstanceProtocol.EnterWakeZone(id), null);
