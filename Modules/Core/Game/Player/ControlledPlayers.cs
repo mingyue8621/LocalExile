@@ -66,6 +66,15 @@ public static partial class Game
         var plan = FollowerPlans.GetOrCreateValue(conn);
         // First the thing a player reaches for: a follower that stands in the fire until it dies is what reads as an idiot.
         if (!inTown && await DrinkControlledFlask(conn, now)) return;
+        // Further behind than a fight may take it: it walks back first. Without this every enemy met on the way keeps it
+        // fighting where it stands, the engage leash is pushed forward each time it picks one, and it never closes the gap
+        // at all (live 2026-11-11: four followers stuck 110 cells behind the player, swinging at whatever came by).
+        if (!inTown && Dist(here, leader.Walk.Position(now)) > ControlledEngageLeash)
+        {
+            plan.EngageUntil = 0;
+            ControlledSmallTalkAt(conn, now);
+            return;
+        }
         // The enemy it picks for itself: the rarest, then what is on the player's back (ControlledCombat.ControlledTarget).
         var enemy = inTown ? null : ControlledTarget(conn, leader, here, now);
         if (enemy is not { } picked)

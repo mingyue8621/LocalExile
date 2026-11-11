@@ -8,7 +8,7 @@ public static partial class Game
     public const double ControlledFollowerLeash = 60;
     /// <summary>How far it may get from the leader while it is fighting: its 80-cell reach is measured from itself, so a
     /// target at the edge of that would otherwise be untouchable without stepping outside the follow leash.</summary>
-    internal const double ControlledEngageLeash = 90;
+    internal const double ControlledEngageLeash = 70;
     /// <summary>How far behind it will still try to run after the leader before blinking back into the party.</summary>
     internal const double ControlledCatchUpRange = 120;
     /// <summary>How long it keeps running while the gap is not closing; the leader's own speed means it may never close.</summary>
