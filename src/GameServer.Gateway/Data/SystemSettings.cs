@@ -80,6 +80,12 @@ public sealed class SystemSettings
 
     public double MonsterPackDensityMultiplier => Math.Clamp(Get("monster_pack_density_multiplier"), 0, 100);
     public double MonsterPackSizeMultiplier => Math.Clamp(Get("monster_pack_size_multiplier"), 0, 50);
+    /// <summary>Scales every monster hit that comes from a shot: a bow's arrow, a spell's projectile (MonsterAttack.Ranged
+    /// or .Projectile). Melee swings keep their damage. The client's own numbers are level-shared Damage x the variety's
+    /// DamageMultiplier x its attack time (MonsterCatalog.BaseDamage), and at 45-50 that puts an archer at 200-400 a shot
+    /// while a character of that act carries ~1,600 life (live 2026-11-11: killed by archers). 1 when the row is absent.</summary>
+    public double MonsterRangedDamageMultiplier =>
+        Values.TryGetValue("monster_ranged_damage_multiplier", out double ranged) ? Math.Clamp(ranged, 0, 10) : 1;
     public double ExperienceMultiplier => Math.Clamp(Get("experience_multiplier"), 0, 1000);
     public int MaxLevel => Math.Clamp(GetInt("max_level"), 1, Progression.MaxLevelCeiling);
 

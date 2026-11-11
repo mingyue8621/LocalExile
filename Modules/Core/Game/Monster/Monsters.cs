@@ -1730,7 +1730,14 @@ public static partial class Game
         // with this hit's one armour decision.
         var gambler = GamblerFor(stats);
         // The King's Mystic Fetishes leave Portent Vapors: 10% increased damage taken per stack from his hits only.
-        var hitDamage = a.Damage;
+        var attackDamage = a.Damage;
+        // A shot's damage: the client's own numbers (level-shared Damage x the variety's DamageMultiplier x its attack
+        // time) put a 45-50 archer at 200-400 a shot against a character of that act's ~1,600 life, and a spell cannot be
+        // evaded at all, so the shots alone decide the fight (live 2026-11-11). Melee keeps its damage; the scale is a
+        // system setting (monster_ranged_damage_multiplier), 1 when it is absent.
+        if (a.Ranged || a.Projectile is not null)
+            attackDamage = attackDamage.Scale(SystemSettings.Default.MonsterRangedDamageMultiplier);
+        var hitDamage = attackDamage;
         if (m.EncounterStats is { } encounter) hitDamage = MonsterModEffects.AddedTo(hitDamage, encounter);
         if (KingInMists.IsBoss(m.Variety) && conn.KingPortentStacks > 0 && now < conn.KingPortentUntil)
             hitDamage = hitDamage.Scale(1 + 0.1 * conn.KingPortentStacks);
@@ -1741,7 +1748,7 @@ public static partial class Game
             cannotCrit: VaalOversoul.CannotCrit(m, a));   // its crit, Executioner's
         // The player's passive enemy auras (Born under Fire): the hit and its ailment base convert alike, so ignite
         // sees the converted damage. Converting does not remove stun, so the hit recovery below reads a.Damage.
-        var baseHit = a.Damage;
+        var baseHit = attackDamage;
         if (EnemyAuraConversionLocked(conn, m, here, now, StatOf) is { } auraConversion)
             (rolled, baseHit) = (rolled.Convert(auraConversion), baseHit.Convert(auraConversion));
         // Glacial Wave: less damage dealt is all of it (PoB Damage MORE), so the ignite its crit puts on you too.
