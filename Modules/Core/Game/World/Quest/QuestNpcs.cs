@@ -83,7 +83,7 @@ public static partial class Game
                 var npc = !transitionable ? c.Npc
                     : transitioned ? c.Npc with { TransitionState = NpcTransitionStates(c.Npc) }
                     : c.RoomState ? c.Npc with { TransitionState = 1 } : c.Npc;
-                c.Id = await SpawnNpc(remote, stream, ciphers, conn, npc, c.X, c.Y, c.Angle);
+                c.Id = await SpawnNpc(remote, stream, ciphers, conn, npc, c.X, c.Y, c.Angle, WireTypeOf(c.Npc.Id));
                 Console.WriteLine($"[gateway] {remote} quest npc {c.Npc.Name} ({c.Npc.Id}) appears at ({c.X}, {c.Y}): {why}");
             }
             else if (!want && c.Id != 0)

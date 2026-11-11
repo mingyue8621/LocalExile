@@ -4,13 +4,25 @@ using GameServer.Core.Protocol.Login;
 
 public static partial class Game
 {
+    // A water idler drawn on dry ground. The Mud Flats' Nessa is authored to tread water there — her .ot's
+    // create_untransitioned plays water_idle and her Timer dives after 18 s — and with no water in our terrain she draws
+    // with her body under the floor, shoulders and head only (live 2026-11-11). The same model .ao
+    // (Metadata/NPC/Act6/Nessa.ao) has a rock_idle twin with an identical component set, so the wire type is the twin
+    // while the quest keeps her own id: dialogue, the a6q1 transition and the minimap entry stay NessaMudFlats. She is the
+    // only type in the client data whose untransitioned state plays water_idle.
+    static readonly Dictionary<string, string> DryGroundTwin = new(StringComparer.Ordinal)
+    {
+        ["Metadata/NPC/Act6/NessaMudFlats"] = "Metadata/NPC/Act6/NessaPrisonersGate",
+    };
+    public static string WireTypeOf(string npcId) => DryGroundTwin.GetValueOrDefault(npcId, npcId);
+
     // Creates one NPC (0x2bb, its NPCs.dat Id is an .ot type) and puts it in the wake zone; kept for clicks and /npcs.
     public static async Task<uint> SpawnNpc(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, NpcCatalog.Npc npc,
-        int x, int y, float rotation)
+        int x, int y, float rotation, string? wireType = null)
     {
         uint id = conn.TakeObjectId();
         var obj = new NpcObject(x, y, npc.Components!, rotation, npc.StateMachine, npc.TransitionState, npc.Model, npc.Height);
-        uint type = InstanceEntities.ObjectTypeHash(npc.Id);
+        uint type = InstanceEntities.ObjectTypeHash(wireType ?? npc.Id);
         await SendWorldCreate(remote, stream, ciphers, conn, id, InstanceEntities.CreateObject(id, type, obj.Blob()),
             $"0x02bb create npc 0x{id:x} {npc} type=0x{type:x8} at ({x}, {y}) rotation {rotation:0.##}, components {string.Join(", ", npc.Components!)}");
         await SendWorldRecord(remote, stream, ciphers, conn, id, InstanceProtocol.EnterWakeZone(id), $"0x01a9 npc 0x{id:x} enters wake zone");
