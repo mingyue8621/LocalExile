@@ -128,8 +128,17 @@ sealed partial class BotDirector
     void Resume()
     {
         var saved = File.Exists(_statePath) ? JsonSerializer.Deserialize<List<SavedBot>>(File.ReadAllText(_statePath)) ?? [] : [];
+        // Every bot the file knows keeps its account, resumed or not: the limit below must not turn the ones it held back
+        // into the orphans the end of this method deletes.
+        var known = saved.Select(s => s.AccountId).ToHashSet();
+        // The most bots the server asked for holds a restart back too: a server set to 0 that came back with the hundred
+        // its state remembered was still full of bots, which is not what turning them off means (live 2026-11-12).
+        int room = Math.Max(0, _settings.MaxBots);
+        int held = 0;
         foreach (var s in saved)
         {
+            if (room <= 0) { held++; continue; }
+            room--;
             if (_accounts.GetCharacter(s.CharacterId) is null) continue;
             var bot = new Bot
             {
@@ -170,7 +179,6 @@ sealed partial class BotDirector
                 _log.Write(extra.Account, extra.Name, $"после перезапуска в городе {extra.Town} нет места: идёт дальше по квестам");
                 BeginQuest(extra, DateTime.UtcNow);
             }
-        var known = _bots.Select(b => b.AccountId).ToHashSet();
         foreach (var orphan in _accounts.Accounts().Where(a => IsBot(a) && !known.Contains(a.Id)))
         {
             foreach (var c in _accounts.CharactersOf(orphan.Id)) _accounts.DeleteCharacter(c.Id);
@@ -178,6 +186,7 @@ sealed partial class BotDirector
             _log.Write(orphan.Name, "-", "аккаунт бота без состояния удалён");
         }
         if (_bots.Count > 0) _console($"bots: resumed {_bots.Count}");
+        else if (held > 0) _console($"bots: none resumed, the most is {_settings.MaxBots} ({held} kept in its state)");
     }
 
     // The mark a bot account carries in place of a password hash. A real hash is base64 (AccountService), which never
