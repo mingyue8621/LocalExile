@@ -363,14 +363,16 @@ public static class BrineKing
             {
                 nextSlam = now + 5;
                 int effect = Phases.Completed >= 2 && Random.Shared.Next(2) == 0 ? (Random.Shared.Next(2) == 0 ? 6759 : 6761) : 6668;
-                await Cast(conn, effect, player, now);
+                // A swing the client was never shown lands no hit: the action was superseded (a flinch, a phase, the
+                // player leaving), so its contact has nothing to present and used to damage in silence.
+                if (!await Cast(conn, effect, player, now)) return;
                 var attack = Attack(conn, boss.Variety!, boss.Level, effect);
                 hits.Add((now + attack.Seconds * 0.65, player, effect == 6668 ? 12 : 18, attack, boss.ActionGeneration));
                 return;
             }
             if (distance <= boss.Variety!.AttackRange + 1)
             {
-                await Cast(conn, MeleeEffect, player, now);
+                if (!await Cast(conn, MeleeEffect, player, now)) return;
                 var attack = Attack(conn, boss.Variety!, boss.Level, MeleeEffect);
                 hits.Add((now + attack.Seconds * 0.5, player, boss.Variety.AttackRange + 2, attack, boss.ActionGeneration));
             }
@@ -383,7 +385,7 @@ public static class BrineKing
             }
         }
 
-        async Task Cast(ClientState conn, int effect, (int X, int Y) target, double now)
+        async Task<bool> Cast(ClientState conn, int effect, (int X, int Y) target, double now)
         {
             var attack = Attack(conn, boss.Variety!, boss.Level, effect);
             int generation;
@@ -394,11 +396,15 @@ public static class BrineKing
                 boss.BusyUntil = now + attack.Seconds + 0.2;
             }
             var (remote, stream, ciphers) = conn.Wire;
-            await SendMonsterAction(remote, stream, ciphers, conn, id, boss, generation, () =>
+            bool sent = await SendMonsterAction(remote, stream, ciphers, conn, id, boss, generation, () =>
             {
                 var p = boss.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
                 return InstanceProtocol.ActionStarted(id, p.X, p.Y, target.X, target.Y, Skill(effect), conn.NextActionSequence(), 0x0408);
             }, $"[Brine King] skill {effect}, phase {Phases.Completed}");
+            // Said out loud: a swing the client never saw is the difference between "the boss does nothing" and a boss
+            // that damages without a single animation, and only the log tells the two apart.
+            if (!sent) Console.WriteLine($"[Brine King] skill {effect} was not sent: the action was superseded before the client saw it");
+            return sent;
         }
 
         async Task Move(ClientState conn, (int X, int Y) target, double now)
