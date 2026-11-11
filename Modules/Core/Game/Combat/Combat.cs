@@ -1734,7 +1734,13 @@ public static partial class Game
                 if (!spell && SkillsFor(conn).IsMelee(gem.Effect))
                     contactHit = WithMeleeProximityLocked(conn, player, skillStats, m, contactHit, ProjectileWorldTime(conn));
                 int hitChance = spell ? 100 : AttackHitChanceAt(conn, id, m, ProjectileWorldTime(conn), accuracy, player);
-                if (!spell && !accuracy.CannotBeEvaded && !m.AttackEvasion.Hits(hitChance, ProjectileWorldTime(conn), conn.AttackAccuracyRandom)) continue;
+                if (!spell && !accuracy.CannotBeEvaded && !m.AttackEvasion.Hits(hitChance, ProjectileWorldTime(conn), conn.AttackAccuracyRandom))
+                {
+                    if (conn.ControlledPrepared)
+                        Console.WriteLine($"[bots] {conn.Character} {gem.Name} on 0x{id:x} ({m.Label}) evaded: hit chance {hitChance}%, "
+                            + $"accuracy {accuracy.Rating} against evasion {m.Effects.Evasion(Monsters.BaseEvasion(m.Level) ?? 0)}");
+                    continue;
+                }
                 if (MonsterBlocks(m, Random.Shared, spell, ProjectileWorldTime(conn), skillStats))
                 {
                     Console.WriteLine($"[gateway] {remote} {gem.Name} on 0x{id:x} ({m.Label}) blocked");
@@ -1780,6 +1786,13 @@ public static partial class Game
                 var rampageSource = RampageOnMeleeHitLocked(conn, m, !spell && SkillsFor(conn).IsMelee(gem.Effect), rampagePlayer);
                 applied = ApplyMonsterHitLocked(conn, m, damage, rampageSource, rampagePlayer,
                     cull: Cull.Of(player, skillStats, critical, spell));
+                // A party bot's hit, said out loud: a follower's damage is the one thing the party cannot read off its own
+                // client, so a report of "the bots do no damage" has nothing to go on without this line.
+                if (conn.ControlledPrepared)
+                    Console.WriteLine($"[bots] {conn.Character} {gem.Name} on 0x{id:x} ({m.Label}): {damage} damage"
+                        + $"{(critical ? " critical" : "")}{(resistance is null ? "" : $", {resistance}")}, "
+                        + $"life {(applied is { } said ? said.Life : m.Life)}/{m.MaxLife}, "
+                        + $"hit chance {hitChance}%, {targets.Count} in the sweep");
                 if (applied is not null)
                 {
                     if (!spell) ReleaseCriticalTrigger(conn, ProjectilesFor(remote, stream, ciphers, conn),

@@ -110,7 +110,7 @@ public static partial class Game
                         {
                             var use = release() with { Seed = ++seed };
                             long useId = Runtime.Release(use);
-                            if (ServerTrace.Projectiles && !Quiet(use.Payload))
+                            if ((ServerTrace.Projectiles || Conn.ControlledPrepared) && !Quiet(use.Payload))
                                 Console.WriteLine($"[gateway] {remote} projectile release t={Runtime.Now / (double)ProjectileRuntime.QuantaPerSecond:0.000000} use={useId} "
                                     + $"skill={PayloadLabel(use.Payload)} metadata={use.Profile.Id} count={use.Profile.Count} "
                                     + $"origin={use.Origin} aim={use.Aim} speed={use.Profile.Speed:0.###}");
@@ -314,7 +314,13 @@ public static partial class Game
             if (contact.Projectile.Use.Payload is not ProjectileOffense shot || shot.Valid?.Invoke() == false)
                 return ProjectileHitResult.Miss;
             if (!Conn.Monsters.TryGetValue(contact.Target.Id, out var target) || target.Dead || target.Life == 0
-                || Key(contact.Target.Id, target) != contact.Target) return ProjectileHitResult.Miss;
+                || Key(contact.Target.Id, target) != contact.Target)
+            {
+                if (Conn.ControlledPrepared)
+                    Console.WriteLine($"[bots] {Conn.Character} {contact.Projectile.Profile.Id} shot ends on 0x{contact.Target.Id:x}: "
+                        + $"the target is not this instance's living monster");
+                return ProjectileHitResult.Miss;
+            }
             var random = contact.Projectile.RandomSource;
             if (shot.RampageEpoch is long ownedEpoch)
             {
@@ -354,7 +360,12 @@ public static partial class Game
                 var accuracy = shot.AccuracyProfile ?? new(shot.Accuracy, shot.AccuracyMoreUnique, shot.AccuracyMoreClose, shot.AlwaysHits);
                 hitChance = AttackHitChanceAt(Conn, contact.Target.Id, target, at, accuracy);
                 if (!accuracy.CannotBeEvaded && !target.AttackEvasion.Hits(hitChance, at, Conn.AttackAccuracyRandom))
+                {
+                    if (Conn.ControlledPrepared)
+                        Console.WriteLine($"[bots] {Conn.Character} {contact.Projectile.Profile.Id} shot evaded by 0x{contact.Target.Id:x} "
+                            + $"({target.Label}): hit chance {hitChance}%, accuracy {accuracy.Rating}");
                     return ProjectileHitResult.Miss;
+                }
             }
             if (MonsterBlocks(target, random, shot.Spell, at, shot.SkillStats)) return ProjectileHitResult.Blocked;
             double more = contact.Multiplier * (contact.Phase > 0 ? shot.ReturnMultiplier : 1);
@@ -412,6 +423,12 @@ public static partial class Game
             CommitProjectileHit(this, contact, target, hit.Value, damage, shot, critical,
                 OwnerStun(Conn, target, damage, mitigated, melee: false, shot.Spell, critical, player, shot.SkillStats));
             if (critical) Enqueue(() => MaybeCreateProfaneGround(remote, stream, ciphers, Conn, target.Walk.Position(at)));
+            // A party bot's arrow, said out loud: its own client never shows the party whether the shot landed, so a
+            // report of "the bots' shots do nothing" cannot be checked any other way.
+            if (Conn.ControlledPrepared)
+                Console.WriteLine($"[bots] {Conn.Character} {contact.Projectile.Profile.Id} shot hits 0x{contact.Target.Id:x} "
+                    + $"({target.Label}) for {damage}{(critical ? " critical" : "")}, life {hit.Value.Life}/{target.MaxLife}, "
+                    + $"hit chance {hitChance}%");
             return ProjectileHitResult.Hit;
         }
 
@@ -422,7 +439,8 @@ public static partial class Game
             if (!valid && value.Kind != ProjectileEventKind.End) return;
             int x = (int)Math.Round(value.Position.X), y = (int)Math.Round(value.Position.Y);
             var presentation = PresentationFor(p);
-            if (value.Kind == ProjectileEventKind.End && p.ParentId == 0 && ServerTrace.Projectiles && !Quiet(p.Use.Payload))
+            if (value.Kind == ProjectileEventKind.End && p.ParentId == 0
+                && (ServerTrace.Projectiles || Conn.ControlledPrepared) && !Quiet(p.Use.Payload))
                 Console.WriteLine($"[gateway] {remote} projectile end use={p.UseId} entity={p.Id}"
                     + $" reason={value.Reason} position={value.Position} metadata={p.Profile.Id}"
                     + $" grid={Conn.Layout.Id}_seed{Conn.Seed} blocked={ProjectileGrid.Blocks(Conn.Layout.Id, Conn.Seed, x, y)?.ToString() ?? "unknown"}");
