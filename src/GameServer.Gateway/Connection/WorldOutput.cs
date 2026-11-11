@@ -178,6 +178,14 @@ public sealed class WorldOutput
     {
         lock (sync) return Published(target) && !target.RemovalRequested;
     }
+
+    /// <summary>Whether this connection's output already holds an incarnation of <paramref name="id"/> (any state): a producer
+    /// that only has to show an object checks this first instead of creating a second one (the ground items one
+    /// <c>SendGroundItems</c> and the start weapon both put down).</summary>
+    public bool Contains(uint id)
+    {
+        lock (sync) return objects.ContainsKey(id);
+    }
     bool Published(WorldObject target) => !closed && ReferenceEquals(target.Owner, this)
         && target.State == WorldObject.BirthState.Ready;
 
@@ -275,6 +283,7 @@ public sealed class WorldOutput
                 || !(leaving.State == WorldObject.BirthState.Retired || leaving.RemovalRequested || !repeated.Add(leaving))).ToArray();
             var precedingCreates = new HashSet<WorldObject>();
             var removing = new HashSet<WorldObject>();
+            var repeats = new List<WorldObject>();
             foreach (var record in records)
             {
                 if (record.Object is not { } target) continue;
@@ -293,7 +302,15 @@ public sealed class WorldOutput
                 else if (record.Kind is OutputRecord.RecordKind.AfterBirth or OutputRecord.RecordKind.Remove)
                 {
                     if (!Published(target) && !precedingCreates.Contains(target) && target.State != WorldObject.BirthState.Admitted)
-                        throw new ArgumentException("Prepared output needs an admitted or preceding birth.");
+                    {
+                        // A presentation or removal for an incarnation this connection never showed (its birth was prepared
+                        // by another producer and never admitted, or a view noticed it before the birth): dropping that one
+                        // record keeps the rest of the batch - and every later tick - working, where refusing the batch
+                        // made "player updates failed" repeat and never delivered anything more to the client
+                        // (live 2026-11-11, The Riverways: 569 monsters created, then the ground view's batch refused).
+                        repeats.Add(target);
+                        continue;
+                    }
                     if (record.Kind == OutputRecord.RecordKind.Remove)
                     {
                         // 142183ce0's tail follows object ticks. All 5,153 coastw1/ret2 removals use it;
@@ -304,6 +321,8 @@ public sealed class WorldOutput
                     }
                 }
             }
+            if (repeats.Count > 0)
+                records = [.. records.Where(r => r.Object is null || !repeats.Contains(r.Object))];
             foreach (var birth in births) { birth.State = WorldObject.BirthState.Admitted; birth.CreationFrame = framed ? number : null; }
             foreach (var target in removing) { target.RemovalRequested = true; target.Invalidated.TrySetResult(false); }
             List<Packet> immediate = [];

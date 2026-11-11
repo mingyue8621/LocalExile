@@ -620,6 +620,10 @@ public static partial class Game
             bool seen;
             lock (conn.SeenGround) seen = !conn.SeenGround.Add(id);
             if (seen) continue;
+            // Another producer already created it for this connection (the start weapon, a drop): a second create is
+            // refused by the world, and the refusal is what left the ground view's next batch stuck (Player.Resurrect /
+            // SharedGround.cs).
+            if (conn.WorldOutput.Contains(id)) continue;
             await SendWorldCreate(remote, stream, ciphers, conn, id, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(WorldItemObject.MetadataPath), ground.Blob()),
                 $"0x02bb create world item 0x{id:x} left at ({ground.GridX}, {ground.GridY})");
             await SendWorldRecord(remote, stream, ciphers, conn, id, InstanceProtocol.EnterWakeZone(id), null);
@@ -725,6 +729,9 @@ public static partial class Game
         var ground = new WorldItemObject(x, y, weapon);
         // Put here on an earlier connection: SendGroundItems has sent it already, if it still lies here.
         if (conn.Instance.PlaceStartWeapon(CharacterName(conn), ground) is not { } id) return;
+        // SendGroundItems shows it as any other item on the next area entry: mark it seen here so the two do not both
+        // create 0x100000 for this connection (live 2026-11-11: "create 0x100000 refused ... still Ready", twice).
+        lock (conn.SeenGround) conn.SeenGround.Add(id);
         await SendWorldCreate(remote, stream, ciphers, conn, id, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(WorldItemObject.MetadataPath), ground.Blob()),
             $"0x02bb create world item 0x{id:x} start weapon {ItemsFor(conn).ByHash(weapon.TypeHash)?.Name} at ({x}, {y}), spawn ({conn.Layout.SpawnX}, {conn.Layout.SpawnY})");
         await SendWorldRecord(remote, stream, ciphers, conn, id, InstanceProtocol.EnterWakeZone(id), null);
