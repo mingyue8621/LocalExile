@@ -1,4 +1,4 @@
-using System.Net.Sockets;
+﻿using System.Net.Sockets;
 using GameServer.Core.Protocol.Instance;
 using GameServer.Core.Protocol.Login;
 using DamagePacket = GameServer.Core.World.DamagePacket;
@@ -53,7 +53,7 @@ public static partial class Game
             // warcry may not use a corpse that an explosion already took.
             corpse.CorpseConsumed = true;
             conn.Monsters.Remove(corpseId);
-            effect = conn.NextObjectId++;
+            effect = conn.TakeObjectId();
         }
         Console.WriteLine($"[gateway] {remote} kill explosion 0x{corpseId:x} for {amount} physical within {radius} cells:" +
             $" {hits.Count} hit, {hits.Count(h => h.Hit.Life == 0)} killed");

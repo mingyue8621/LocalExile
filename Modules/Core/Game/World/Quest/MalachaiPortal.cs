@@ -1,4 +1,4 @@
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 using GameServer.Core.Protocol.Instance;
 using GameServer.Core.Protocol.Login;
 using GameServer.Core.World;
@@ -313,7 +313,7 @@ static partial class Game
     {
         var to = (X: conn.Layout.SpawnX, Y: conn.Layout.SpawnY);
         if (Dist(to, at) < 8) to = (at.X + 6, at.Y);
-        uint id = conn.NextObjectId++;
+        uint id = conn.TakeObjectId();
         // An AreaTransition object with the death portal's rig: the layout's own gate blob, which the client draws and
         // the area's transition handling moves the player through.
         var portal = new AreaTransitionObject(at.X, at.Y, conn.Layout.Hash, Model: MalachaiPortalRig) { TeleportTo = to };

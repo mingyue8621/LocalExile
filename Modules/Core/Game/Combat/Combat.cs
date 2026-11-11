@@ -1,4 +1,4 @@
-using System.Net.Sockets;
+﻿using System.Net.Sockets;
 using GameServer.Core.Protocol.Instance;
 using GameServer.Core.Protocol.Login;
 using WalkEstimator = GameServer.Core.World.WalkEstimator;
@@ -1075,7 +1075,7 @@ public static partial class Game
                     SupportEffectPct: supportEffect, AffectsSelf: affectsSelf, Stance: stance,
                     ReservesLife: context.Life, ReservationEfficiencyPct: context.Efficiency,
                     // A banner plants its own ground effect where the player stands (AuraCatalog.BannerAo).
-                    BannerObject: AuraCatalog.BannerAo(effectId) is null ? 0 : conn.NextObjectId++);
+                    BannerObject: AuraCatalog.BannerAo(effectId) is null ? 0 : conn.TakeObjectId());
                 if (aura.BannerObject != 0)
                     bannerAt = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
                 conn.Auras[skillId] = aura;

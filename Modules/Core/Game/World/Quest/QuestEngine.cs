@@ -1,4 +1,4 @@
-using System.Net.Sockets;
+﻿using System.Net.Sockets;
 using System.Text.Json;
 using GameServer.Core.Protocol.Instance;
 using GameServer.Core.Protocol.Login;
@@ -435,7 +435,7 @@ public static partial class Game
             return;
         }
         if (rule.GoneWhenTransitioned && QuestObjectTransitioned(conn, rule)) return;
-        uint id = conn.NextObjectId++;
+        uint id = conn.TakeObjectId();
         lock (conn.QuestObjects) conn.QuestObjects[id] = (rule, at, info);
         if (info.Blocking) conn.SetBlocker(id, at.X, at.Y, info.Size);
         await SendWorldCreate(remote, stream, ciphers, conn, id, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(rule.ObjectType), QuestObjectBlob(conn, rule, at, info)),
@@ -566,7 +566,7 @@ public static partial class Game
             }
             if (info.Components.Contains("TriggerableBlockage"))
             {
-                uint next = conn.NextObjectId++;
+                uint next = conn.TakeObjectId();
                 lock (conn.QuestObjects) { conn.QuestObjects.Remove(id); conn.QuestObjects[next] = (rule, at, info); }
                 await Game.SendWorldRemoval(remote, stream, ciphers, conn, id, null);
                 await SendWorldCreate(remote, stream, ciphers, conn, next, InstanceEntities.CreateObject(next, InstanceEntities.ObjectTypeHash(rule.ObjectType), QuestObjectBlob(conn, rule, at, info)),
@@ -654,7 +654,7 @@ public static partial class Game
         foreach (var (id, rule, at) in chests)
         {
             if (hidden.Contains(id) || !QuestMarkerCollected(conn, rule.Item, carried)) continue;
-            uint next = conn.NextObjectId++;
+            uint next = conn.TakeObjectId();
             lock (conn.QuestChests) { conn.QuestChests.Remove(id); conn.QuestChests[next] = (rule, at); }
             conn.RemoveBlocker(id);
             conn.SetBlocker(next, at.X, at.Y, QuestChestSize);
@@ -668,7 +668,7 @@ public static partial class Game
         foreach (var (id, nest) in nests)
         {
             if (hidden.Contains(id) || !QuestMarkerCollected(conn, GlyphQuest.Glyphs[nest.Glyph], carried)) continue;
-            uint next = conn.NextObjectId++;
+            uint next = conn.TakeObjectId();
             lock (conn.GlyphNests) { conn.GlyphNests.Remove(id); conn.GlyphNests[next] = nest; }
             conn.RemoveBlocker(id);
             conn.SetBlocker(next, nest.At.X, nest.At.Y, GlyphQuest.NestSize);
@@ -684,7 +684,7 @@ public static partial class Game
     public static async Task CreateQuestChest(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, Quests.ChestRule rule, GlyphQuest.Placement at)
     {
         bool opened = conn.Instance.ChestOpened(at.X, at.Y);
-        uint id = conn.NextObjectId++;
+        uint id = conn.TakeObjectId();
         lock (conn.QuestChests) conn.QuestChests[id] = (rule, at);
         conn.SetBlocker(id, at.X, at.Y, QuestChestSize);
         await SendWorldCreate(remote, stream, ciphers, conn, id, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(rule.ChestType), QuestChestBlob(conn, rule, at, opened)),
@@ -717,7 +717,7 @@ public static partial class Game
             await SendWorldRecord(remote, stream, ciphers, conn, PlayerId, InstanceProtocol.ActionEnded(PlayerId), null);
             return;
         }
-        uint opened = conn.NextObjectId++;
+        uint opened = conn.TakeObjectId();
         lock (conn.QuestChests) { conn.QuestChests.Remove(use.TargetId); conn.QuestChests[opened] = (rule, at); }
         conn.RemoveBlocker(use.TargetId);
         conn.SetBlocker(opened, at.X, at.Y, QuestChestSize);

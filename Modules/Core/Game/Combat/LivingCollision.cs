@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Net.Sockets;
 using GameServer.Core.Diagnostics;
 using GameServer.Core.Protocol.Instance;
@@ -251,7 +251,7 @@ public static partial class Game
                     if (Progression.LevelFor(peer.Template.Experience, CharacterStats.LevelStarts)
                         > Progression.LevelFor(previous.Template.Experience, CharacterStats.LevelStarts))
                     {
-                        uint effect = conn.NextObjectId++;
+                        uint effect = conn.TakeObjectId();
                         conn.TemporarySkillEffects[effect] = AreaTime(conn) + 3;
                         packets.Create(effect, InstanceEntities.CreateObject(effect, InstanceEntities.ObjectTypeHash(EffectObject.TypePath),
                             new EffectObject(peer.X, peer.Y, "Metadata/Effects/misc/levelup_new/rig.ao")

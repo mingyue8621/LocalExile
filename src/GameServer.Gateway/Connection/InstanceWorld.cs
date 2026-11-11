@@ -24,6 +24,14 @@ public sealed class InstanceWorld
     /// order (ascending ids: LivingCollision.StepFrames) is kept.</summary>
     public uint NextObjectId = 0x04000000;
 
+    /// <summary>The next id for a server object of this instance, taken atomically. Producers on different threads each
+    /// need one of their own: the projectile pump spawns a volley's arrows while the connection's own thread casts, and a
+    /// bot in the same instance does too. "NextObjectId++" reads this shared counter and writes it back without a lock, so
+    /// two of them read one value and built two objects with one id; the world output then refuses the second ("World
+    /// object ID is still reserved or published") and the connection closes (live 2026-11-11, Lightning Arrow in a fight).
+    /// Monsters already allocate this way (NewMonsterId).</summary>
+    public uint TakeObjectId() => Interlocked.Increment(ref NextObjectId) - 1;
+
     /// <summary>Buff instances (S→C 0x1c1) of everyone in the instance (ClientState.NextBuff).</summary>
     public ushort NextBuff = 1;
 
