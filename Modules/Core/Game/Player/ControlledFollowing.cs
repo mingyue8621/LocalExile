@@ -48,11 +48,14 @@ public static partial class Game
         var destination = leader.Walk.Destination;
         double dx = destination.X - origin.X, dy = destination.Y - origin.Y;
         bool moving = leader.Walk.Moving(now) && (dx != 0 || dy != 0);
+        // A destination the player has not reached still says which way they were walking, so a stopped player keeps the
+        // formation behind them instead of letting the followers drift round to the front.
+        bool heading = moving || dx != 0 || dy != 0;
         // Which way the formation lies: backwards along a walk, away from the doorway it followed the leader through, and
         // otherwise the side it already stands on — a follower keeps its side of the leader instead of circling him.
         var here = conn.Walk.Position(now);
         double outward = Math.Atan2(here.Y - origin.Y, here.X - origin.X);
-        if (moving) outward = Math.Atan2(dy, dx) + Math.PI;
+        if (heading) outward = Math.Atan2(dy, dx) + Math.PI;
         else if (arrival)
         {
             var entry = conn.Layout.AreaTransitions.Select(p => p.Transition)
@@ -67,19 +70,25 @@ public static partial class Game
             if (!moving || length < 1) return false;
             double ux = dx / length, uy = dy / length, ax = x - origin.X, ay = y - origin.Y;
             double along = ax * ux + ay * uy;
-            return along > -3 && along < 26 && Math.Abs(ay * ux - ax * uy) < 5;
+            // A cell inside the corridor the leader is walking down is a body its own pathfinder has to go round. The lane
+            // is wider and longer than the leader is: a follower at its edge still reads as standing in the way.
+            return along > -4 && along < 30 && Math.Abs(ay * ux - ax * uy) < 7;
         }
         // Try the trail first, then either side of a narrow passage. Bodies are live inputs.
         double side = (conn.PeerId % 5 - 2.0) * .3;
         // Each bot prefers its own rank in the trail, so three of them walk at three distances instead of shoulder to
         // shoulder: the queue behind a player is a column, not a rank.
         int rank = (int)(conn.PeerId % 3);
-        int[] radii = moving ? [9, 13, 17] : [7, 11, 15];
+        // Far enough that a body is never under the player's feet: a follower at 7 cells is in the way the moment the
+        // player sets off, and in a doorway there is no room to walk round one. The distances still form a column.
+        int[] radii = moving ? [12, 16, 20] : [14, 18, 22];
         var bodies = conn.Blockers;
         bool Floor(int x, int y) => x >= 0 && y >= 0 && x < conn.Layout.GridW && y < conn.Layout.GridH
             && conn.Layout.WalkableFor(x, y, 2) && !conn.Barrier.Contains((x, y));
         foreach (int radius in radii.Skip(rank).Concat(radii.Take(rank)))
-            foreach (double turn in new[] { 0.0, .45, -.45, .9, -.9, 1.4, -1.4 })
+            // Behind the leader, never round at their side or in front: 0.8 rad is the widest a queue may fan out, or one
+            // of them ends up where the player is about to walk.
+            foreach (double turn in new[] { 0.0, .45, -.45, .8, -.8 })
             {
                 double angle = outward + side + turn;
                 var at = (X: origin.X + (int)Math.Round(Math.Cos(angle) * radius),
@@ -204,17 +213,24 @@ public static partial class Game
         var bodies = conn.Blockers;
         bool Floor(int x, int y) => x >= 0 && y >= 0 && x < conn.Layout.GridW && y < conn.Layout.GridH
             && conn.Layout.WalkableFor(x, y, 2) && !conn.Barrier.Contains((x, y));
+        var at0 = leader.Walk.Position(now);
+        var destination = leader.Walk.Destination;
+        double bx = destination.X - at0.X, by = destination.Y - at0.Y;
+        // Behind the player, along their last heading: an idle follower that wanders round to the front is the one that
+        // blocks a doorway the moment the player walks on.
+        double behind = bx != 0 || by != 0 ? Math.Atan2(by, bx) + Math.PI : Math.Atan2(here.Y - at0.Y, here.X - at0.X);
         for (int trial = 0; trial < 8; trial++)
         {
-            double angle = (seed % 360) * Math.PI / 180 + trial * Math.PI / 4;
-            int radius = 3 + (int)(seed % 5);
-            var at = (X: here.X + (int)Math.Round(Math.Cos(angle) * radius),
-                Y: here.Y + (int)Math.Round(Math.Sin(angle) * radius));
-            if (Dist(at, leader.Walk.Position(now)) > ControlledFollowerLeash || !Floor(at.X, at.Y)
+            double angle = behind + (trial - 3.5) * .35;
+            int radius = 12 + (int)((seed + (uint)trial * 7919u) % 9);
+            // Measured from the player, not from the bot's own feet: the point it walks to is a place behind the player.
+            var at = (X: at0.X + (int)Math.Round(Math.Cos(angle) * radius),
+                Y: at0.Y + (int)Math.Round(Math.Sin(angle) * radius));
+            if (Dist(at, at0) > ControlledFollowerLeash || !Floor(at.X, at.Y)
                 || ClientPathfinder.ObjectBlocks(bodies, at.X, at.Y, 3, 6)) continue;
-            // Never shuffle onto the player's own cell: a follower standing shoulder to shoulder is in the way the moment
+            // Never shuffle onto the player's own cell or beside it: a follower at arm's length is in the way the moment
             // the player turns.
-            if (Dist(at, leader.Walk.Position(now)) < 6) continue;
+            if (Dist(at, at0) < 12) continue;
             var path = ClientPathfinder.FindPath(here, at, Floor, conn.Layout.GridW, conn.Layout.GridH, bodies, 2);
             if (path.Count < 2 || path[^1] != at) continue;
             // Rounded path cells can briefly leave the circle even with both endpoints inside it.
