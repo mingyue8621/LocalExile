@@ -29,6 +29,13 @@
 - 没有永恒珠宝（军团）的种子、替换天赋树或核心天赋替换。
 - 深渊珠宝属于物品上的深渊插孔，不在本页范围内。
 - 集群珠宝（扩展插孔、代理天赋与显著天赋）是另一个 PR。
+- No unique item definitions (name, base type, visual identity, mod list, variants) and no `/item`/drop/vendor path.
+- No conditional-stat engine: today every non-local mod is applied unconditionally, so "if you have", "recently",
+  "on kill", per-charge and threshold mods would be wrong.
+- No passive-tree radius model, so "in Radius" jewels, threshold jewels and node-modifying jewels are not modelled.
+- No timeless-jewel (Legion) seed, alternate tree or keystone substitution.
+- Abyss jewels belong in abyss sockets on items and are a separate feature (see the items status).
+- Cluster jewels (expansion sockets, proxy passives and notables) are a separate PR.
 
 ## 计划
 
@@ -112,6 +119,58 @@
 - **顺序：** 按技能限定作用域的阈值消费者 -> Lioneye's Fall 的标记层 -> 其余特殊机制。
 - 完成标准：每组都在一棵小的合成天赋树上有测试，开发命令生成的珠宝只改变预期的节点，全局词缀仍然生效，
   移除珠宝后回到基线。
+- **Radius model:** `PassiveJewelRadii.dat` gives Small 800, Medium 1200, Large 1500, VeryLarge 2000 and Massive 2400,
+  with the matching ring inner/outer values. `PassiveTree.NodesInRadius` already handles the timeless disc; add
+  `NodesInRing` for Thread of Hope. Reuse the timeless exclusions and skip conquered nodes.
+- **Mechanism groups:** 6 attribute conversions, 6 damage/defence/weapon conversions, 3 notable replacements, 10 passive
+  additions, 33 threshold/skill jewels, 11 per-node scaling jewels, 3 allocation/tree rules, 1 passive-effect/notable-
+  suppression jewel and 5 special/global-only jewels.
+- **Reuse from timeless:** the `nodeStats` override pattern in `EquipmentStatSources`, the TinyMT32-independent
+  per-node stat replacement, the `PassiveTree` geometry (`NodesInRadius`/`NodesInRing`), the passive-jewel
+  socket/refusal path and the item-art table.
+- **Missing layers:** skill-scoped threshold consumers; Lioneye's Fall's conditional modifiers without a mapped bow
+  stat; special mechanics (corpse destruction).
+- **Wiki gap check (2026-10-29):** of the poewiki names this catalogue lacked, Bound By Destiny, Megalomaniac,
+  Sublime Vision, The Balance of Terror and Watcher's Eye now have item generation (their encounter drop rates and
+  conditional-stat consumers are partial); Forbidden Flame and Forbidden Flesh still have no item source.
+- **Generated specials:** Impossible Escape (`/impossible_escape`, 48 keystone variants) is implemented with the
+  keystone-radius allocation bypass; Rational Doctrine's `/unique_jewel` source and its stationary consecrated /
+  critical-strike profane ground mechanics are implemented (see [status](../status/progression.md)).
+- **Pilot done (42 rows with server effects; 33 threshold and Lioneye's Fall item sources generated):**
+  `RadiusJewelCatalogue`,
+  `ThresholdJewelCatalogue`, `/radius_jewel`, the 1500/1200/800 disc and Thread of Hope ring
+  queries, the six attribute conversions, the five damage/defence conversions (Cold Steel, Fireborn, Energy From
+  Within, Healthy Mind, Energised Armour), the three notable replacements (Fevered Mind, Fortress Covenant, Quickening
+  Covenant), the ten passive additions (Coated Shrapnel, Martial Artistry, the Dreams/Nightmares, The Light of Meaning,
+  The Perandus Pact), the eleven per-node scaling jewels (Anatomical/Eldritch Knowledge, Pugilist, Spire of Stone,
+  Static Electricity and the Tempered/Transcendent trios, with allocated/unallocated counts and PoB `getPerStat`
+  floors), Might of the Meek (50% effect on non-keystone passives, notables suppressed), Intuitive Leap/Thread of Hope
+  (allocation bypass, ring variants, removal refusal) and Unnatural Instinct (allocated smalls suppressed, unallocated
+  smalls granted). The cluster-socket refusal, the item limits and the live checks pass (Strength -10 / Intelligence
+  +34; life 5857 -> 5311 and ES 243 -> 273 with Energy From Within; life 5311 -> 5355 with The Light of Meaning
+  (Life); in the full layout Anatomical is worth +165 at socket 11 (5520 with it, 5355 without), with socket 11's 20
+  Int contributing `floor(20 / 3) = 6` flat life on top of its global life%; Might of the Meek at cell 3 changed life
+  5520 -> 5529 and mana 2345 -> 2375, and uncapped attack/spell block 168%/27% -> 162%/20% as the Dark Arts notable
+  was suppressed; Intuitive Leap accepted disconnected node 55247 (life 5520 -> 5575) and the allocation survived a
+  relog, and in cell 1 it refused the outside neighbour 53802 (no bridging); Thread of Hope uses the PoB 3_16 rings
+  960-1320 / 1320-1680 / 1680-2040 / 2040-2400 / 2400-2880, does not enable jewel sockets, and its -10% all-res roll
+  changed `/resistances` 268/221/221 -> 258/211/211; its ring value is implicit and the base radius 0 so the client
+  draws the annulus. Massive accepted 23507 (2628) and 48477 (523 allocated), and after refunding them Large accepted
+  38129 (1808); swapping the item while those bypass nodes remained was refused. Might in All Forms in cell 1 changed
+  the `passive jewel stats` melee value 129 -> 137 (+8 = 40 Dex+Int in radius / 5) while Brute Force was in the
+  inventory; restoring Brute Force returned it to 127. Pitch Darkness and Sudden Ignition are created as global item
+  sources; their Fire Damage stats apply, and Sudden Ignition's corpse-destruction stat is currently unread. The 33
+  threshold items are generated from PoB by `scripts/re/threshold_jewels.py`; `ThresholdJewels` sums every ordinary
+  passive in radius and adds the mapped stats when the attribute total is met. Live: `Combat Focus Cobalt` in socket
+  36634 logged `elemental_hit_cannot_roll_fire_damage 1` (60 Int); `Collateral Damage` in socket 60735 logged
+  `galvanic_arrow_area_damage_+% 50` and `shrapnel_shot_radius_+% 25` (60 Dex); `Spirited Response` in a spare socket
+  changed mana 2355 -> 2476 from its 10% maximum mana global. Skill-specific consumers remain partial. Unnatural
+  Instinct changed life 5520 -> 5685, mana 2355 -> 2326 and ES 277 -> 285). Lioneye's Fall converts melee and
+  melee-weapon stats in its radius to their bow equivalents; conditional modifiers without a mapped bow stat remain.
+- **Order:** skill-specific threshold consumers -> Lioneye's Fall's unmapped conditional modifiers -> the remaining
+  special mechanics.
+- Done when each group has tests on a small synthetic tree, a dev-created jewel changes only the intended nodes, the
+  global mods still apply, and removing the jewel restores the baseline.
 
 ### 5. 永恒珠宝（目录里 6 个；节点转换已完成）
 
@@ -133,6 +192,12 @@
   [status/progression.md](../status/progression.md)）：物品、按大小嵌套、客户端自身节点 id 的分配与主题/显著天赋属性
   已完成；id 到节点的映射（部分已分配的集群）、核心天赋、半径规则与商人配方尚未完成。
   参考与测量见 [cluster-jewels](../docs/game/cluster-jewels.md)。
+- **Abyss jewels (9):** they fit allocated passive sockets and equipment Abyss sockets (items status); only the
+  Stygian Vise rolls its Abyss socket so far, and the Gaze and Historic effects need their own consumers.
+- **Cluster jewels (8):** the separate cluster-jewel change (in progress, see
+  [status/progression.md](../status/progression.md)): the item, nesting by size, allocation of the client's own node ids
+  and the theme/notable stats are in; the id-to-node mapping (partly allocated clusters), the keystones, the radius rules
+  and the vendor recipe are not. Reference and measurements: [cluster-jewels](../docs/game/cluster-jewels.md).
 
 ## 建议顺序与验收
 

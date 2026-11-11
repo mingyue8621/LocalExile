@@ -110,7 +110,8 @@
   catalogue is 10%. The per-jewel table is in [unique-jewels](../docs/game/unique-jewels.md).
   Code: `PassiveTree.JewelNodeForSlot`, Gateway (`PlaceItem`, `HeldOntoItem`, `PickUpItem`, `CharacterStatSources`).
   Docs: [15](../docs/protocol/15-progression.md) §2a, [unique-jewels](../docs/game/unique-jewels.md).
-- Cluster jewels (server and live client check 2026-10-27): `/cluster_jewel <small|medium|large> [passives] [sockets]
+- The seven single-keystone small cluster jewels grant their native keystone stat on allocation. Their individual
+  combat mechanics remain partial. For ordinary clusters, `/cluster_jewel <small|medium|large> [passives] [sockets]
   [theme] [notables…]` and `/voices [1|3|5|7]` make real items, and nesting follows the size rule (a tree socket takes any
   size, a large jewel's sockets medium/small, a medium one's socket small). Their passives are the client's own
   expansion ids (block base fixed per pane cell, e.g. 195..206 for cell 20); the server keeps them in the third list of
@@ -210,6 +211,93 @@
   Forbidden Flame/Flesh、Megalomaniac、Sublime Vision、The Balance of Terror 与 Watcher's Eye 未实现；它们记录在
   [unique-jewels](../docs/game/unique-jewels.md) 里且没有物品来源。Impossible Escape 与 Rational Doctrine
   是这里补上的两处缺口。
+- Timeless jewels roll a faction seed and current conqueror in ordinary unique generation.
+  `/timeless <name> [displayed seed] [conqueror]` creates the six unique jewels with the client's `UniqueJewelAlternateTreeInRadius*` mod. The client itself draws the
+  conquered radius from those stats; the server reproduces the same alternate tree with the TinyMT32 generator, the
+  `AlternateTreeVersions` flags, `AlternatePassiveSkills` and `AlternatePassiveAdditions`, and applies replacement or
+  added stats to allocated ordinary nodes in the fixed 0..1500 radius. The RNG and generated values match Path of
+  Building's LUTs (Vaal small 62429/seed 2000: Aura Effect 3; notable 37326: Cult of Fire, 30 fire resistance and 1
+  maximum) and the live client log confirms the alternate tree version, seed and conqueror. `Elegant Hubris` stores its
+  displayed seed divided by 20; only current conquerors are offered; only one Historic timeless jewel may be socketed;
+  cluster sockets are refused. Militant Faith also carries two distinct current per-10-Devotion mods (the pre-3.29.0
+  reduced Mana Cost row is legacy and not rolled); `DevotionStats` scales them by `floor(Devotion / 10)` into the normal
+  stats, so resistance/damage/aura/regen/ailment targets are applied while curse duration, minion/totem/brand/channelled,
+  mana cost and shield defences remain unread. The generated list covers the 96 timeless additions, including the four
+  rows missing from Path of Building's reference data.
+  Keystone stat rows are applied, but the conqueror keystones' special gameplay mechanics (Divine Flesh, Chainbreaker and
+  the rest) are still missing.
+  Code: `TimelessJewelCatalog.cs`, `TimelessJewelEngine.cs`, `PassiveTree` geometry/radius, `Program.Progression.cs`
+  (`EquipmentStatSources`), `Program.Items.cs` (`PassiveJewelRefusal`). Docs:
+  [timeless-jewels](../docs/game/timeless-jewels.md).
+
+- Radius unique jewels (pilot 2026-10-29): all **78 rows / 76 distinct names** with a `Radius:` line are classified in
+  [radius-jewels](../docs/game/radius-jewels.md) and the generated
+  [radius-jewel-list](../docs/game/radius-jewel-list.md): 6 attribute conversions, 6 damage/defence/weapon
+  conversions, 3 notable replacements, 10 passive additions, 33 threshold/skill jewels, 11 per-node scaling, 3
+  allocation/tree rules, 1 passive-effect/notable-suppression, 5 special/global-only. **The 42 implemented jewels
+  (39 pilot rows plus Might in All Forms, Pitch Darkness and Sudden Ignition):** `/radius_jewel <name> [variant]`
+  creates the six attribute conversions, five damage/defence conversions, three notable replacements, ten passive
+  additions, eleven per-node scaling jewels
+  (Anatomical Knowledge, Eldritch Knowledge, Pugilist, Spire of Stone, Static Electricity, the Tempered/Transcendent
+  trios), Might of the Meek and the three allocation/tree-rule jewels (Intuitive Leap, Thread of Hope's five ring
+  variants, Unnatural Instinct).
+  `EquipmentStatSources` moves/transforms the matching stats, replaces allocated notables, appends the passive
+  additions (including the resistance-scaled Breach jewels), selects the Light/Perandus variant, computes the per-node
+  scaling from allocated and unallocated attributes, applies Might of the Meek's 50% non-keystone effect with notables
+  suppressed, and swaps Unnatural Instinct's allocated and unallocated small passives. `OrdinaryPassiveRules` treats
+  Intuitive Leap/Thread of Hope bypass nodes as extra roots; `PassiveTree.NodesInRing` selects the Thread of Hope ring,
+  and taking either jewel out is refused while a bypass-allocated node remains. Live: Brute Force in socket 1 changed
+  Strength 559 -> 549 and Intelligence 647 -> 681; Energy From Within in socket 16 changed life 5857 -> 5311 and ES
+  243 -> 273; The Light of Meaning (Life) in socket 12 changed life 5311 -> 5355; in the full demo layout (Brute Force
+  socket 1, Anatomical socket 11, Fevered Mind socket 13, Light socket 12, Energy From Within socket 16) Anatomical is
+  worth +165 (life 5520 with it, 5355 without), and the same layout reads mana 2345 and ES 276 (mana 2355/ES 277 after
+  the later relog). Socket 11 has 20 Int, so `floor(20 / 3) = 6` flat life is part of that total; socket 13 has no
+  Intelligence and in the earlier isolated check only the global life% applied (5355 -> 5502). Might of the Meek in cell
+  3 changed life 5520 -> 5529 and mana 2345 -> 2375 from the 50% effect on the Intelligence/Strength smalls; uncapped
+  attack/spell block moved 168%/27% -> 162%/20% as the Dark Arts notable was suppressed (partly offset by the scaled
+  dual-wield block smalls). Intuitive Leap in cell 3 accepted disconnected node 55247, life went 5520 -> 5575 and the
+  allocation survived a relog; in cell 1 it accepted 42981 but refused its neighbour 53802 outside the disc (no
+  bridging). Thread of Hope uses the PoB 3_16 Variable rings 960-1320, 1320-1680, 1680-2040, 2040-2400 and 2400-2880,
+  does not enable jewel sockets in the ring, and its -10% all-res roll changed `/resistances` 268/221/221 ->
+  258/211/211; its ring value is implicit and the allocate mod's base radius is 0 so the client draws the annulus
+  instead of a filled disc. Massive in cell 3 accepted 23507 (2628) and 48477 (523 allocated); after refunding them the
+  Large item accepted 38129 (1808); swapping the jewel while those bypass nodes remained was refused. Might in All
+  Forms in cell 1 changed the `passive jewel stats` melee value 129 -> 137 (+8 = 40 Dex+Int in radius / 5) while Brute
+  Force was in the inventory; restoring Brute Force returned it to 127 (the conversion changes the baseline). Cluster
+  passives are never in a radius jewel's radius: Path of Building precomputes `nodesInRadius` before its cluster graphs
+  are built, so the server's ordinary-PSG-only radius is intentional. The 33 threshold jewels have generated item
+  sources (`scripts/re/threshold_jewels.py`, `ThresholdJewelCatalogue.cs`); the client applies their local threshold
+  mods. Current Dead Reckoning gives skeleton hits flat chaos from the equipped shield's local energy shield without
+  an attribute threshold. `ThresholdJewels.cs` parses the target/attribute mask, sums every ordinary passive in radius (allocated or
+  not, PoB's `Threshold` pass) and adds the mapped stat when the total is met. Live: `Combat Focus Cobalt` in socket
+  36634 logged `elemental_hit_cannot_roll_fire_damage 1` (60 Int); `Collateral Damage` in socket 60735 logged
+  `galvanic_arrow_area_damage_+% 50` and `shrapnel_shot_radius_+% 25` (60 Dex); `Spirited Response` in socket 6
+  (cell 8) changed mana 2355 -> 2476 from its 10% maximum mana global. The skill-specific consumers remain partial and
+  targets without a client stat row are skipped. Unnatural Instinct in cell 3 changed life 5520 -> 5685, mana
+  2355 -> 2326 and ES 277 -> 285 from three allocated Int smalls and three unallocated Life/ES smalls. Lioneye's Fall's
+  radius now converts melee and melee-weapon stats with native bow equivalents, including physical damage, attack
+  speed and critical modifiers. Conditional modifiers without a mapped bow stat still need individual consumers.
+  Warrior's Tale scales tattoo stats within its socket radius. Grand Spectrum rolls one of three current variants
+  per base and scales by the total equipped across bases (limit three). Inspired Learning's rare-mod steal and the
+  skill-specific threshold consumers remain partial. The socket/save path,
+  `PassiveTree.NodesInRadius`/`NodesInRing`, the timeless per-node pattern and the art table are reused. The radius
+  suite has 98 tests.
+
+- Impossible Escape (generated special): `/impossible_escape <keystone>|list` creates the 48-variant Viridian Jewel
+  (Small, limit 1, corrupted). The item mod stores the keystone's `PassiveSkillGraphId` and display base radius 800;
+  the effect radius is Path of Building 3_16's Small **960**. Legacy items with the Maven table row are migrated on
+  load. The allocated socket grants disconnected passives around the named keystone, excluding the keystone itself.
+  A live Witch allocated Dire Torment (9015) without taking Supreme Ego (49639). Earlier client checks also placed
+  Replenishing Remedies (50690) within the ring and refused pickup while a disconnected node depended on the jewel. Rational Doctrine (`/unique_jewel`) creates
+  consecrated ground while stationary with Strength highest and profane ground on a critical strike with Intelligence
+  highest; both effects linger for 4 seconds, and hits against enemies on profane ground have 100% increased critical
+  chance. The profane-ground debuff and its critical-chance consumer have automated coverage. Live 2026-11-01 (the
+  item's stats set through `/set_stat`): a critical strike created the profane ground art, applied buff 1569, and
+  removed it after the linger.
+
+- Watcher's Eye, Bound By Destiny, Sublime Vision, The Balance of Terror and Megalomaniac have named item generation.
+  Their encounter drop rates and individual conditional-stat consumers are partial. Megalomaniac adds three distinct
+  notables and an empty small passive. Forbidden Flame and Forbidden Flesh still lack a mainline source.
 
 - 基于命令的普通升华选择、独立的点数发放、连通的分配、付费退点与保存。
   一次原生的决斗者/屠杀者冒烟核对过普通节点、升华分配/退点与两个点数预算。
@@ -364,6 +452,123 @@
   自动化配置测试覆盖有效的实机改动，以及在非法输入后保留最后一个有效快照。
   原生天赋替代项与复利等级公式有自动化覆盖。
   见 [赛季模式](../docs/game/league-modes.md)。
+- Hierophant: every ordinary node's stats apply except the Brand ones (no Brand executes), checked in the client
+  except the halved shock while Arcane Surge runs,
+  [node by node](../docs/game/hierophant.md).
+- Behemoth: the optional Phrecia module supplies its capability, verified-graph opt-in and mode-aware node sources.
+  Shared Rampage tiers and Vaal Ground Slam payment execute in Game with generation/source retirement guards.
+  Two deterministic Gateway regressions cover worker ownership and atomic attack/payment admission.
+  Bounded modular native checks cover choice/source, real hit/kill stacks, reload/re-entry, tier-15 dispatch/expiry,
+  paid refund and ordinary reload controls; historical whole-class evidence retains its original source scope.
+  Final exact-head full-suite, review and native receipt revisions/results are recorded in the PR.
+  Docs: [Behemoth consumers, legal builds and validation limits](../docs/game/behemoth.md).
+- Whisperer: the optional module supplies the actual Deadeye/Ranger descriptor and allocated node sources.
+  Generic Mana, spending, Recoup and shared Blind consumers run in Game with independent lifetime-owned state.
+  Two deterministic Gateway Facts cover actual admission, legal builds, paid refunds and resource/lifecycle composition,
+  including current-Game utility End automation and retained paid recovery across replacement.
+  Current-main local build, suites, independent review and bounded native checks cover the resource and reload paths.
+  Spatial forks, full Vaal/Rampage and the complete owned-minion matrix remain outside that acceptance.
+  Docs: [Whisperer consumers, legal builds and validation limits](../docs/game/whisperer.md).
+- Aristocrat: every node in its installed graph has a server consumer (gem levels and quality, attribute requirements,
+  conditional ailment immunity, lowest-attribute damage, granted passive points), with Gateway coverage of legal builds,
+  paid refunds and reload. Not yet checked with the real client: that needs the reviewed combined graph installed.
+  Docs: [Aristocrat checklist](../docs/game/aristocrat.md).
+- Ancestral Commander: the defensive nodes have server consumers (Armour and Life, Ancestral Endurance, Toughened
+  Skin's action/movement floors and doubled body armour, Ancestral Defiance), with Gateway coverage of legal builds,
+  the paid Ancestral Spirit choice refund and reload.
+  Call of the Ancestors speeds Enduring Cry's release and slows its one-use cooldown, which the record and the client
+  derive the same way; Deathrattle explodes and consumes the server's corpses and opens the quest chests at the release.
+  The explosion takes the player's global damage and conversion; Deathrattle is partial: no added damage, on-hit
+  effects or art, only Enduring Cry, and no chests beyond the quest ones.
+  Ancestral Reach's spirit strikes hit the monsters the client picks; Ancestral Echo strikes the previous location on
+  the server and sends the client the first location it needs to strike there too.
+  Neither acts for the Strike gems typed Projectile (Frost Blades, Lightning Strike, Molten Strike, Wild Strike and
+  their transfigured gems except Frost Blades of Katabasis): the server has no melee hit for them, though the client draws their spirit strikes.
+  Born under Fire converts nearby monsters' physical hits and puts its debuff on them.
+  Spirits of Kahuturoa, Utula and Kiloava trigger on a Unique's crit, Savage Hit or blocked hit, with the shared
+  cooldown and their Leadership buff (Kahuturoa's armour share and Kiloava's block recovery act; Utula's leech has no
+  leech to act on); each chieftain fights beside the player for the buff's duration, with its first skill only.
+  Server monsters have no base critical strike chance, so Kahuturoa triggers only on a Unique given an always-crit mod
+  through `/mob_mods`, never in normal play.
+  Forest of Ancestors' +1 totem and its 20% of hits from the nearest totem act on Rejuvenation Totems, the one totem
+  skill the server places; a totem killed while a Unique is near triggers Spirit of Kaom, whose Leadership adds 25%.
+  Not yet: Spirit of Rakiata (no Marks), monsters attacking totems and other totem skills.
+  `Game_VERIFIED_ANCESTRAL_COMMANDER=1` opts in; not yet checked with the real client.
+  Docs: [Ancestral Commander checklist](../docs/game/ancestral-commander.md).
+- Paladin: the nine small nodes (life regeneration, aura effect), Anointed Champion (consecrated ground while
+  stationary, its linger and 50% increased effect), the Paladin Aura options (granted level 30 Determination or Grace,
+  level 40 Discipline), Light of Divinity (nearby monsters take 25% increased elemental damage), Bring the Battle
+  (warcries taunt with infinite power; taunted monsters take 20% increased damage), Elemental Valiance (triggered
+  elemental relics that give their aura and explode, in Ruthless too), Absolution (40% aura effect while linked), Deep
+  Connections (links to the player's relics, +5 link gem levels) and Field Medicine (40% magic utility flask effect;
+  flasks on linked targets, whose movement speed a relic walks at) have server consumers, with Gateway coverage of
+  three legal builds, the Paladin Aura option swap, paid refunds and reload.
+  `Game_VERIFIED_PALADIN=1` opts in on the reviewed combined graph.
+  No consumer: curses, party allies, a death experience penalty, a linked minion's flask defences, and Bring the
+  Battle's less damage against other targets (monsters only hit the player).
+  Not applied: a linked minion's flask phasing, and flask damage on a relic's explosion (unverified).
+  Not yet checked with the real client. Docs: [Paladin checklist](../docs/game/paladin.md).
+- Polytheist: every node has a server consumer or a documented engine gap, with Gateway coverage of three legal
+  builds, paid refunds and reload.
+  The twelve small nodes (defences; light radius, which the client applies), Devout of the Brine King and Ralakesh's
+  minimum charges have consumers.
+  Devout of Garukhan (evasion and regeneration while moving, Unaffected by Shock) and Devout of Ryslatha (more maximum
+  attack damage, no regeneration on enemies hit recently) have consumers and Gateway coverage against a plain build.
+  So do Devout of Gruthkul (spells disabled and dealing no damage, life, regeneration, enemies that hit you attack
+  slower; whether their swing animation slows is unverified), Devout of Lunaris (Novas at the target, two more spell
+  projectiles, more spell area) and Devout of Solaris (a blind aura on nearby enemies, more critical chance against and
+  less damage from blinded enemies; their reduced critical chance has nothing to reduce, because monsters crit only
+  through `always_crit`, an override).
+  Devout of Abberath triggers Abberath's Fury on each footstep while walking (its radius comes from the explosion art
+  and is unverified), its hits ignite monsters, the client draws the burning hoofprints, and ignites on the player
+  deal nothing.
+  Devout of Yugul, Ralakesh's Corrupted Blood immunity and Garukhan's ground immunity wait for curses, reflected
+  damage, Corrupted Blood and hazardous ground.
+  `Game_VERIFIED_POLYTHEIST=1` opts in.
+  Not checked with the real client: that needs the reviewed combined graph installed.
+  Docs: [Polytheist checklist](../docs/game/polytheist.md).
+- Surfcaster: Baited Breath (every hit crits while holding a Fishing Rod), Screaming Reels (60% more cast speed with a
+  rod, in the server wait and the native clip), Sea Legs, Stormy Seas' conversion, Brine Bound's Cannot be Frozen and
+  the small nodes' cast speed have consumers, with Gateway coverage of legal builds, paid refunds and reload.
+  Ghost of the Deep's Torment Touched buff gives its four 23% bonuses and shows on the player.
+  Changing Seasons lets any hit chill the player and makes the chill increased action speed.
+  Stormy Seas' cold damage shocks monsters (the general monster chill/freeze/shock engine).
+  On that engine, Glacial Wave's chill raises the monster's damage taken and lessens its swings, Brine Bound freezes
+  monsters that hit you and holds every freeze for 1 s, and Within the Tempest shocks kills and spreads shocks 1.5 m.
+  The small nodes' chance to cause monsters to flee makes a hit monster walk away without attacking.
+  Not yet checked with the real client: that needs the reviewed combined graph installed.
+  Fishing (fish rarity, corrupted fish) has no gameplay in 3.29.3b.
+  `Game_VERIFIED_SURFCASTER=1` opts in.
+  Docs: [Surfcaster checklist](../docs/game/surfcaster.md).
+- Phrecia identities, graph ownership and the point/save lifecycle have automated coverage.
+  Existing class capabilities and passive sources are extracted into the optional `PhreciaAscendancies` module.
+  The Phrecia league lists it explicitly; Idols remains a separate unimplemented feature.
+  Module absence refuses saved-family admission without changing progress; reload requires affected players to re-enter.
+  Bounded modular native checks cover the three class sources, paid refunds, normal controls and reload re-entry.
+  Historical whole-class checks below retain their original scope.
+  Docs: [module boundary, scope and reload policy](../docs/game/phrecia-modules.md).
+  Harbinger has opt-in companions, curses, recipient clocks and typed resource consumers.
+  Bounded client checks cover summons, Focus, curses, timers, travel and reload; the full matrix remains partial.
+  See [Harbinger](../docs/game/harbinger.md).
+  Phrecia game connections/selection are gated by default; Antiquarian and Gambler have accepted opt-ins above.
+  Normal startup does not install or recover a graph and ordinary/unascended play has no alternate-graph preflight.
+  The native Labyrinth/Altar flow is separate (#151); other Phrecia class gameplay remains separate work.
+  Native ordinary command checks do not establish an expanded chooser or special class gameplay.
+  Forest Tracking's attack-damage bonus from final evasion shares the existing Steel Willed calculation.
+  Automated checks cover actual node allocation/refund/reload, final defences, signed composition and attack consumers.
+  Seventeen native raw-input controls cover real damage, armour/evasion composition, added damage and relog.
+  Full Daughter of Oshabi gameplay remains separate.
+  Herald, Architect of Chaos, Paladin and Puppeteer family gem levels reach actual skill records and calculations.
+  Automated checks cover real connected allocation, paid refunds, reload, supported levels and intrinsic requirements.
+  Twenty-eight native checks cover effective family levels, unrelated sources, removal, unchanged storage and relog.
+  Family-specific execution and Phrecia native admission remain separate.
+  Docs: [scope and compatibility gate](../docs/game/ascendancies.md).
+- Ruthless applies a configurable compounding XP multiplier from level 68 by default.
+  The numeric rate is LocalExile tuning because the retail server formula is not public.
+  Native Ruthless passive stat/point alternatives are selected for each Ruthless connection.
+  Automated configuration tests cover valid live edits and retaining the last valid snapshot after invalid input.
+  Native passive alternatives and the compounding level formula have automated coverage.
+  See [league modes](../docs/game/league-modes.md).
 
 ## 尚未实现
 
@@ -378,3 +583,17 @@
   Makanga 闸门、Journey 计数与五个 `PassiveSkillOverrides.Limit` 分组在服务端强制执行；Makanui 把其随机核心天赋
   存进 `TattooKeystones`。测试会话里该角色目前有 530 个天赋与 12 个纹身。52 行仍未实现；
   下一步是条件/技能行、Loyalty 与七个 Forbidden 升华纹身。
+- Saving quest progress.
+  Quest passive/refund rewards and native Labyrinth/Altar acquisition (#151) remain missing.
+  Remaining special ascendancy gameplay and broader Phrecia client compatibility are separate work.
+- Tattoos: the 100-item 3.29.3b catalogue, protocol and implementation groups are documented in
+  [tattoos](../docs/game/tattoos.md). The client flow is implemented: C->S `0x77` names the inventory, item and
+  passive; `0x33`'s fifth list carries `node | PassiveSkillOverrides.HASH16 << 16`; the item is consumed and the
+  map is saved independently of allocation. **66 rows are client-verified**: the ten pilot, 22 plain stats, the
+  nine skill/minion/flask plain-stat rows, the knockback row, the eleven Honoured rows (attribute notables
+  included), nine Makanga gates, three Journey tattoos and Journey Makanui; Ancestral Bloodlines is partial
+  (life/mana recovery unread) and Hinekora/Kitava Makanga are inert. Firewalker also survived relog and was removed
+  with an Orb of Scouring. The Makanga gate, Journey counting and the five `PassiveSkillOverrides.Limit` groups are
+  enforced server-side; Makanui stores its random keystone in `TattooKeystones`. 31 rows remain not implemented:
+  the nine ailment and avoidance rows, five rows that need new consumers (corpse consumption, Fortify-on-stun,
+  guard duration, hinder and herald effect), the ten Loyalty summons and the seven Forbidden ascendancy tattoos.

@@ -41,6 +41,9 @@
   客户端在同一条登录连接上回到角色列表，可玩角色能再次进入。
   代码：Gateway。
   文档：[09](../docs/protocol/09-area-change.md) §6。
+- Character selection reads the saved main ascendancy for its class byte and preserves portrait cosmetics;
+  the native client shows the correct portraits and names for all 21 normal ascendancies across seven base classes.
+
 - Remember Password now returns and verifies the official client's 32-byte saved-login credential in account login
   0x03 / result 0x04.
   It survives server restarts, is device/account-bound and is invalidated by changing the password.
@@ -105,6 +108,7 @@
   未知的存档字段会被保留；若存档里有游戏数据不认识的物品，登录会被阻止。
   JSON 存档与 accounts.json 只会被导入一次（`Saves.cs`、`ItemMoves.cs`、`GameServer.Storage/SaveDatabase.cs`、
   `SqliteAccountStore.cs`；[存档](../docs/saves.md)）。
+
 - Selected league modes have server rules with automated coverage and native entry, exit and migration checks.
   Ordinary Hardcore death migrates to the matching softcore base while preserving SSF; Hardcore Ruthless stays dead.
   Carried progress and the death record commit together, source stash/gold stay behind, and stale writes cannot undo it.
