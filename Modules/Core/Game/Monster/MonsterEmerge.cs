@@ -56,9 +56,18 @@ public sealed class MonsterEmerge(string folder = "data")
     private readonly Lazy<Dictionary<string, EmergeKind>> _types = new(() => LoadTypes(folder));
     private readonly Lazy<Dictionary<string, (double Seconds, int Index)>> _clips = new(() => LoadClips(folder));
     private readonly Lazy<ushort?> _action = new(() => LoadAction(folder));
+    private readonly Lazy<Dictionary<string, ushort>> _actions = new(() => LoadActions(folder));
 
     /// <summary>The Emerge basic action's skill id (ActionTypes HASH16 &amp; 0x3fff: 0x0101), null without the table.</summary>
     public ushort? SkillId => _action.Value is ushort hash ? (ushort)(hash & 0x3fff) : null;
+
+    /// <summary>
+    /// Any basic action's skill id by its ActionTypes name (Emerge, Emerge2, ChangeToStance1/2 …: Kitava's phase changes
+    /// and the withdraw/rise of his two forms are those actions, and the client plays the .act clip of the one it is
+    /// sent). Null when the table lacks the action.
+    /// </summary>
+    public ushort? ActionSkill(string name) =>
+        _actions.Value.TryGetValue(name, out ushort hash) ? (ushort)(hash & 0x3fff) : null;
 
     /// <summary>How a monster of this variety and rarity starts (see <see cref="EmergeKind"/>).</summary>
     public EmergeKind Kind(MonsterCatalog.Variety v, MonsterRarity rarity = MonsterRarity.Normal) =>
@@ -251,5 +260,19 @@ public sealed class MonsterEmerge(string folder = "data")
             if (r.TryGetProperty("Id", out var id) && id.GetString() == "Emerge" && r.TryGetProperty("HASH16", out var h) && h.ValueKind == JsonValueKind.Number)
                 return (ushort)h.GetInt32();
         return null;
+    }
+
+    // ActionTypes.json by name: every basic action's HASH16 (ActionSkill masks it to the skill id).
+    static Dictionary<string, ushort> LoadActions(string folder)
+    {
+        string path = Path.Combine(folder, "tables", "ActionTypes.json");
+        if (!ClientTables.Exists(path)) return [];
+        using var doc = JsonDocument.Parse(ClientTables.ReadAllBytes(path));
+        var actions = new Dictionary<string, ushort>(StringComparer.Ordinal);
+        foreach (var r in doc.RootElement.EnumerateArray())
+            if (r.TryGetProperty("Id", out var id) && id.GetString() is string name
+                && r.TryGetProperty("HASH16", out var h) && h.ValueKind == JsonValueKind.Number)
+                actions[name] = (ushort)h.GetInt32();
+        return actions;
     }
 }

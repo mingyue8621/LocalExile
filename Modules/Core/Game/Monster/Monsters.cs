@@ -342,9 +342,11 @@ public static partial class Game
                 KingGrace = !friendly && KingInMists.IsBoss(variety),
                 FetishGrace = !friendly && KingInMists.IsFetish(variety),
                 // The Brine King's three immunity thresholds, Malachai's one (cannot_drop_below_%_life 70, where the first
-                // form submerges instead of dying, MalachaiPortal) and the Depraved Trinity's two.
+                // form submerges instead of dying, MalachaiPortal), the Depraved Trinity's two, and Kitava's four (50 %
+                // ends his first form and each of the rest opens his chest for a heart, KitavaFight).
                 LifePhases = !friendly && brine ? new([75, 50, 25])
                     : !friendly && variety.Id == MalachaiFirst ? new([MalachaiSubmergePercent])
+                    : !friendly && IsKitavaForm(variety) ? new(KitavaPhases)
                     : !friendly && DepravedTrinity.IsBoss(variety) ? new([66, 33]) : null,
                 EntranceGrace = !friendly && (DepravedTrinity.IsBoss(variety) || VaalOversoul.IsBoss(variety) || DoedreSewers.IsBoss(variety)),
             }, emerge, waits);

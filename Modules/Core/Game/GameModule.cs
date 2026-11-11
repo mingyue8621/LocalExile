@@ -25,9 +25,15 @@ public sealed class GameModule : IModule
         // and the second rises in the room below with the three hearts that keep him alive.
         GameEvents.Tick.Add(id, (conn, _) => global::Game.MalachaiTick(conn));
         GameEvents.TransitionHidden.Add(id, global::Game.MalachaiGateHidden);
+        // Kitava (Act 5): at 50 % the first form gives way to the second, whose chest opens three times for the heart that
+        // has to be destroyed between them (KitavaFight.cs).
+        GameEvents.Tick.Add(id, (conn, _) => global::Game.KitavaTick(conn));
+        // The rooftop's own portal stands only once the fight is over (it is the way back down).
+        GameEvents.TransitionHidden.Add(id, global::Game.KitavaPortalHidden);
         GameEvents.PlayerLeaving.Add(id, (conn, _) =>
         {
             global::Game.LeavingMalachaiPortal(conn);
+            global::Game.LeavingKitava(conn);
             return Task.CompletedTask;
         });
         module.Lifetime.Own(global::DoedreSewers.CleanupOnUnload());
