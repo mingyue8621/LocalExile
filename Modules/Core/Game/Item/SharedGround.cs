@@ -12,12 +12,12 @@ public static partial class Game
     {
         if (!GameEvents.AllowsLoot(conn)) return;
         var ground = conn.Instance.Ground;
-        await Send(remote, stream, ciphers, [], null, atGate: () =>
+        await SendWorldBatch(conn, [], admission =>
         {
             if (!CurrentGameWork || conn.Closed || conn.LeavingArea || !conn.PlayerSent) return null;
             var all = ground.All();
             var now = new HashSet<uint>(all.Select(e => e.Id));
-            var packets = new List<byte[]>();
+            var packets = new WorldRecordBuilder(conn, admission);
             // SeenGround is a plain set: the area's first send, this sync and a bot's loot request all touch it, so every
             // access takes its lock. Guarding only this one left the first send adding an id while this ran, and a lost id
             // is an item the client was shown and is never told to remove.
@@ -28,7 +28,7 @@ public static partial class Game
                 foreach (uint gone in conn.SeenGround.Where(id => !now.Contains(id)).ToList())
                 {
                     conn.SeenGround.Remove(gone);
-                    packets.Add(InstanceProtocol.RemoveObject(gone));
+                    packets.Remove(gone);
                 }
                 foreach (var (id, item) in all)
                 {
@@ -37,13 +37,13 @@ public static partial class Game
                     if (!shared && !ReferenceEquals(by, conn)) continue; // another player's own
                     conn.SeenGround.Add(id);
                     if (ReferenceEquals(by, conn)) continue; // shown where it was put down
-                    packets.Add(InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(WorldItemObject.MetadataPath),
+                    packets.Create(id, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(WorldItemObject.MetadataPath),
                         item.Blob(justDropped: ground.IsNewFor(conn, id))));
-                    packets.Add(InstanceProtocol.EnterWakeZone(id));
+                    packets.Presentation(id, InstanceProtocol.EnterWakeZone(id));
                 }
             }
-            return packets.Count == 0 ? null : packets.SelectMany(p => p).ToArray();
-        });
+            return packets.Build();
+        }, transport: (remote, stream, ciphers));
     }
 
     /// <summary>Whether this client has been shown that ground item. SeenGround is a plain set touched by the area's first

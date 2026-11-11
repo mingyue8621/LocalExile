@@ -218,3 +218,42 @@
   以及组队的拒绝、踢人与掉线（[28](../docs/protocol/28-player-trade.md) 的 "Open"）。
   原生的远程玩家身体与普通/传奇怪物的净空都只有单客户端核对。
   见 [status/world.md](../status/world.md) 与 [07](../docs/protocol/07-latency-visibility-movement.md)。
+- **Predictive desync:** Shield Charge and the map device's walk are not traced, and two monsters racing for one cell can
+  swap places between client and server ([07](../docs/protocol/07-latency-visibility-movement.md) §5, "Open").
+- **Lockstep network mode:** the server decides every action and the client plays it back by server frames, each
+  action start putting the client on the server's cell, which ends the parted copies of a crowd.
+  It works locally when selected by the client; Predictive remains preferred, and network parity is not verified
+  ([status](../status/world.md)).
+  - **Known:** M5's dormant-body membership and saved-cell restoration are accepted with open issues.
+    The player's walk, attacks, spells, pick-ups and object uses, monsters' orders, hit recoveries, emerges and
+    corpses, and other players' copies follow the client's frame rules, and world messages are explicit records in
+    the client's key order ([07](../docs/protocol/07-latency-visibility-movement.md) §5, §6).
+    On the 3.29.3b client held walks and pack fights (wand, bow, sword) stayed on the client's cells within GGG's
+    margin, and single probes followed natural packs, a dense area, pick-ups, spells after a Move, a reconnect and
+    two players.
+    Left: the same measurements on 3.29.3c; steps that fall exactly on a frame's end (the client decides them with
+    its float accumulator); two places where the generated walk grid is not the client's; the King in the Mists,
+    which moves during its skills on the client; monsters' and minions' hits, still written at the frame's start;
+    a held skill's repeat, one frame later than the client would take it; attack in place for a predictive client.
+  - **Start:** measure on 3.29.3c. Then move the encounters and skills added since (Izaro's arena, Doedre's
+    sewers, the Depraved Trinity, the Vaal Oversoul; Bladefall of Trarthus, Winter Orb, Storm Call, Discharge, Dark
+    Bargain, Flicker Strike's effects) and the gm-commands mod to world records (`Game.SendWorldCreate`,
+    `SendWorldRecord`, `SendWorldRemoval`): their own objects' messages still go out outside the frame's records.
+    Then special action producers, sequence wrap, ranged chase behavior and the remaining skills and world
+    interactions.
+  - **Done when:** on a fixed bench every sync figure is within GGG's margin. The bench is pack fights per weapon,
+    natural packs and a dense area. The figures are monsters standing per order kind, monsters in a pack, monsters
+    walking per speed, the player standing and walking, and snap episodes.
+    The server sends nothing the client ignores and frames its orders as GGG does.
+    Skills, objects, area changes, bosses, two players and a real network link work as on GGG, or as the client plays
+    them where GGG was never recorded.
+    Turning it on by default stays the maintainer's decision.
+- **HNC packets from the client** (type 0xDD): what the server should do with them
+  ([07](../docs/protocol/07-latency-visibility-movement.md)).
+- **Server-side world simulation** (monsters, combat): no project for it yet; add one when it is needed.
+- **Several players** in one instance: player presence, poses, life, departure and body blockers are published.
+  Verify two authenticated connections together, then add party admission to private instances and shared combat.
+  Trade between players and party invite / accept / leave work. Next: friend requests (C→S 0x80) and the friend list,
+  and party Decline, kicks and disconnects ([28](../docs/protocol/28-player-trade.md) "Open").
+  The native remote-player body and normal/unique monster clearance have single-client checks.
+  See [status/world.md](../status/world.md) and [07](../docs/protocol/07-latency-visibility-movement.md).
