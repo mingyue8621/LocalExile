@@ -1,50 +1,51 @@
-# 为 LocalExile 做贡献
+# Contributing to LocalExile
 
-人类和 AI 智能体都欢迎。先从 [AGENTS.md](AGENTS.md) 看规矩，然后看
-[Agents/Status.md](Agents/Status.md)（哪些已经能用）和 [Agents/Roadmap.md](Agents/Roadmap.md)（接下来做什么、
-怎么认领一个条目）。协议参考与各种笔记在
-[Agents/docs/](Agents/docs/README.md)。
+People and AI agents are both welcome. Start with [AGENTS.md](AGENTS.md): the rules, then
+[Agents/Status.md](Agents/Status.md) (what works) and [Agents/Roadmap.md](Agents/Roadmap.md) (what to build next and
+how to pick up an item). The protocol reference and the notes are in
+[Agents/docs/](Agents/docs/README.md).
 
-## 给人看的部分
+## For people
 
-- 打开一个前沿模型（例如 Claude Opus 5.5），让它在你机器上把这个项目搭起来。
-- 让它把 `Agents/` 整个目录和所有 MD 文件读一遍。
+- Open up a Frontier Model (such as Claude Opus 5.5) and tell them to set-up this project on your machine.
+- Tell them to read all the Agents/ folder and all the MD files.
 
-## 开始搭建
+## Getting Started
 
-**完整指南：[Agents/GettingStarted.md](Agents/GettingStarted.md)。** 它逐步列出每一步该看到什么输出、边界情况
-以及一张排错表。这份指南同时面向人和面向正在做搭建的 AI 智能体。
+**Full guide: [Agents/GettingStarted.md](Agents/GettingStarted.md).** It covers every step with its expected output, the edge cases
+and a troubleshooting table. It is written for people and for AI agents setting this up.
 
-简版（Windows、.NET 10 SDK、一份独立的流放之路 **3.29.3c** 客户端；Linux 见完整指南）：
+In short (Windows, .NET 10 SDK, a standalone or Steam Path of Exile **3.29.3c** client; Linux is covered in the full guide):
 
 ```powershell
 dotnet build GameServer.slnx
-robocopy "<你的 PoE 3.29.3c 目录>" Client /E; Copy-Item Client\PathOfExile.exe Client\Game.exe
+robocopy "<your PoE 3.29.3c folder>" Client /E; Copy-Item Client\PathOfExile.exe Client\Game.exe
 dotnet run --project src/GameServer.Auth -- keygen Client/Game.exe
 dotnet run --project src/GameServer.Auth -- patch Client/Game.exe Client/Game.patched.exe
 dotnet run --project src/GameServer.Patch -- gateway --login 127.0.0.1:20493
-# 需要 Node.js（在 Tools/ooz 里跑 npm install）与 Python 3.9+：live.ps1 会先解包游戏数据（scripts/dev/extract-data.ps1）
-# 建账号 + 角色：GameServer.Host 与 GameServer.DevClient（Agents/GettingStarted.md 第 8 步）
-.\scripts\dev\live.ps1 -Walkmaps   # -Walkmaps 可选：需要 pip install frida，用于抓取行走地图
+# needs Node.js (+ npm install in Tools/ooz): live.ps1 extracts the game data it needs first (scripts/dev/extract-data.ps1 -Servers)
+# create an account + character: GameServer.Host and GameServer.DevClient (Agents/GettingStarted.md, step 8)
+.\scripts\dev\live.ps1 -Walkmaps   # -Walkmaps is optional: needs `pip install frida`, captures walk maps
 ```
 
-**启动客户端一律走 `live.ps1`。** 用别的方式启动，客户端会去连官方补丁服务器，可能把自己更新掉。
+**Always start the client through `live.ps1`.** Started any other way, the client contacts the official patch servers
+and may update itself.
 
-## 项目构成
+## Projects
 
-| 项目 | 作用 | 端口 |
+| Project | Role | Port |
 |---|---|---|
-| `GameServer.Auth` | 登录服；也用于生成密钥、把客户端打补丁成信任这些密钥 | 20493（登录）、127.0.0.1:20495（控制） |
-| `GameServer.Gateway` | 副本（游戏）服务器 | 6112 |
-| `GameServer.Patch` | 本地补丁服，让客户端永不去连真正的补丁服务器；也用于修改 GGPK 里的网关列表 | 12995、http 8080 |
-| `GameServer.Host` + `GameServer.DevClient` | 开发用账号服务（注册账号、创建角色） | 7000 |
-| `GameServer.Core` | 协议、加密、账号、副本注册表 | |
-| `GameServer.Data` | GGPK / bundle / `.dat` 读取器 | |
-| `GameServer.Storage` | 账号与存档存储 | |
-| `GameServer.Modding` | mod 与模块所基于的加载器契约：`IMod`、`IModule`、`League` 与各自的上下文 | |
-| `LocalExile` | 发布包里给玩家的启动器（命令行） | |
-| `Modules/` | 游戏系统，只对在联盟里列出它的玩家装载：`Core/`（当前游戏）、`Legacy/`（GGG 过去的赛季）、`Custom/`（自定义联盟） | |
-| `Leagues/` | 赛季，每个赛季是一组模块 | |
-| `Mods/` | 玩家自行选择安装的 mod（[LocalExile-Mods](https://github.com/LocalExile/LocalExile-Mods)），网关运行期间可热重载 | |
+| `GameServer.Auth` | login server; also generates keys and patches the client to trust them | 20493 (login), 127.0.0.1:20495 (control) |
+| `GameServer.Gateway` | instance (game) server | 6112 |
+| `GameServer.Patch` | local patching server, so the client never contacts the real patch servers; also edits the GGPK gateway list | 12995, http 8080 |
+| `GameServer.Host` + `GameServer.DevClient` | dev account service (register accounts, create characters) | 7000 |
+| `GameServer.Core` | protocol, crypto, accounts, instance registry | |
+| `GameServer.Data` | GGPK / bundle / `.dat` readers | |
+| `GameServer.Storage` | account and save storage | |
+| `GameServer.Modding` | the loader contract mods and modules build on: `IMod`, `IModule`, `League`, the context | |
+| `LocalExile` | the player launcher (command line) shipped in releases | |
+| `Modules/` | game systems, loaded for the leagues that list them: `Core/` (the current game), `Legacy/` (GGG's past leagues), `Custom/` (custom leagues) | |
+| `Leagues/` | leagues, each a set of modules | |
+| `Mods/` | the user's opt-in mods ([LocalExile-Mods](https://github.com/LocalExile/LocalExile-Mods)), reloaded while the Gateway runs | |
 
-某处改动该归哪一层，见 [AGENTS.md](AGENTS.md)（「代码放在哪一层」）。
+Which of these a change belongs in: [AGENTS.md](AGENTS.md) ("What goes where").

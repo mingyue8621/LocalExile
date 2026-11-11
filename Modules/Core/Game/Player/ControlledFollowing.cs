@@ -248,21 +248,24 @@ public static partial class Game
         var at0 = leader.Walk.Position(now);
         var destination = leader.Walk.Destination;
         double bx = destination.X - at0.X, by = destination.Y - at0.Y;
-        // Behind the player, along their last heading: an idle follower that wanders round to the front is the one that
-        // blocks a doorway the moment the player walks on.
-        double behind = bx != 0 || by != 0 ? Math.Atan2(by, bx) + Math.PI : Math.Atan2(here.Y - at0.Y, here.X - at0.X);
+        // An idle shuffle, not the follow pass: a short step from its own feet, and while the player is walking never one
+        // that puts it in front of them (an idle follower that wanders round to the front is the one that blocks a doorway
+        // the moment the player walks on). Standing still there is no front to keep clear, and it shuffles anywhere.
+        bool walking = bx != 0 || by != 0;
+        double length = walking ? Math.Sqrt(bx * bx + by * by) : 0;
+        double fx = walking ? bx / length : 0, fy = walking ? by / length : 0;
         for (int trial = 0; trial < 8; trial++)
         {
-            double angle = behind + (trial - 3.5) * .35;
-            int radius = 12 + (int)((seed + (uint)trial * 7919u) % 9);
-            // Measured from the player, not from the bot's own feet: the point it walks to is a place behind the player.
-            var at = (X: at0.X + (int)Math.Round(Math.Cos(angle) * radius),
-                Y: at0.Y + (int)Math.Round(Math.Sin(angle) * radius));
+            double angle = (seed % 628) / 100.0 + trial * Math.PI / 4;
+            int radius = 4 + (int)((seed + (uint)trial * 7919u) % 5);
+            var at = (X: here.X + (int)Math.Round(Math.Cos(angle) * radius),
+                Y: here.Y + (int)Math.Round(Math.Sin(angle) * radius));
             if (Dist(at, at0) > ControlledFollowerLeash || !Floor(at.X, at.Y)
                 || ClientPathfinder.ObjectBlocks(bodies, at.X, at.Y, 3, 6)) continue;
-            // Never shuffle onto the player's own cell or beside it: a follower at arm's length is in the way the moment
-            // the player turns.
-            if (Dist(at, at0) < 12) continue;
+            // Never onto the player's own cell or beside it: a follower at arm's length is in the way the moment the
+            // player turns.
+            if (Dist(at, at0) < 3) continue;
+            if (walking && (at.X - at0.X) * fx + (at.Y - at0.Y) * fy > 0) continue;
             var path = ClientPathfinder.FindPath(here, at, Floor, conn.Layout.GridW, conn.Layout.GridH, bodies, 2);
             if (path.Count < 2 || path[^1] != at) continue;
             // Rounded path cells can briefly leave the circle even with both endpoints inside it.

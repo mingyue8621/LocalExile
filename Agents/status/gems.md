@@ -33,6 +33,14 @@
   `GemDropsTests` 覆盖掷骰池、等级门槛与无等级宝石。在游戏的掉落池未知之前，这个比率是我们自己定的。
   实机：稀有怪物掉出了普通技能与辅助宝石。最初一版用的是数据里的 ShopTag 宝石，其中包含物品授予/遗留行，
   所以掷骰池收窄成了任务/初始/卓越三组。
+- **Gem drops (verified live 2026-10-26).** 4% of a monster's item drops are an obtainable gem whose `DropLevel` the
+  monster meets, unlevelled and without a rarity roll (`ItemDrops`, `GemSources.DropPool`,
+  [15](../docs/protocol/15-progression.md) §3).
+  The pool is the quest reward gems, the starting gems and the drop-only exceptional supports; the data's Graft,
+  item-granted/legacy (Envy, Death Aura, Quickstep) and placeholder ("...") rows never drop.
+  The rate is our own until the game's drop pools are known.
+  Live: rare monsters dropped normal skill and support gems. The first attempt used the data's ShopTag gems, which
+  include the item-granted/legacy rows, so the pool was narrowed to the quest/starting/exceptional sets.
 
 - **宝石商人（2026-10-26 在 Nessa 上实机验证；Lilly/Siosa 有单元测试）。**
   在这个本地 checkout 里，Nessa 还额外拥有全部可生成宝石，与任务/职业无关，并带替代变体。

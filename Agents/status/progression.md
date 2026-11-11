@@ -71,15 +71,9 @@
   a new level sends its stats, full life and mana, the passive points and the account's level;
   experience is saved per character; `/add_xp`.
   Code: `Progression.cs`, Gateway (`GainExperience`, `ApplyLevel`).
+- Experience and levels from kills, with the level penalty and party share.
   Docs: [15](../docs/protocol/15-progression.md) §1.
-- Passive Skill Tree: S→C 0x33 (level, class, allocated nodes, passive and refund points;
-  the client counts level − 1 points), C→S 0x34 allocates a node, checked, applied to the stats (attributes, life,
-  mana, resistances and more) and saved; C→S 0x36 with flag 0 refunds a node for a saved refund point (checked,
-  mastery effects removed); using an Orb of Regret (right-click, C→S 0x58) takes one item and adds one point;
-  a Book of Skill (right-click, C→S 0x58; every quest book of that name) is used up and gives one more passive skill
-  point, both saved together; a Book of Regrets gives two refund points the same way;
-  `/passives`, `/add_refund_points`, `/reset_passives`.
-  Code: `PassiveTree.cs`, `CharacterSaves.cs`, Gateway (`ChangePassives`, `UseItem`).
+- Passive Skill Tree: allocation, refunds, Orbs of Regret, Books of Skill and Regrets.
   Docs: [15](../docs/protocol/15-progression.md) §2.
 - Passive masteries: S→C 0x33 carries selected effects (`node | effect << 16`) and C→S 0x35 selects the effect HASH16;
   a mastery node can be allocated normally and its effect selected/changed without spending another point.
@@ -346,6 +340,26 @@
   当前基线的构建/测试与精确的相关 head 组合保留了已文档化的共享合并解决方式。
   Default Phrecia 准入被闸住；显式选择 Gambler 会以只读方式核验已安装图谱字节。
   文档：[Gambler 清单、范围与验证](../docs/game/gambler.md)。
+- Passive masteries, with Block, Fire and Wand Mastery effects. Docs: [15](../docs/protocol/15-progression.md) §2.
+- Passive tree jewel sockets, percentage attribute mods and The Adorned (tree art check pending).
+  Docs: [15](../docs/protocol/15-progression.md) §2a, [unique jewels](../docs/game/unique-jewels.md).
+- Cluster jewels: the single-keystone smalls' keystone stats, nesting, the client's layout and theme stats; keystones,
+  radius rules and the vendor recipe are missing. Docs: [cluster jewels](../docs/game/cluster-jewels.md).
+- Timeless jewels: the alternate tree in radius and Militant Faith's Devotion mods; conqueror keystone mechanics are
+  missing. Docs: [timeless jewels](../docs/game/timeless-jewels.md).
+- Radius unique jewels: 42 implemented and the 33 threshold jewels; skill-specific consumers are partial.
+  Docs: [radius jewels](../docs/game/radius-jewels.md), [list](../docs/game/radius-jewel-list.md).
+- Impossible Escape and Rational Doctrine. Docs: [radius jewels](../docs/game/radius-jewels.md),
+  [13](../docs/protocol/13-items.md), "What some flasks and Rational Doctrine make".
+- Watcher's Eye, Bound By Destiny, Sublime Vision, The Balance of Terror and Megalomaniac items; their drops and
+  conditional consumers are partial. Docs: [unique jewels](../docs/game/unique-jewels.md).
+- Ordinary ascendancy selection, point awards, allocations, paid refunds and saves.
+  Docs: [ascendancies](../docs/game/ascendancies.md).
+- Elementalist Shaper of Flames. Docs: [20](../docs/protocol/20-damage.md) §3.
+- Antiquarian. Docs: [Antiquarian](../docs/game/antiquarian.md).
+- Juggernaut. Docs: [Juggernaut](../docs/game/juggernaut.md).
+- Slayer, except Impact's melee range. Docs: [Slayer](../docs/game/slayer.md).
+- Gambler. Docs: [Gambler](../docs/game/gambler.md).
 
 ## 部分实现
 
@@ -569,6 +583,18 @@
   Automated configuration tests cover valid live edits and retaining the last valid snapshot after invalid input.
   Native passive alternatives and the compounding level formula have automated coverage.
   See [league modes](../docs/game/league-modes.md).
+- Hierophant, except the Brand nodes. Docs: [Hierophant](../docs/game/hierophant.md).
+- Behemoth through the optional Phrecia module. Docs: [Behemoth](../docs/game/behemoth.md).
+- Whisperer through the optional module. Docs: [Whisperer](../docs/game/whisperer.md).
+- Aristocrat (not checked live). Docs: [Aristocrat](../docs/game/aristocrat.md).
+- Ancestral Commander (not checked live). Docs: [Ancestral Commander](../docs/game/ancestral-commander.md).
+- Paladin (not checked live). Docs: [Paladin](../docs/game/paladin.md).
+- Polytheist (not checked live). Docs: [Polytheist](../docs/game/polytheist.md).
+- Surfcaster (not checked live). Docs: [Surfcaster](../docs/game/surfcaster.md).
+- Phrecia ascendancies: the optional module, Harbinger, Forest Tracking and family gem levels.
+  Docs: [Phrecia modules](../docs/game/phrecia-modules.md), [Harbinger](../docs/game/harbinger.md),
+  [ascendancies](../docs/game/ascendancies.md).
+- Ruthless experience and passive alternatives. Docs: [league modes](../docs/game/league-modes.md).
 
 ## 尚未实现
 
@@ -597,3 +623,6 @@
   enforced server-side; Makanui stores its random keystone in `TattooKeystones`. 31 rows remain not implemented:
   the nine ailment and avoidance rows, five rows that need new consumers (corpse consumption, Fortify-on-stun,
   guard duration, hinder and herald effect), the ten Loyalty summons and the seven Forbidden ascendancy tattoos.
+- Saving quest progress, quest passive/refund rewards and native Labyrinth/Altar acquisition (#151).
+- Tattoos: 75 rows work in the client; 22 rows (new consumers, Loyalty summons, Forbidden tattoos) are missing.
+  Docs: [tattoos](../docs/game/tattoos.md).

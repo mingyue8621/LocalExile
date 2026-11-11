@@ -9,6 +9,9 @@
 自身光环限制有原生成对增益、加成、保留、重登与死亡对照。
 请验证原生灰图标预测与更广的城镇/战斗/换角色往返。
 挂起/恢复生命周期是明确的 LocalExile 策略；见 protocol/11-skills.md 第 10c 与 13 节。
+- **Aura round trips:** validate the own-aura restriction's native grey-icon prediction and broader
+  town/combat/character-switch round trips.
+  The suspend/restore lifecycle is LocalExile policy ([11](../docs/protocol/11-skills.md) §10c and §13).
 
 ## 3. 玩法
 
@@ -43,6 +46,26 @@
   与每次 replay），并给 Gateway 设 `Game_ICE_NOVA_REPEATS=1` 让它发计数，然后逐圈打上去。
   完成标准：带 Spell Echo 画出的每一圈 Ice Nova 都恰好造成一次伤害。
 - **已完成区域修复：** Cyclone 的 `/set_aoe` 最终半径现在会下发给客户端并与命中判定共用；见状态与 protocol/11-skills.md（实机核对待做）。
+- **Fortification extensions:** other conditional sources, permanent grants and monster ailment thresholds.
+  See [Fortification](../docs/game/fortification.md).
+- **Aura caster art:** confirm the received buff's top-left icon live; radius-scaled aura rings need their radius.
+- **Spark start cell:** the server flies each spark on the client's wander but from the server's walk position, so a
+  drawn spark can still hit with no damage.
+  Start: trace the client's start cell and each leg's start time per frame (`scripts/re/frida/trace-spark-legs.js`)
+  next to the server's `spark seq=` lines, then start the server's legs from the same cell and frame.
+  Done when: every drawn spark hit deals damage once, and no damage lands without one.
+- **Spectral Throw hit timing:** hits can land before or after the drawn weapon reaches a monster, most on the return
+  toward monsters walking at the thrower ([11](../docs/protocol/11-skills.md) §10).
+  Start: trace the client's weapon (`scripts/re/frida/trace-projectile-path.js`) next to the server's hit lines on one
+  clock, with pauses and default attacks between throws; then read every class and stance's Melee views from the ACT
+  and .ao in `scripts/re/anim_contacts.py` instead of `SpectralThrowRelease`'s table.
+  Done when: each hit lands as the drawn weapon reaches the monster, out and back, for every class and weapon.
+- **Ice Nova with Spell Echo:** the server sends Ice Nova no `spell_repeat_count`, so Spell Echo only speeds it up
+  (the action's two repeat paths are in [11](../docs/protocol/11-skills.md) §9).
+  Start: cast Ice Nova with Spell Echo linked under `scripts/re/frida/trace-ice-nova-repeat.js`, with
+  `Game_ICE_NOVA_REPEATS=1` set for the Gateway so it sends the count, then hit with each ring.
+  Done when: every Ice Nova ring drawn with Spell Echo deals damage once.
+- **Cyclone's area:** check the `/set_aoe` radius live.
 
 ### 玩家的真实属性
 
@@ -427,22 +450,56 @@
   types. Native Standard checks bind eleven positive formatter captures to fresh owned skill stats, verify removal
   and relog, and retain partial zero-row evidence for Brutality/Righteous Fire. Native in-place link mutation,
   official critical weighting, DoT and special skill mechanics remain open.
+The issue #75 target is the 357 virtual stats behind the character panel ([11](../docs/protocol/11-skills.md) §14).
+Each needs its sources, consumers and lifecycle traced; no completion follows from a historical native run or a
+matching source name.
+The issue #75 native matrices were run on the source LocalExile revisions, not repeated on this port.
+
+- **Accuracy and criticals:** review the remaining ordinary-bow snapshots and special repeats, complete the remaining
+  accuracy conditions, correct off-hand sources and publish all chance/always-hit rows; dual-hand, multi-hit and
+  integer-roll expectations are open ([20](../docs/protocol/20-damage.md) §2h).
+- **Impale:** conditional weapon/Pride chance, extra applications and consumption overrides, Impaler mechanics,
+  native count/visual publication, corpse consumers and official duration rounding ([20](../docs/protocol/20-damage.md)
+  §3a).
+- **Cooldowns:** multi-use recharge, shared groups, typed/conditional/more recovery and official tick boundaries
+  ([11](../docs/protocol/11-skills.md) §9).
+- **Attack timing:** an attack longer than its clip stretches the clip's slow span, which `AttackContactDelay` does not
+  model; the arrow arrives about 25 ms after the muzzle flash, with a fixed 60 ms lead tuned on localhost rather than
+  one that follows the connection's latency ([11](../docs/protocol/11-skills.md) §4).
+- **Spell and attack panels:** integer-roll expectation, cooldowns, DoT/beam displays, in-place link mutation,
+  off-hand alternation, conditional damage and support/modifier scope; check equipment UI refresh live.
+- **Warcries:** executors for the other warcries; explosions need global added damage, flat crit chance, on-hit
+  effects, their native art and the wave delay ([11](../docs/protocol/11-skills.md) §10i).
+- **Character panel (#75)** ([11](../docs/protocol/11-skills.md) §14):
+  - Regeneration: other conversions than Zealot's Oath, named conditional/more modifiers and other recovery systems.
+  - Charges: Brand attachment/cap enforcement, the Affliction non-damaging effect and Absorption recoup consumers.
+    Reap's damage over time debuff, Vaal Reap's temporary Blood Charge maximum, and executing the secondary hits
+    (Bear Trap, Herald of Ice) whose rows are display-only.
+  - Deferred (owner's decision, 2026-10-29): Spirit and Siphoning Charges. Their only 3.29 player sources are unique
+    mods (`maximum_spirit_charges_per_abyss_jewel_equipped`,
+    `maximum_siphoning_charges_per_elder_or_shaper_item_equipped`), so they need unique definitions beyond
+    Mageblood (#60), abyss sockets on the other uniques that have them and a consumer for `Item.Influences`
+    ([13](../docs/protocol/13-items.md) §2f). Blitz and Challenger have no 3.29 source.
+  - Penetration: off-hand attack selection and the conditional forms not read yet (Zealotry's critical-only, Enmity's
+    Embrace's overcapped fire, recent kill or block, flask, tincture, while chilled, single-skill).
+  - Ailments: validate the twelve duration/effect aliases, then ailment chance/eligibility, damaging ranges,
+    duration/application and stacking. Left/right ring operators are slot-local: do not sum them globally.
+  - Defences: official fractional/group arithmetic, the remaining prohibitions and conversions, all-source immediate
+    Life publication, other Shaper's Touch effects, Ward and the conditional/more pool operators.
+  - Attributes: signed equipment cycles, attribute conversions, conditional/more operators and mercenary gates.
+  - On kill and flasks: full on-kill recovery/percentage/prohibition rules, block-animation timing, conditional flask
+    sources and queued timer/predictor presentation.
+  - Leech ([20](../docs/protocol/20-damage.md) §5b): other conversions, conditional and weapon-family sources,
+    skill-specific recovery speeds and the speed/defence/ailment/DoT leech-state consumers; other Life-retention
+    sources. Do not add overlapping displayed scopes, substitute regeneration for leech, broaden the attack-only item
+    scope, infer Vaal Pact from legacy raw flag names, or multiply one boolean doubling per item copy.
+  - Damage: alternative quality, off-hand alternation, endpoint-only modifiers and official rounding.
+  - Continue auditing the remaining rows against the current implementation before adding formulas.
 - **Done when:** life, mana, attributes, resistances and their derived values come from the server's own calculation
   (Characters.dat base values, level, items, passives) and are sent in the Stats component.
-  The overcapped resistances' derived evasion and critical increases now follow that rule and are native-verified.
-  Generic increased attributes have historical native raw-source, derived-pool and requirement controls at `60044ad`.
-  Current-main mana-per-Strength, requirement and inactive-weapon composition has automated coverage.
-  Eleven rebased native controls verify final Strength mana groups, increased mana once and ordinary gear requirements.
-  Ordered joint native controls at `c9cd1864` verify conversion after final Strength and odd Intelligence.
-  Remaining native composition includes own-item percentage retention, cascading equipment, passive refunds and swaps.
-  The fractional algorithm remains a documented PoB server model; official-server parity is not established.
-  See [Status](../status/skills-and-combat.md) and [the calculation model](../docs/protocol/11-skills.md) section 4.
-  Phrecia play compatibility remains a separate prerequisite.
-  Power of Purpose has historical original-head raw-source, armour/mana, actual attack-consumer and relog controls.
-  Native idle reservation, Iron Reflexes and MORE compositions remain; their model and automated tests are in
-  [the calculation notes](../docs/game/power-of-purpose.md).
-  Combined increased attributes, mana-per-Strength and conversion have regressions on base `939b44fe`.
-  Joint native controls at `c9cd1864` remain historical; the rebased candidate needs separate native acceptance.
+  Open beyond that: own-item percentage retention, cascading equipment, passive refunds and swaps natively; Power of
+  Purpose's idle reservation, Iron Reflexes and MORE natively ([Power of Purpose](../docs/game/power-of-purpose.md));
+  official-server fractional parity; Phrecia play compatibility.
 
 ### 光环：保留与效果
 
@@ -478,6 +535,12 @@
   retail Virulence decay and the skill-specific trap/mine payloads beyond the shared Skitterbot trigger/rearm lifecycle.
   The skill-bar indicator's buff association is implemented (0x1c1 bit3; live check pending, see Status).
   Support gems come with the gem system ("Gems" below); Life reservation has its own budget and recovery lifecycle.
+- **Known:** [11](../docs/protocol/11-skills.md) §13 has reservation, the implemented auras and the own-aura lifecycle.
+  Passive enemy auras other than the implemented ones (the Occultist's) need consumers for their stats first (§10e).
+- **Start:** the auras' 3D effects (BuffVisuals EPKs of the `IsSkillBuff` rows do not render, unlike Righteous Fire's);
+  banners, enemy/Vaal aura executors and unsupported conditional effects.
+  Verify the herald combat matrix, retail Virulence decay, the skill-specific trap/mine payloads beyond Skitterbots'
+  trigger/rearm, and the skill-bar indicator's buff association (0x1c1 bit3) live.
 - **Done when:** the standard auras reserve correctly, their effects match PoB, and the character panel and HUD show
   the same reserved and unreserved values.
 
@@ -487,6 +550,8 @@
 - **入手：** 在真实客户端验证 60 秒倒计时、第一步即移除与伤害阻止。图标可见；
   其修正后的浮点计时器需要在上游整合之后实机复核。
 - **完成标准：** 计时器倒计时，保护在移动、动作或到期时结束。
+- **Start:** verify the Grace Period's 60-second countdown, first-step removal and damage prevention live.
+- **Done when:** the timer counts down and protection ends on movement, actions or expiry.
 
 ### 伤害模型（基础已完成，接下来是更深的防御）
 
@@ -660,6 +725,33 @@
   Add support effects through `DamagePacket.Add`, `Scale`, `Convert` and `AddGain`.
   When owned-actor execution is implemented, supply actual-caster stats to `SkillDamageContext` explicitly.
   Do not inherit an owner's spell-damage restriction onto independent minions or daemons without a skill rule.
+- **Client Buff descriptor consumer follow-up (#370, Known issues K1-K3):** follow one prepared descriptor
+  from `ChaosDegenerationAuraPlayersUniqueBodyStr3` to an actual reader and explain its output.
+  The [ownership/transfer report](../docs/re/client-buff-descriptor-consumers.md) is the bounded #466 delivery.
+  Resume only with new same-object transfer or typed-reader evidence, as a separate batch under #370.
+- **Known:** [20](../docs/protocol/20-damage.md) has the damage model; both sides still have flat damage ranges
+  ([11](../docs/protocol/11-skills.md) §5, §6). Monster armour is not modelled.
+- **Start:**
+  - Special ES mechanics, skill Exposure, the remaining conditional penetration, damaging and alternative ailments on
+    monsters beyond ignites and bleeds, and further added-damage/support effects.
+  - Weapon-local "with this Weapon per 10 <attribute>" and spell per-Intelligence added damage.
+  - Monster skills beyond the first granted effect (ranged, spells).
+  - Player stun: ES avoidance, substituted thresholds, conditional defences and monster-specific modifiers.
+  - Criticals: other conditional more chance, guaranteed-critical effects, off-hand chance/multiplier publication and
+    execution, Focus/curse lifecycles. The off-hand range/timing publication has no critical fields: do not infer
+    completion from its other weapon fields.
+  - Whisperer, Arcane Might, Steel Willed, Rampager and Behemoth's remaining scope is in their docs
+    ([Whisperer](../docs/game/whisperer.md), [Arcane Might](../docs/game/arcane-might.md),
+    [Steel Willed armour](../docs/game/steel-willed-armour.md), [Behemoth](../docs/game/behemoth.md)).
+  - Frostblink: moving targets, use during an active walk, departure/arrival damage, chilled ground, enemy-dependent
+    recovery and shared Blink groups. Extend terrain and movement restrictions from native evidence before accepting
+    other instant movement skills.
+  - Add support effects through `DamagePacket.Add`, `Scale`, `Convert` and `AddGain`. When owned-actor execution is
+    implemented, supply the actual caster's stats to `SkillDamageContext`; do not inherit an owner's spell-damage
+    restriction onto independent minions without a skill rule.
+  - Recheck natively: supported-gem, modifier and bow combinations; critical ignore against a rebuilt DLL; the
+    resolved bow-contact and target-modifier composition; overcapped-resistance and critical rounding on the resolved
+    stack; Controlled Destruction and the unique -40% critical source; queued ES capacity changes.
 - **Done when:** damage numbers match the character panel and the monsters' levels.
 
   原生上限/顺序使用一次 raw40 接触；四接触时序与强制的全写入者竞态仍只有自动化覆盖。
@@ -722,6 +814,12 @@
 - **完成标准：** 伤害数字与角色面板和怪物等级一致。
 
 ### 元素异常状态扩展
+- Check the sent `virtual_action_speed_+%` and the frozen pose with the real client.
+  Open: the shatter visual (the packet that removes the corpse is not known), unique/boss thresholds, the monster
+  variety's own immunities and a native check of the proliferation radius's area scaling
+  ([20](../docs/protocol/20-damage.md#outgoing-chill-freeze-and-shock-on-monsters)).
+- Dedicated native buff icons and source/threshold/conditional-immunity parity before a general ailment engine;
+  hostile spell adapters and alternative-ailment sources ([Gambler](../docs/game/gambler.md)).
 
 - 玩家对怪物的冰缓、冰冻与感电已实现，带 Gateway 覆盖。
   请用真实客户端核对下发的 `virtual_action_speed_+%` 与被冰冻的姿态。
@@ -735,6 +833,10 @@
   见 [Gambler](../docs/game/gambler.md)。
 
 ### 狂怒扩展
+- Native composition with supported projectiles, area sweeps, equipment sources, notification delays and slow
+  destination loading; queued refreshes across expiry and decay-speed modifiers.
+  Measure official capped-attempt refresh and area-loading timer parity before replacing policy v1.
+  See [26-rage.md](../docs/protocol/26-rage.md).
 
 - 通用狂怒生成、上限、已安装增益/计数、实际伤害、衰减、暂停与生命周期已原生验证。
   剩余的原生组合包括受支持的投射物、范围扫击、连携/生效装备来源、超出共享区间的通知延迟与慢速目的地加载。
@@ -744,6 +846,10 @@
   见 [26-rage.md](../docs/protocol/26-rage.md)；瓦尔消耗与整职业选择仍是独立机制。
 
 ### 瓦尔执行与剩余灵魂核对
+- Native acceptance of duplicates, removal/readd, cooldown refresh, held death notifications, Vaal Haste/Grace aura
+  costs, death/resurrection and slow destination loading ([27](../docs/protocol/27-vaal-souls.md)).
+  Validate the [modular Behemoth candidate](../docs/game/behemoth.md) natively; other Vaal executors and official
+  distribution/capacity parity remain open.
 
 - 收集、有界的共享预算与已证明的 Actor 载荷（#308）通过自动化与有界原生核对。
   基线 `939b44fe` 上的来源检查覆盖属性/魔力组合、辅助、付款与当前发布。
@@ -759,6 +865,9 @@
   其他执行器与官方分布/容量一致性仍属独立工作；不受支持的施放仍被拒绝。
 
 ### 死亡界面变体
+- **Known:** S→C 0x55 flags bit0/2/3 are mapped ([11](../docs/protocol/11-skills.md) §7);
+  bit4 and the trailing u32 / u8 / u16 are not.
+- **Done when:** Sanctum and other modes show their own options.
 
 - **已知：** S→C 0x55 的 flag bit0/2/3 已映射（[11](../docs/protocol/11-skills.md) §7）；bit4 与尾部的 u32 / u8 / u16 尚未。
 - **完成标准：** 圣所与其他模式显示各自的选项。
@@ -825,3 +934,37 @@
   为平台与装饰件建服务端地表高度/世界模型（#182）、更多区域的高度网格（或放进行走地图录制器），
   以及与自带碰撞体的装饰件和物件做碰撞。
 - **完成标准：** Fireball 与箭矢在每个区域都像真实的那样：在地形与平台上位于施法者躯干处，遇墙与物件停下。
+- **Client-contract research:** use the frozen [delivery matrix](../docs/re/projectiles/delivery-matrix.md)
+  before extending the simulator or changing phase prediction ownership.
+  Keep the [K1/K2/K3 followups](../docs/re/projectiles/verification-and-limitations.md) separate.
+  Do not make full rendering, every stat producer or complete engine teardown prerequisites for using closed rules.
+- **Known:** the [framework](../docs/game/projectile-framework.md) owns production routing and the only simulator;
+  [registered skills](../docs/game/projectile-skills.md) add special behaviour.
+- **Open:**
+  - Off-hand timing/damage and nonzero intrinsic attack repeats; per-skill duration before the 150-cell cap and a
+    native check of the continuation boundary; the action-speed/Tailwind contract (#246).
+  - Combat body geometry: actor positions use integer walk estimates and Gateway actor radii are zero, so area
+    coverage is centre-based; calibrate against `ObjectSize`.
+  - Monster weapon projectiles: `monster_projectile_weapon`, `monster_snipe` and `monster_puncture` (109 varieties'
+    first effect) take their projectile from the monster's weapon art (MonsterVarieties
+    `Weapon1_ItemVisualIdentityKeys`, e.g. `SkeletonArrow1`), which the server does not read, so they hit instantly
+    with no shot. Monster spell projectiles (`MonsterProjectileSpell`) need their own adapter.
+  - Mortars: the splash radius is a development default and `projectile_spread_radius` (3) is not modelled; monster
+    melee still lands at half the attack time although the pools carry `Melee` keyframes. Check live whether the
+    client seeds a monster's clip choice from the 0xffff sequence (the Spitter's attack2 would spit 75 ms earlier and
+    1.3 cells farther back), the handedness of a keyframe's lateral offset, `MinimumAttackDistance` and the dead zone.
+- **Live reference** ([11](../docs/protocol/11-skills.md#17-live-reference-ranged-attacks-on-gggs-servers)):
+  probe whether a predictive client draws its own shot from the record's count before dropping its server arrows;
+  measure where the client's mortar lands against the server's hit, and trace and probe the spell mortars
+  (`monster_mortar`, `monster_mortar_around_caster`) before dropping their server objects.
+  Explain the hit-timing fit (the arrow releases at the table's 299.9 cells/s, close to live's 308, yet hits arrive
+  2.72 ms per cell against live's 3.25), add the 300 ms stun bit on hits, find why a level 1 Sand Spitter hits for 5–7
+  here and a constant 4 on live, and decode S→C `0x1b4` (player only, the attack's skill id and a point list).
+- **Start:** user-run Fireball/KB checks from the skill guide, including return, terrain and overlapping explosions.
+  Check the aimed-height model live, then find the client's own projectile height/terrain rule for its predicted gem
+  projectiles and replace the 12-step clearance; send the wall-hit sound of a server `DefaultArrow` at terrain.
+  Calibrate cluster radial distribution, sequence timing and native art against client evidence.
+  Build a surface-height/world model for platforms and doodads (#182), height grids for more areas, and collision with
+  doodads and objects that have their own colliders.
+- **Done when:** Fireball and bow arrows look like the real ones in every area: at the caster's torso on terrain and
+  platforms, stopping at walls and objects.
