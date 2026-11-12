@@ -455,6 +455,10 @@ public sealed class SkillCatalog(string folder = "data", bool hardMode = false)
     public bool IsMovement(int effectRow) => _movementEffects.Value.Contains(effectRow);
     public bool IsChannelled(int effectRow) => _skillTypes.Channel.Value.Contains(effectRow);
     public bool IsTravel(int effectRow) => _skillTypes.Travel.Value.Contains(effectRow);
+    /// <summary>A skill that blinks: it puts the player at the aimed cell without a path there (ActiveSkillType Blink:
+    /// Dash, Frostblink, Flame Dash — the client's own data marks them, and the client's action does not walk).
+    /// Leap Slam and Whirling Blades are Travel without Blink: they keep a body in motion.</summary>
+    public bool IsBlink(int effectRow) => _skillTypes.Blink.Value.Contains(effectRow);
     public bool IsGuard(int effectRow) => _skillTypes.Guard.Value.Contains(effectRow);
     /// <summary>A skill that needs a shield (ActiveSkillType RequiresShield: Shield Charge, Shield Crush …).</summary>
     public bool RequiresShield(int effectRow) => _skillTypes.RequiresShield.Value.Contains(effectRow);
@@ -569,7 +573,7 @@ public sealed class SkillCatalog(string folder = "data", bool hardMode = false)
             Instant = Of("Instant"); Movement = Of("Movement"); Attack = Of("Attack"); Melee = Of("Melee");
             Spell = Of("Spell"); Projectile = Of("Projectile"); Warcry = Of("Warcry"); Aura = Of("Aura");
             Curse = Of("AppliesCurse"); AddedAura = Of("Aura", added: true); Brand = Of("Brand");
-            Travel = Of("Travel"); Guard = Of("Guard"); Channel = Of("Channel");
+            Travel = Of("Travel"); Guard = Of("Guard"); Channel = Of("Channel"); Blink = Of("Blink");
             Strike = Of("MeleeSingleTarget"); Vaal = Of("Vaal"); Nova = Of("Nova"); RequiresShield = Of("RequiresShield");
             SelfTargeted = new(() =>
             {
@@ -591,6 +595,7 @@ public sealed class SkillCatalog(string folder = "data", bool hardMode = false)
         public Lazy<HashSet<int>> AddedAura { get; }
         public Lazy<HashSet<int>> Brand { get; }
         public Lazy<HashSet<int>> Travel { get; }
+        public Lazy<HashSet<int>> Blink { get; }
         public Lazy<HashSet<int>> Channel { get; }
         public Lazy<HashSet<int>> Guard { get; }
         public Lazy<HashSet<int>> Strike { get; }

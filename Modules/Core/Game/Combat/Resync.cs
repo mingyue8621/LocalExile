@@ -124,9 +124,40 @@ public static partial class Game
             }
             return last;
         }
+        // A blink (Dash, Frostblink, Flame Dash) and a leap (Leap Slam, Blink Arrow) land where they land: what matters
+        // is that the cell holds the player, not that a path leads to it. Walking the line back from the aim put the
+        // player at the start whenever the aim was inside a wall, and the client's next resync pulled them back there
+        // (the same complaint as 2026-10-23, live again 2026-11-12 with Dash).
+        if (SkillsFor(conn).IsBlink(effect) || SkillsFor(conn).IsTravel(effect))
+            return StandableNear(aim, walkable) ?? from;
         foreach (var cell in ClientPathfinder.Line(aim, from))
             if (walkable(cell.X, cell.Y)) return cell;
         return from;
+    }
+
+    // How far from the aimed cell a blink looks for a cell the player can stand on.
+    const int LandingSearchRadius = 12;
+
+    /// <summary>The aimed cell when the player can stand on it, else the nearest one that can, ring by ring. A blink
+    /// aimed into a wall lands beside it, as the client's own does, instead of at the start.</summary>
+    static (int X, int Y)? StandableNear((int X, int Y) aim, Func<int, int, bool> walkable)
+    {
+        if (walkable(aim.X, aim.Y)) return aim;
+        for (int radius = 1; radius <= LandingSearchRadius; radius++)
+        {
+            (int X, int Y)? best = null;
+            int bestDistance = int.MaxValue;
+            for (int dy = -radius; dy <= radius; dy++)
+                for (int dx = -radius; dx <= radius; dx++)
+                {
+                    if (Math.Max(Math.Abs(dx), Math.Abs(dy)) != radius) continue;   // this ring only
+                    if (!walkable(aim.X + dx, aim.Y + dy)) continue;
+                    int distance = dx * dx + dy * dy;
+                    if (distance < bestDistance) (bestDistance, best) = (distance, (aim.X + dx, aim.Y + dy));
+                }
+            if (best is not null) return best;
+        }
+        return null;
     }
 
     // Dash crosses open gaps. Only the landing needs walking clearance. If the direct landing fails,
@@ -146,7 +177,10 @@ public static partial class Game
         var last = from;
         if (layout.Sight is not { } sight)
         {
-            foreach (var cell in ClientPathfinder.Line(from, end))
+            // The starting cell is skipped: the player already stands on it, and the client's grid marks door frames
+            // and bridge rails as blocking for projectiles. Judging it first returned the start whenever a player
+            // dashed from such a cell, and the client's own dash was then undone.
+            foreach (var cell in ClientPathfinder.Line(from, end).Skip(1))
             {
                 if (!floor(cell.X, cell.Y)) break;
                 last = cell;
@@ -156,7 +190,7 @@ public static partial class Game
 
         bool direct = floor(end.X, end.Y);
         bool fallback = true;
-        foreach (var cell in ClientPathfinder.Line(from, end))
+        foreach (var cell in ClientPathfinder.Line(from, end).Skip(1))
         {
             int clearance = sight(cell.X, cell.Y);
             if (clearance < 1 || barriers.Contains(cell)) return last;

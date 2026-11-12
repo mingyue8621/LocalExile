@@ -64,8 +64,7 @@ public static partial class Game
             var resolved = MergeSkillStats(CharacterPlayerStats(conn), SupportedSkill(conn, skillId).Stats);
             int Get(string name) => Stats.Key(name) is uint key ? resolved.GetValueOrDefault(key) : 0;
             _ = definition.Parameters.Resolve(Get, 1, ArrowsFor(conn, effect));
-            var at = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
-            if (definition.RequiresTerrain && ProjectileGrid.Blocks(conn.Layout.Id, conn.Seed, at.X, at.Y) is null)
+            if (definition.RequiresTerrain && conn.Layout.Sight is null)
                 throw new InvalidOperationException("Projectile recipe requires a projectile terrain mask");
             return true;
         }
@@ -264,7 +263,7 @@ public static partial class Game
         var profile = definition.Parameters.Resolve(Get, speed, ArrowsFor(conn, gem.Effect));
         var at = totem?.At ?? conn.Walk.Position(session.Runtime.Now / (double)ProjectileRuntime.QuantaPerSecond);
         var origin = ProjectileSession.Vector(at);
-        if (definition.RequiresTerrain && ProjectileGrid.Blocks(conn.Layout.Id, conn.Seed, at.X, at.Y) is null)
+        if (definition.RequiresTerrain && conn.Layout.Sight is null)
             throw new InvalidOperationException("Projectile recipe requires a projectile terrain mask");
         var target = ProjectileSession.Vector(aim);
         var direction = (target - origin).Unit;

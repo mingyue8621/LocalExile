@@ -289,9 +289,12 @@ public static partial class Game
         public TerrainContact? TraceTerrain(ProjectileVector from, ProjectileVector to) =>
             ProjectileGeometry.TraceGrid(from, to, Wall);
 
+        // The connection's own layout, not ProjectileGrid.Blocks: that one asks ServerLevels for the area at level 0,
+        // which is a different generated level than the one the player is in (the level is part of its cache key), so
+        // its walls could stand somewhere else. Layout.Sight is the same client grid, read from the level in play.
         bool Wall(int x, int y) => x < 0 || y < 0 || Conn.Layout.GridW > 0 && x >= Conn.Layout.GridW
             || Conn.Layout.GridH > 0 && y >= Conn.Layout.GridH
-            || ProjectileGrid.Blocks(Conn.Layout.Id, Conn.Seed, x, y) == true || Conn.ProjectileWalls.Contains((x, y));
+            || (Conn.Layout.Sight is { } sight && sight(x, y) == 0) || Conn.ProjectileWalls.Contains((x, y));
 
         int? Height(int x, int y) => TerrainHeights.At(Conn.Layout.Id, Conn.Seed, x, y);
 
@@ -454,7 +457,7 @@ public static partial class Game
                 && (ServerTrace.Projectiles || Conn.ControlledPrepared) && !Quiet(p.Use.Payload))
                 Console.WriteLine($"[gateway] {remote} projectile end use={p.UseId} entity={p.Id}"
                     + $" reason={value.Reason} position={value.Position} metadata={p.Profile.Id}"
-                    + $" grid={Conn.Layout.Id}_seed{Conn.Seed} blocked={ProjectileGrid.Blocks(Conn.Layout.Id, Conn.Seed, x, y)?.ToString() ?? "unknown"}");
+                    + $" grid={Conn.Layout.Id}_seed{Conn.Seed} blocked={(Conn.Layout.Sight is { } sight ? sight(x, y) == 0 : "unknown")}");
             if (valid && presentation.EventEffect?.Invoke(value) is { } eventEffect)
             {
                 bool spawn = value.Kind == ProjectileEventKind.Spawn;
