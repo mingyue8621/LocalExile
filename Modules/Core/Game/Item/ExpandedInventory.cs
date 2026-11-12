@@ -7,6 +7,9 @@ static partial class Game
     // The grant is the real source value, never the presentation-only recovery flag below.
     internal static bool ExpandedInventoryGranted(ClientState conn)
     {
+        // The setting hands the 4×5 grid to every character: it is the client's own inventory row 84, so no ascendancy
+        // node and no client edit is needed. Operators turn it off with expanded_inventory_for_all = 0.
+        if (SystemSettings.Default.ExpandedInventoryForAll) return true;
         if (Stats.Key(ExpandedInventoryStat) is not uint key) return false;
         long value = CharacterStatSources(conn).Stats.GetValueOrDefault(key);
         if (GameEvents.Stats.Any)

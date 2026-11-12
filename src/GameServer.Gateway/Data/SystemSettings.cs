@@ -63,6 +63,10 @@ public sealed class SystemSettings
     public double GoldChanceMultiplier => Math.Clamp(Get("gold_drop_chance_multiplier"), 0, 100);
     public double GoldAutoLootRadius => Math.Clamp(Get("gold_auto_loot_radius"), 0, 100);
 
+    /// <summary>The client's own 4×5 side backpack (inventory row 84) for every character, without the Primalist
+    /// ascendancy's "Might of the Bear". 1 = on, 0 = only the ascendancy node grants it.</summary>
+    public bool ExpandedInventoryForAll => Get("expanded_inventory_for_all") >= 1;
+
     /// <summary>One projectile movement instance's maximum flight, in cells (10 cells = 1 m): 150 = the client's 15 m
     /// cap. Fork, chain and split start a new movement instance with a fresh budget.</summary>
     public int ProjectileMaximumRangeCells => Math.Clamp(GetInt("projectile_maximum_range_cells"), 1, 10_000);
