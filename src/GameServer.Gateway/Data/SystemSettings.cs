@@ -67,6 +67,9 @@ public sealed class SystemSettings
     /// ascendancy's "Might of the Bear". 1 = on, 0 = only the ascendancy node grants it.</summary>
     public bool ExpandedInventoryForAll => Get("expanded_inventory_for_all") >= 1;
 
+    /// <summary>How far the 2nd Pet slot's pet reaches for currency and gold, in cells. Unset (0) keeps 60.</summary>
+    public double PetLootRadius => Get("pet_loot_radius") is var cells && cells > 0 ? Math.Clamp(cells, 5, 800) : 60;
+
     /// <summary>One projectile movement instance's maximum flight, in cells (10 cells = 1 m): 150 = the client's 15 m
     /// cap. Fork, chain and split start a new movement instance with a fresh budget.</summary>
     public int ProjectileMaximumRangeCells => Math.Clamp(GetInt("projectile_maximum_range_cells"), 1, 10_000);

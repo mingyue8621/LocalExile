@@ -4,7 +4,7 @@ using GameServer.Core.Protocol.Login;
 
 static partial class Game
 {
-    // 捡物宠物（装扮里 Pet 槽那两只，见 CosmeticsModule.SpawnPets）：每 0.4 秒把玩家周围 120 格内的通货与金币收进主背包。
+    // 捡物宠物（装扮里 Pet 槽那两只，见 CosmeticsModule.SpawnPets）：每 0.4 秒把玩家周围 60 格内的通货与金币收进主背包。
     //   只用 2 号槽（slot 19）那只；1 号槽（slot 18）那只只跟着走，不捡东西。
     //   通货 = 能堆叠的（MaxStack > 1：通货、碎片、精华、命运卡、圣甲虫）加上同样算通货但不堆叠的（共振器、诱饵、
     //   部分门票碎片，见 PetLootClasses）。装备、宝石、药剂、地图一律不碰。
@@ -12,7 +12,9 @@ static partial class Game
     //   一轮最多收 3 件，由近到远；收不下的直接跳过，不会堵住后面能收的（以前是取最近 3 件，3 件都塞不下就原地卡死）。
     // 落库与封包和玩家自己点拾取（PickUpGroundItem 的堆叠分支）完全同一条路径：Ground.Take → AddStacked → 保存，
     // 再发 0x2bd 移除物件、0x00bf 背包变更。不走路、不播玩家动作，所以看起来就是宠物在身边把东西收了。
-    const double PetLootRange = 120;   // 之前 80：玩家走两步，脚边的东西就出圈了（2026-11-12 日志里最近的通货在 125 格）
+    // 60 是默认值，可在 world.db 的 system_settings 里用 pet_loot_radius 改（不用改代码、不用重新发版）。
+    // 历史：硬编码 80 → 120（脚步跟不上掉落）→ 60（用户 2026-11-12 定：范围不用那么大）。
+    static double PetLootRange => SystemSettings.Default.PetLootRadius;
     const int PetLootIntervalMs = 400;
     const int PetLootBusyIntervalMs = 1000;   // 地上有货但一件都收不进来（背包满）时放慢，别空转
     const int PetLootPerTick = 3;
@@ -70,21 +72,29 @@ static partial class Game
                     continue;
                 }
                 if (HardcoreProgressBlocked(conn)) continue;
-                var (tried, taken) = await PetLootOnce(remote, stream, ciphers, conn);
+                var (tried, taken, gold, notes) = await PetLootOnce(remote, stream, ciphers, conn);
                 // 有货一件没进（多半是背包满了）就放慢；地上没货则保持正常节奏，新掉落照旧 0.4 秒内收走。
                 if (taken > 0) busy = 0;
                 else if (tried > 0) busy = Math.Min(busy + 1, 3);
                 else busy = 0;
                 double now = conn.Clock.Elapsed.TotalSeconds;
-                if (tried > 0 && taken == 0 && now >= nextReport)
+                // 收成功也记一条：以前成功完全不写日志，于是"宠物到底捡了什么"根本无从判断。
+                if (taken > 0 && now >= nextReport)
                 {
-                    nextReport = now + 30;
-                    Console.WriteLine($"[gateway] {remote} pet: none of {tried} nearby item(s) fitted the inventory, they stay on the ground");
+                    nextReport = now + 10;
+                    Console.WriteLine($"[gateway] {remote} pet: took {taken} of {tried} nearby item(s) ({gold} gold)");
+                    foreach (string note in notes) Console.WriteLine($"[gateway] {remote} pet:   {note}");
                 }
-                // 地上有东西、候选却一件都没有（tried 一直是 0）：把判据写出来，别只能靠猜。
+                else if (taken == 0 && tried > 0 && now >= nextReport)
+                {
+                    nextReport = now + 15;
+                    Console.WriteLine($"[gateway] {remote} pet: took none of {tried} nearby item(s), they stay on the ground");
+                    foreach (string note in notes) Console.WriteLine($"[gateway] {remote} pet:   {note}");
+                }
+                // 地上有东西、候选却一件都没有（tried 一直是 0）：把身边最近的几件连同判据写出来，别只能靠猜。
                 else if (tried == 0 && now >= nextDiagnosis && conn.Instance.Ground.All() is { Count: > 0 } all)
                 {
-                    nextDiagnosis = now + 30;
+                    nextDiagnosis = now + 15;
                     var (px, py) = conn.Walk.Position(now);
                     var ranked = all
                         .Select(e => (e.Id, e.Item, Dist: Math.Sqrt((double)(e.Item.GridX - px) * (e.Item.GridX - px)
@@ -95,7 +105,7 @@ static partial class Game
                     int both = ranked.Count(e => e.Dist <= PetLootRange && PetLootable(e.Item));
                     Console.WriteLine($"[gateway] {remote} pet: nothing to take at ({px}, {py}); the ground holds {ranked.Count} item(s) — "
                         + $"{inRange} within {PetLootRange:0} cells, {lootable} lootable anywhere, {both} lootable and in range");
-                    foreach (var e in ranked.Take(6))
+                    foreach (var e in ranked.Take(8))
                     {
                         var shape = ShapeOf(e.Item.Item);
                         Console.WriteLine($"[gateway] {remote} pet:   0x{e.Id:x} type 0x{e.Item.Item.TypeHash:x8} "
@@ -124,8 +134,12 @@ static partial class Game
         conn.PetLootRunning = false;
     }
 
-    /// <summary>One pass: how many it tried and how many went into the inventory.</summary>
-    static async Task<(int Tried, int Taken)> PetLootOnce(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
+    /// <summary>Why one item stayed on the ground.</summary>
+    enum PetPick { Taken, NotLootable, NoRoom, Gone }
+
+    /// <summary>One pass: how many it tried, how many went in, and a line per item for the log.</summary>
+    static async Task<(int Tried, int Taken, int Gold, List<string> Notes)> PetLootOnce(
+        string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
     {
         double now = conn.Clock.Elapsed.TotalSeconds;
         var (x, y) = conn.Walk.Position(now);
@@ -133,37 +147,48 @@ static partial class Game
             .OrderBy(g => (double)(g.Item.GridX - x) * (g.Item.GridX - x) + (double)(g.Item.GridY - y) * (g.Item.GridY - y))
             .Take(PetLootAttempts)
             .ToList();
-        int taken = 0, tried = 0;
+        int taken = 0, tried = 0, gold = 0;
+        var notes = new List<string>();
         foreach (var (id, ground) in near)
         {
             if (conn.Closed || taken >= PetLootPerTick) break;
             tried++;
-            if (await PetPickUp(remote, stream, ciphers, conn, id, ground)) taken++;
+            var picked = await PetPickUp(remote, stream, ciphers, conn, id, ground);
+            if (picked == PetPick.Taken)
+            {
+                taken++;
+                if (IsGold(ground)) gold++;
+            }
+            if (notes.Count < 8) notes.Add($"0x{id:x} {picked} {ground.Item.StackSize}x {Label(ground)}");
         }
-        return (tried, taken);
+        return (tried, taken, gold, notes);
     }
 
+    /// <summary>What one line of the pet's log calls this item: gold, or its client.db item class.</summary>
+    static string Label(WorldItemObject ground) =>
+        IsGold(ground) ? "Gold" : ShapeOf(ground.Item)?.Class ?? "(no catalog row)";
+
     // Takes one ground item into the main inventory, the way the player's own stacking pickup does, without the walk.
-    // False when it stays on the ground: no room, or someone else took it first.
-    static async Task<bool> PetPickUp(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, uint id, WorldItemObject ground)
+    static async Task<PetPick> PetPickUp(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, uint id, WorldItemObject ground)
     {
         if (IsGold(ground))
         {
             await PickUpGold(remote, stream, ciphers, conn, id, ground, "by the pet");
-            return true;
+            // PickUpGold takes it itself; still on the ground means it refused (dead, paused, or someone took it first).
+            return conn.Instance.Ground.Get(id) is null ? PetPick.Taken : PetPick.Gone;
         }
-        if (!PetLootable(ground)) return false;
+        if (!PetLootable(ground)) return PetPick.NotLootable;
         var items = ItemsOf(conn);
         PlayerInventories.Stacking stacked;
         WorldItemObject? rest = null;
         uint restId = 0;
         lock (conn.Monsters)
         {
-            if (HardcoreProgressBlocked(conn)) return false;
+            if (HardcoreProgressBlocked(conn)) return PetPick.Gone;
             // No room: it stays on the ground and is tried again on the next pass, and this pass goes on to the next item
             // (which is where the old nearest-three-with-no-room case used to hold up everything behind it).
-            if (!items.Fits(PlayerInventories.MainInventory, ground.Item, ShapeOf)) return false;
-            if (conn.Instance.Ground.Take(id) is null) return false;   // already picked up
+            if (!items.Fits(PlayerInventories.MainInventory, ground.Item, ShapeOf)) return PetPick.NoRoom;
+            if (conn.Instance.Ground.Take(id) is null) return PetPick.Gone;   // already picked up
             stacked = KeepOnGroundIfNotSaved(conn, ground, () => items.AddStacked(PlayerInventories.MainInventory, ground.Item, ShapeOf));
             if (stacked.Left > 0)
             {
@@ -181,6 +206,6 @@ static partial class Game
             InstanceItems.InventoryChange(PlayerInventories.InventoryId(PlayerInventories.MainInventory),
                 items.NextRevision(PlayerInventories.MainInventory), stacked.RemovedIds, stacked.AddedItems),
             $"0x00bf inventory 1: pet took {ground.Item.StackSize} ({stacked.Changed.Count} stack(s) grown, {stacked.Added.Count} new)");
-        return true;
+        return PetPick.Taken;
     }
 }
