@@ -49,8 +49,16 @@ public static class DoedreSewers
         var (min, max) = Monsters.BaseDamage(v, level) ?? (1, 1);
         bool spell = effect != Melee;
         var damage = spell ? catalog.HitDamage(effect, l) : DamagePacket.Of(DamageType.Physical, min, max);
+        // No phase multiplier and no phase cast-speed: Doedre's phases change which effluent is up, not how hard her skills
+        // hit, and the client's rows carry one value each (WandStrike 416-625, BubbleBurst 316-474, Warp 639-959 at level 1,
+        // Melee the level's own Damage). The hand-written 1.5x on the purple phase stacked with the ten exposure stacks
+        // (+100% damage taken) and a 3-projectile wand volley took a whole 2,768-life bar in one action (live 2026-11-12).
+        // A spell hit keeps every monster hit's ceiling: MonsterCatalog.BaseDamage(level) x HitCapFactor, the same one
+        // MonsterCatalog.BaseDamage applies to a swing, which Warp's 959 exceeded at level 56 (201 x 4 = 806).
+        if (spell && Monsters.BaseDamage(level) is int budget && budget > 0
+            && damage.MaxTotal > (double)budget * MonsterCatalog.HitCapFactor)
+            damage = damage.Scale((double)budget * MonsterCatalog.HitCapFactor / damage.MaxTotal);
         double seconds = effect == Melee ? v.AttackMs / 1000d : catalog.CastTimeMs(effect) / 1000d;
-        if (effect is not (Drain or Emerge)) { if (phase == 1) seconds /= 1.5; if (phase == 2) damage = damage.Scale(1.5); }
         return new(Skill(effect), Math.Max(.1, seconds), effect == Melee ? v.AttackRange : 85, damage) { Spell = spell, Scripted = true };
     }
     public static async Task Leaving(ClientState c) => await Clear(c);
@@ -176,6 +184,15 @@ public static class DoedreSewers
             var catalog = Game.SkillsFor(c);
             cloudDps = catalog.EffectStats(744, catalog.MaxLevelAt(744, boss.Level))
                 .Where(s => Stats.Name(s.Item1) == "base_chaos_damage_to_deal_per_minute").Sum(s => s.Item2) / 60d;
+            // What her six granted effects say at this level, in one line: the numbers every hit below is built from
+            // (client.db GrantedEffects 406/6437/6440/6447/6743/6742 and the Creeping Fire cloud, 744).
+            if (boss.Variety is { } bossVariety)
+                Console.WriteLine($"[gateway] Doedre data at level {boss.Level}: " + string.Join("; ",
+                    Effects.Select(effect =>
+                    {
+                        var a = Attack(c, bossVariety, boss.Level, effect, 0);
+                        return $"{catalog.EffectId(effect) ?? effect.ToString()} {a.Damage.MinTotal:0}-{a.Damage.MaxTotal:0} / {a.Seconds:0.##} s";
+                    })) + $"; chaos cloud {cloudDps:0.#}/s");
             var placements = new QuestObjectTypes.AreaPlacements(Area, c.Seed, []);
             centre = boss.Walk.Position(c.Clock.Elapsed.TotalSeconds);
             foreach (string name in new[] { "DoedreCauldronValve", "DoedreSewersCauldron", "DoedreSewerFaceDoor" })
