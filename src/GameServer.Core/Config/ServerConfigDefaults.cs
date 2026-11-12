@@ -107,9 +107,12 @@ Chat.Port = 6113
 #        relative to the repository root (or the release
 #        folder) or absolute. A repository checkout's
 #        scripts/dev/live.ps1 always uses Client.
+#        auto follows the machine instead of a written path: the folder the
+#        login launcher last ran in (data/client-folder.txt, written by
+#        流放之路登录器.exe), then Client, then the release folder itself.
 #        Default: Client [Game_CLIENT_FOLDER]
 
-Client.Folder = Client
+Client.Folder = auto
 
 """;
 }

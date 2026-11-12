@@ -51,7 +51,48 @@ public static class ServerConfig
     public static string GatewayPublicAddress => Text("Game_GATEWAY_HOST", "Gateway.PublicAddress", "127.0.0.1");
     public static IPAddress ChatBind => Address("Game_CHAT_BIND", "Chat.BindAddress", "0.0.0.0");
     public static int ChatPort => Port("Game_CHAT_PORT", "Chat.Port", 6113);
-    public static string ClientFolder => Text("Game_CLIENT_FOLDER", "Client.Folder", "Client");
+    /// <summary>The client the servers patch and read the game data from. <c>auto</c> — or a folder that is not on this
+    /// machine — is resolved instead of written down: the folder the login launcher last ran in (it sits with the game it
+    /// starts and records that folder in <c>data/client-folder.txt</c>), then <c>Client</c>, then this folder itself. An
+    /// install moved to another computer or another drive therefore keeps working as it is.</summary>
+    public static string ClientFolder
+    {
+        get
+        {
+            string configured = Text("Game_CLIENT_FOLDER", "Client.Folder", "Client");
+            if (configured.Length > 0 && !configured.Equals("auto", StringComparison.OrdinalIgnoreCase)
+                && System.IO.Directory.Exists(configured)) return configured;
+            // Nothing to detect: keep "Client" (what the setting ships with) so the next error names a folder to make,
+            // not the word "auto".
+            return DetectedClient() ?? (configured.Equals("auto", StringComparison.OrdinalIgnoreCase) ? "Client" : configured);
+        }
+    }
+
+    /// <summary>Where the client is when <see cref="ClientFolder"/> was not told: the login launcher's recorded folder,
+    /// then <c>Client</c>, then the working folder. Null when none of them holds a client.</summary>
+    static string? DetectedClient()
+    {
+        try
+        {
+            string note = System.IO.Path.Combine("data", "client-folder.txt");
+            if (System.IO.File.Exists(note))
+            {
+                string folder = System.IO.File.ReadAllText(note).Trim().Trim('"');
+                if (folder.Length > 0 && HoldsClient(folder)) return folder;
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        foreach (string folder in new[] { "Client", "." })
+            if (HoldsClient(folder)) return folder;
+        return null;
+    }
+
+    /// <summary>Whether a folder holds a game client, in either layout (a GGPK, or the game's own executables).</summary>
+    static bool HoldsClient(string folder) =>
+        System.IO.File.Exists(System.IO.Path.Combine(folder, "Content.ggpk"))
+        || System.IO.File.Exists(System.IO.Path.Combine(folder, "Game.patched.exe"))
+        || System.IO.File.Exists(System.IO.Path.Combine(folder, "Game.exe"))
+        || System.IO.Directory.Exists(System.IO.Path.Combine(folder, "Bundles2"));
 
     /// <summary>The setting: its environment variable, else the file's key, else the default.</summary>
     public static string Text(string variable, string key, string fallback) =>
