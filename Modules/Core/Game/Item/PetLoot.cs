@@ -48,14 +48,27 @@ static partial class Game
     internal static async Task RunPetLoot(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
     {
         int busy = 0;
-        double nextReport = 0, nextError = 0;
+        double nextReport = 0, nextError = 0, nextMissing = 0;
         while (!conn.Closed)
         {
             try
             {
                 await Task.Delay(busy == 0 ? PetLootIntervalMs : PetLootBusyIntervalMs);
                 if (conn.Closed) break;
-                if (!PetLooterOut(conn)) { busy = 0; continue; }
+                if (!PetLooterOut(conn))
+                {
+                    busy = 0;
+                    // 没有 2 号槽的宠物就没什么可捡的；说一次，免得"宠物不捡"分不清是没宠物还是没逻辑。
+                    double missing = conn.Clock.Elapsed.TotalSeconds;
+                    if (missing >= nextMissing)
+                    {
+                        nextMissing = missing + 60;
+                        int spawned = 0;
+                        lock (conn.Pets) spawned = conn.Pets.Count;
+                        Console.WriteLine($"[gateway] {remote} pet: no pet in slot {PetLootSlot} (spawned pets: {spawned}), nothing to pick up");
+                    }
+                    continue;
+                }
                 if (HardcoreProgressBlocked(conn)) continue;
                 var (tried, taken) = await PetLootOnce(remote, stream, ciphers, conn);
                 // 有货一件没进（多半是背包满了）就放慢；地上没货则保持正常节奏，新掉落照旧 0.4 秒内收走。
@@ -69,11 +82,12 @@ static partial class Game
                     Console.WriteLine($"[gateway] {remote} pet: none of {tried} nearby item(s) fitted the inventory, they stay on the ground");
                 }
             }
-            catch (Exception e) when (e is IOException or ObjectDisposedException or SocketException or InvalidOperationException)
+            catch (Exception e)
             {
-                // 一次发送失败不能把拾取永久停掉：以前异常一跳出循环，PetLootRunning 还是 true，SpawnPets 也不会再启动它，
-                // 于是本次连线里宠物就再也不捡了（看起来就是"捡了一会儿就不捡了"）。连接真的断了才退出。
-                if (conn.Closed) return;
+                // 任何一次异常都不能把拾取永久停掉。以前这里只接 4 种异常，别的（ArgumentException / NullReferenceException
+                // 从 Blob()、AddStacked() 里冒出来）直接跳出 while，而 PetLootRunning 仍是 true，SpawnPets 也不会再启动
+                // 它，于是本次连线里宠物就再也不捡了——这就是"捡了一会儿就不捡了"。连接真的断了才退出。
+                if (conn.Closed) break;
                 double now = conn.Clock.Elapsed.TotalSeconds;
                 if (now >= nextError)
                 {
@@ -83,6 +97,8 @@ static partial class Game
                 busy = 3;
             }
         }
+        // 循环停了就允许下一次进图（SpawnPets）重新启动它，而不是留一个永远为 true 的标志位。
+        conn.PetLootRunning = false;
     }
 
     /// <summary>One pass: how many it tried and how many went into the inventory.</summary>

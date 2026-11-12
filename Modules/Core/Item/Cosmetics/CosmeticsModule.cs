@@ -144,10 +144,18 @@ static class CosmeticsFeature
         var (px, py) = conn.Walk.Position(now);
         foreach (var worn in WornCosmetics(conn).Where(w => w.Slot is 18 or 19))
         {
-            if (MtxEffects.Of(worn.MtxTypeHash) is not { PetType: { Length: > 0 } type } fx) continue;
+            if (MtxEffects.Of(worn.MtxTypeHash) is not { PetType: { Length: > 0 } type } fx)
+            {
+                // This used to be a silent continue: a worn pet that never appears could not be told from one that is
+                // simply not picked up (PetLoot asks for slot 19 only).
+                Console.WriteLine($"[gateway] {remote} pet slot {worn.Slot}: record {worn.Id} (hash 0x{worn.MtxTypeHash:x8}) " +
+                    "has no Pet row in the client tables, not spawned");
+                continue;
+            }
             if (!PetObject.CanSerialize(fx.PetComponents, fx.PetStates is not null))
             {
-                Console.WriteLine($"[gateway] {remote} pet {type}: components {string.Join(", ", fx.PetComponents ?? [])} not supported, not spawned");
+                Console.WriteLine($"[gateway] {remote} pet slot {worn.Slot} ({type}): components " +
+                    $"{string.Join(", ", fx.PetComponents ?? [])} not supported, not spawned");
                 continue;
             }
             var (x, y) = PetSpot(conn, (px, py), worn.Slot == 18 ? 1 : -1);
@@ -157,6 +165,7 @@ static class CosmeticsFeature
                 $"0x02bb create pet 0x{id:x} {type} at ({x}, {y})");
             await global::Game.SendWorldRecord(remote, stream, ciphers, conn, id, InstanceProtocol.EnterWakeZone(id), $"0x01a9 pet 0x{id:x} enters wake zone");
             lock (conn.Pets) conn.Pets[id] = new SpawnedPet(conn.NewWalk(x, y, conn.Walk.Speed), worn.Slot == 18 ? 1 : -1, worn.Slot);
+            Console.WriteLine($"[gateway] {remote} pet slot {worn.Slot}: spawned 0x{id:x} {type} at ({x}, {y})");
         }
         if (!conn.PetFollowRunning) { conn.PetFollowRunning = true; _ = RunPetFollow(remote, stream, ciphers, conn); }
         // The worn pet also picks up stacks near the player (PetLoot.cs); without a pet nothing runs.
@@ -200,9 +209,13 @@ static class CosmeticsFeature
                     await global::Game.SendWorldRecord(remote, stream, ciphers, conn, id, InstanceProtocol.ActionStarted(id, from.X, from.Y, to.X, to.Y, Move, 0xffff, 0x0408), null);
             }
         }
-        catch (Exception ex) when (ex is IOException or ObjectDisposedException or InvalidOperationException)
+        catch (Exception ex)
         {
-            // The connection closed while sending.
+            // The connection closed while sending — or something else went wrong. Either way the flag must go back, or
+            // SpawnPets never starts the walk again and the pets stand still for the rest of the connection.
+            if (!conn.Closed)
+                Console.WriteLine($"[gateway] {remote} pets: follow loop ended by {ex.GetType().Name}: {ex.Message}");
         }
+        finally { conn.PetFollowRunning = false; }
     }
 }
