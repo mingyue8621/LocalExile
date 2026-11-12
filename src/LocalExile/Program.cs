@@ -81,15 +81,28 @@ try
     // The servers, the client and the tools end with this process, however it ends.
     KillOnExitJob.AddCurrentProcess();
 
-    bool withClient = options.Command == "run" && !options.NoClient;
+    // A server install has no client on it (2026-11-12: deploying to a server, where the players bring their own): the
+    // servers run without one, and each step that reads the client's files is skipped with a reason instead of failing
+    // the start. Everything those steps produce (login keys, the game data, the client's login list) comes with the copy
+    // from the machine that built the install.
+    string clientFolder = options.Client ?? GameServer.Core.ServerConfig.ClientFolder;
+    bool clientHere = GameServer.Data.Ggpk.ClientFiles.Resolve(clientFolder) is not null;
+    bool withClient = options.Command == "run" && !options.NoClient && clientHere;
+    if (!clientHere && options.Command is "run" or "setup")
+        log.Warn($"no game client at \"{clientFolder}\" (Client.Folder): starting the servers only. Set Client.Folder to the "
+            + "client to play on this machine, or copy data\\login-keys.json and data\\game-files.zip over from the machine "
+            + "that built this install.");
     if (withClient) ClientLaunch.AssertNoneRunning();
     if (options.Command == "run") Servers.AssertPortsFree(ports);
 
-    ClientInstall.Ensure(options, log);
+    if (clientHere) ClientInstall.Ensure(options, log);
     Extraction.Run(log);
-    ClientInstall.EnsureKeysAndPatch(log);
+    if (clientHere) ClientInstall.EnsureKeysAndPatch(log);
+    else if (!File.Exists(Path.Combine("data", "login-keys.json")))
+        log.Warn("data\\login-keys.json is missing and there is no client here to make it: players cannot log in until it "
+            + "is copied from the machine that built this install");
     Accounts.EnsureOne(options, log);
-    ClientInstall.SelectLocalLogin(ports, log);
+    if (clientHere) ClientInstall.SelectLocalLogin(ports, log);
     if (options.Command == "setup")
     {
         log.Done("setup finished; start the game with LocalExile.exe");

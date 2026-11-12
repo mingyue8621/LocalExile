@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using GameServer.Core;
+using GameServer.Data.Ggpk;
 
 namespace LocalExile;
 
@@ -30,6 +32,26 @@ static class Extraction
         if (todo.Count == 0)
         {
             log.Info("game data is up to date");
+            return;
+        }
+
+        // A server install has no client to read: its data files come from the machine that built it. Nothing to remake is
+        // fine (above); something to remake is only a warning when the file is already there in an older version, and an
+        // error naming the setting when it is missing outright — never the tool's stack trace for a folder that is simply
+        // not on this machine (live 2026-11-12: the client moved to G:\POEClient, and extraction died on "Client").
+        string client = ServerConfig.ClientFolder;
+        if (ClientFiles.Resolve(client) is null)
+        {
+            var missing = todo.Where(t => !File.Exists(Local(t.Entry.Outputs[0]))).ToList();
+            if (missing.Count > 0)
+                throw new LauncherException(ExitCode.Extraction,
+                    $"no game client at \"{client}\" (Client.Folder in {ServerConfig.Path}) to make "
+                    + $"{string.Join(", ", missing.Select(m => m.Entry.Outputs[0]))} from. Point Client.Folder at the client, "
+                    + "or copy those files from the machine that built this release.");
+            foreach (var (entry, why) in todo)
+                log.Warn($"{entry.Outputs[0]} stays at its older version ({why}): there is no game client at \"{client}\" "
+                    + $"(Client.Folder) to remake it from");
+            log.Info("continuing without remaking the game data");
             return;
         }
 
