@@ -12,14 +12,7 @@ public static partial class Game
 {
     // S→C 0x7b kinds of the screens the scripts open (the client's screen table at 0x142fd89f0, campaign/pantheon.md §3).
 
-    public static readonly Dictionary<string, byte> ScriptScreens = new(StringComparer.Ordinal)
-    {
-        ["PantheonScreen"] = 0x14,
-        // Einhar's "View Bestiary" (SendOpenScreen( BestiaryScreen )): 0x0f is the kind every master-crafting window
-        // opens — the client then shows the crafting UI the object offers (05-inventories-and-ui.md: BestiaryCrafting is
-        // inventory row 31, 2x4). Not verified live yet.
-        ["BestiaryScreen"] = 0x0f,
-    };
+    public static readonly Dictionary<string, byte> ScriptScreens = new(StringComparer.Ordinal) { ["PantheonScreen"] = 0x14 };
 
 
     /// <summary>Whether the row does something when its talk ends (or at once without a talk).</summary>

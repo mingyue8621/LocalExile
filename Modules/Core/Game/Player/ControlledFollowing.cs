@@ -14,7 +14,7 @@ public static partial class Game
     /// <summary>How long it keeps running while the gap is not closing; the leader's own speed means it may never close.</summary>
     internal const double ControlledCatchUpSeconds = 1.5;
 
-    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ClientState, ControlledFollowing> FollowerPlans = new();
+    static readonly RuleTable<ClientState, ControlledFollowing> FollowerPlans = new();
     sealed class ControlledFollowing
     {
         public bool Following;

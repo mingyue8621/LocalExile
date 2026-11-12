@@ -103,8 +103,10 @@ public static partial class Game
         IReadOnlyList<(uint Key, int Value)>? extraStats = null, Action<uint, SpawnedMonster>? owned = null, Func<bool>? ownedCurrent = null,
         IReadOnlyList<GrantedSkill>? ownedSkills = null, uint? ownedMaximumLife = null,
         MonsterModSet? extraMods = null, bool scripted = false, IReadOnlyList<VisibleItem>? ownedLooks = null,
-        Func<bool>? ownedAdmission = null, MonsterPlacement placement = MonsterPlacement.Proposed, int? lifePercent = null)
+        Func<bool>? ownedAdmission = null, MonsterPlacement placement = MonsterPlacement.Proposed, int? lifePercent = null,
+        MonsterMovement? movement = null)
     {
+        movement ??= MonsterMovement.Default;
         uint id;
         // Under the lock the projectile visuals and ground art take ids under: minions spawn from their own loop.
         lock (conn.Monsters)
@@ -160,7 +162,12 @@ public static partial class Game
         // itself. Every other monster takes its combat effect (MavenNucleus.CombatEffect).
         bool kingActor = KingInMists.IsActor(variety);
         bool brine = BrineKing.IsBoss(variety);
-        int effect = brine ? BrineKing.MeleeEffect : !kingActor ? MavenNucleus.CombatEffect(catalog, variety)
+        // The Shaper, the Elder and Sirus are scripted fights too (AtlasBosses.cs, ShaperFight.cs, ElderFight.cs,
+        // SirusFight.cs): their record's swing is their basic skill, and every other skill of their kit is played by their
+        // controller through its own id.
+        bool atlas = AtlasBosses.IsBoss(variety);
+        int effect = brine ? BrineKing.MeleeEffect : atlas ? AtlasBosses.BasicEffect(variety)
+            : !kingActor ? MavenNucleus.CombatEffect(catalog, variety)
             : variety.GrantedEffects is [int firstEffect, ..] ? firstEffect : -1;
         bool rangedAttack = kingActor
             ? effect >= 0 && (catalog.IsRangedAttack(effect) || variety.RangedWeapon && catalog.IsAttack(effect))
@@ -187,16 +194,18 @@ public static partial class Game
         bool spell = effect >= 0 && catalog.EffectStats(effect, level)
             .Any(s => s.Item1 == StatKeys.CastingSpell && s.Item2 != 0);
         bool castTime = spell || effect >= 0 && catalog.IsSpell(effect);
-        // A ranged attack reaches half the larger of its variety's MaximumAttackDistance and aggro row, read as cells:
-        // the same rule as the notice range above (a Vaal archer's max(58, 135) / 2 ≈ 67 cells), so a ranged monster
+        // An encounter that knows better gives its own share of the attack distance (MonsterMovement.Reach): the Izaro and
+        // Atlas fights use it so a spell caster walks up before it casts.
+        // Otherwise a ranged attack reaches half the larger of its variety's MaximumAttackDistance and aggro row, read as
+        // cells: the same rule as the notice range above (a Vaal archer's max(58, 135) / 2 ≈ 67 cells), so a ranged monster
         // shoots as far as it notices, as the game's do. Dividing by a cell's 250/23 world units instead gave that
         // archer 12.4 cells, and it stood and watched a player six cells off (live 2026-11-08); as plain cells the row
         // had it shooting from 58 and noticing from four screens away. A melee attack keeps the row's number as a cell
         // count: the chase's walk-up stops `Range - 1` cells short of the player (the player's size), so its 6 units
         // as 0.55 cells would park the monster inside them; see the roadmap.
-        double reachUnits = summon is not null || rangedAttack && !kingActor
-            ? Math.Max(variety.AttackRange, variety.AggroRange) : 0;
-        double reach = reachUnits > 0 ? reachUnits / 2 : variety.AttackRange;
+        double reach = movement.Reach is double share ? variety.AttackRange * share
+            : summon is not null || rangedAttack && !kingActor
+                ? Math.Max(variety.AttackRange, variety.AggroRange) / 2 : variety.AttackRange;
         double swing = !kingActor && effect >= 0 && catalog.IsSpell(effect) && catalog.CastTimeMs(effect) > 0
             ? catalog.CastTimeMs(effect) / 1000.0 : variety.AttackMs / 1000.0;
         // Its hit: the level's Damage is the DPS every monster of that level shares (wiki "Monster damage"), so one hit is
@@ -220,7 +229,9 @@ public static partial class Game
         {
             Spell = spell,
             CastTime = castTime,
-            Scripted = kingActor || brine,
+            Scripted = kingActor || brine || atlas,
+            // A weapon in the off hand, not a shield (ItemStances 10) or a quiver (9).
+            DualWielding = ownedLooks?.Any(l => l.Slot == 1 && l.Stance is not (9 or 10)) == true,
             Ranged = rangedAttack,
             Projectile = projectile,
             Summon = summon,
@@ -238,7 +249,7 @@ public static partial class Game
                 + $"projectile {(projectile is null ? "none" : projectile.Metadata)}, cast {attack.CastTime:0.###} s, swing {attack.Seconds:0.###} s");
         // A boss with stages also has the skill that changes them (Hillock's sword extract, BossFights). A scripted
         // encounter drives its own phases: the built-in stage would heal it and fight the controller for its actions.
-        var stage = scripted ? null : BossFights.For(variety.Id);
+        var stage = scripted || atlas ? null : BossFights.For(variety.Id);
         // Its stats as the attack's (skill_is_non_pathing above all, and the stage's own time): without them the client sent
         // the action through its pathing step, played nothing and kept the monster in it (live 2026-10-21).
         var stageSkill = skill is not null && stage is not null
@@ -248,9 +259,17 @@ public static partial class Game
         // The King in the Mists needs its whole granted-effect list on the actor, not only the default attack: each 0x1ab
         // names one of these ids (KingInMists.cs). The three Mystic Fetishes likewise need their hazard list, because the
         // official server sends those actions to the fetish actor.
-        var kingSkills = Sirus.SkillsFor(conn, variety, level) ?? KitavaActFive.SkillsFor(conn, variety, level) ?? KitavaActTen.SkillsFor(conn, variety, level) ?? DepravedTrinity.SkillsFor(conn, variety, level) ?? VaalOversoul.SkillsFor(conn, variety, level) ?? DoedreSewers.SkillsFor(conn, variety, level) ?? BrineKing.SkillsFor(conn, variety, level, attack) ?? KingInMists.SkillsFor(conn, variety, level, attack)
+        var kingSkills = Sirus.SkillsFor(conn, variety, level) ?? KitavaActFive.SkillsFor(conn, variety, level) ?? KitavaActTen.SkillsFor(conn, variety, level) ?? DepravedTrinity.SkillsFor(conn, variety, level) ?? VaalOversoul.SkillsFor(conn, variety, level) ?? DoedreSewers.SkillsFor(conn, variety, level) ?? BrineKing.SkillsFor(conn, variety, level, attack) ?? IzaroSkills.SkillsFor(conn, variety, level, attack, skill) ?? IzaroIdols.SkillsFor(conn, variety, level, attack, skill) ?? KingInMists.SkillsFor(conn, variety, level, attack)
+            ?? AtlasBosses.SkillsFor(conn, variety, level, attack)
             ?? (KingInMists.IsFetish(variety) ? KingInMists.FetishSkillsFor(conn, variety, level, attack) : null);
+        // A monster the campaign places as a boss, or one with a bar of its own, and that has no encounter controller:
+        // it plays the rest of its granted effects through the ordinary AI (BossKits). Every other campaign boss walked
+        // up and swung one default attack forever. A scripted encounter keeps its own list and its own actions.
+        var kit = scripted || kingSkills is not null ? (IReadOnlyList<MonsterKitSkill>)[] : BossKits.Kit(conn, variety, level, effect, attack);
+        // The kit's first entry is the effect the default attack uses, given its own id in the kit: the actor needs that
+        // list, not a second copy of the default attack under the hash-derived id. The stage skill stays: it is 0x0103.
         var skills = kingSkills is { Count: > 0 } ? kingSkills
+            : kit.Count > 0 ? [.. BossKits.SkillsOf(conn, variety, level, kit), .. stageSkill is null ? [] : new List<GrantedSkill> { stageSkill }]
             : skill is null ? null : stageSkill is null ? [skill] : [skill, stageSkill];
         if (ownedSkills is not null) skills = ownedSkills;
         List<(uint, int)>? stats = skill is null ? null : [.. attack.Stats()];
@@ -279,7 +298,7 @@ public static partial class Game
         // The client multiplies this monster's pathing speed by its own roll in the variety's range, drawn from [id, type]
         // (MonsterSpeedRoll.cs); the walk estimate uses the same speed so arrival, swing range and contact agree with it.
         int speedRoll = MonsterSpeedRoll.Percent(id, type, variety);
-        double walkSpeed = mods.Effects.MovementSpeed(variety.MovementSpeed) * MonsterSpeedRoll.Factor(speedRoll);
+        double walkSpeed = mods.Effects.MovementSpeed(variety.MovementSpeed) * MonsterSpeedRoll.Factor(speedRoll) * movement.SpeedFactor;
         // An owned spawn must not send a native object and then lose its roster callback across reload.
         // Commit the neutral identity with its create/wake bytes at one current send gate.
         bool admitted = false;
@@ -338,7 +357,7 @@ public static partial class Game
             }
         void AddMonsterLocked()
         {
-            MonsterEmerge.AddLocked(conn, id, new SpawnedMonster($"{variety.Name}@{level}", conn.NewMonsterWalk(id, x, y, walkSpeed, bodySize, rarity == MonsterRarity.Unique),
+            MonsterEmerge.AddLocked(conn, id, new SpawnedMonster($"{variety.Name}@{level}", conn.NewMonsterWalk(id, x, y, walkSpeed, bodySize, rarity == MonsterRarity.Unique, movement.ThroughBodies),
                 // MinAgroRange/MaxAgroRange read as cells, scaled to the 60–100 cell notice range the player asked for
                 // (three quarters of the row, a Vaal archer's 105–135 becoming 79–100 and a Raised Zombie's 45 the floor
                 // of 60). The chase goes on for the row's own number of cells (SpawnedMonster.ChaseRange) and a ranged
@@ -346,16 +365,18 @@ public static partial class Game
                 (int)Math.Clamp(Math.Round(variety.AggroRange * 0.75), 60, 100),
                 Math.Max(2, variety.ObjectSize + 1), life, (int)Math.Max(3, variety.AggroRange))
             {
-                Attack = skill is null ? null : attack, Hostile = !friendly, Variety = variety, Level = level, Rarity = rarity,
-                Scripted = !friendly && scripted,
+                Attack = skill is null && kit.Count == 0 ? null : kit.Count > 0 ? kit[0].Attack : attack,
+                Kit = kit, Hostile = !friendly, Variety = variety, Level = level, Rarity = rarity, Movement = movement,
+                Scripted = !friendly && (scripted || atlas),
                 Life = Math.Min(damagedLife ?? life, life), Stage = stageSkill is null ? null : stage, States = states,
                 HitAnimations = Monsters.TakeHit(variety.Id), Mods = mods, SpeedRoll = speedRoll,
                 Threshold = QuestsOf(conn).ThresholdOf(conn.Layout.Id, variety.Id),
-                CannotBeStunned = !friendly && (KingInMists.IsBoss(variety) || scripted),
+                CannotBeStunned = !friendly && (KingInMists.IsBoss(variety) || scripted || atlas),
                 KingPhaseLocked = !friendly && KingInMists.IsBoss2(variety),
                 KingGrace = !friendly && KingInMists.IsBoss(variety),
                 FetishGrace = !friendly && KingInMists.IsFetish(variety),
-                LifePhases = !friendly && brine ? new([75, 50, 25]) : !friendly && DepravedTrinity.IsBoss(variety) ? new([66, 33]) : !friendly ? (Sirus.Phases(variety) ?? KitavaActFive.Phases(variety) ?? KitavaActTen.Phases(variety)) : null,
+                // The three thresholds the Atlas bosses change phase at (a quarter of their life each, three times).
+                LifePhases = !friendly && (brine || atlas) ? new([75, 50, 25]) : !friendly && DepravedTrinity.IsBoss(variety) ? new([66, 33]) : !friendly ? (Sirus.Phases(variety) ?? KitavaActFive.Phases(variety) ?? KitavaActTen.Phases(variety)) : null,
                 EntranceGrace = !friendly && (Sirus.IsActor(variety) || KitavaActFive.IsActor(variety) || KitavaActTen.IsActor(variety) || DepravedTrinity.IsBoss(variety) || VaalOversoul.IsBoss(variety) || DoedreSewers.IsBoss(variety)),
             }, emerge, waits);
             if (owned is not null && conn.Monsters.TryGetValue(id, out var added)) owned(id, added);
@@ -434,6 +455,10 @@ public static partial class Game
         // its normal / magic / rare pack points (the Lower Prison trial's plaque platform), its monsters (the Imperial
         // Gardens trial's four Devourers) and its spawners' monsters (LabyrinthTrials.Spawners), rare.
         var trialRooms = placedRooms.Where(r => r.Objects.Any(o => o.Type is LabyrinthTrials.Plaque or LabyrinthTrials.IntroDoor)).ToList();
+        // Any other room of a generated layout places its pack points the same way: the rooms the layout gives a magic
+        // or rare pack of their own (The Chamber of Innocence: twelve magic packs).
+        var layoutPacks = (layout.Level?.PackRooms ?? [])
+            .Where(r => !trialRooms.Any(t => t.Path.Equals(r.Path, StringComparison.OrdinalIgnoreCase))).SelectMany(r => r.Points);
         var trapClear = new HashSet<(int X, int Y)>();
         // The Labyrinth's own rooms keep their packs off their traps too: the generated rooms' and tiles' trap lines.
         var labyrinthTraps = LabyrinthTrials.InLabyrinth(layout.Id) && ServerLevels.For(layout.Id, conn.Seed) is { } labyrinthLevel
@@ -460,7 +485,7 @@ public static partial class Game
         var spawns = WithTwinBosses(AreaPopulation.Plan(area, layout.GridW, layout.GridH, walkable, (layout.SpawnX, layout.SpawnY),
             [.. layout.AreaTransitions.Select(t => (t.Transition.GridX, t.Transition.GridY))], points,
             AreaPopulation.PopulationSeed(layout.Hash, conn.Seed), Spawnable, notes, scale,
-            unassignedAtArrival: MapDevices.Value.IsMapArea(layout.Hash), roomPacks: [.. trialRooms.SelectMany(r => r.Points)],
+            unassignedAtArrival: MapDevices.Value.IsMapArea(layout.Hash), roomPacks: [.. trialRooms.SelectMany(r => r.Points), .. layoutPacks],
             scatterable: trapClear.Count == 0 ? null : (x, y) => !trapClear.Contains((x, y))), mapMods).ToList();
         foreach (var chest in QuestsOf(conn).Chests(layout.Id).Where(r => r.Guards is not null))
             foreach (var room in placedRooms.Where(r => !trialRooms.Contains(r) && r.Objects.Any(o => o.Type == chest.ChestType)))
@@ -619,13 +644,16 @@ public static partial class Game
                 // damage through MonsterSwing/MonsterAreaContact. Its Mystic Fetishes are stationary shrines the
                 // controller activates; the ordinary chase would slowly drag them toward the player.
                 if (Sirus.IsActor(m.Variety) || KitavaActFive.IsActor(m.Variety) || KitavaActTen.IsActor(m.Variety) || DepravedTrinity.IsBoss(m.Variety) || VaalOversoul.IsBoss(m.Variety) || DoedreSewers.IsBoss(m.Variety) || BrineKing.IsBoss(m.Variety) || KingInMists.IsBoss(m.Variety) || KingInMists.IsFetish(m.Variety)
-                    || KingInMists.IsGuidingLight(m.Variety)) continue;
+                    || KingInMists.IsGuidingLight(m.Variety) || AtlasBosses.IsBoss(m.Variety)) continue;
                 if (m.Hostile && protectedEntry) continue;
                 var (mx, my) = m.Walk.Position(now);
                 double d = Math.Sqrt((double)(mx - px) * (mx - px) + (double)(my - py) * (my - py));
                 // One player at a time: the instance's monster acts for whoever it targets, on that one's connection.
                 if (m.Hostile && !MonsterTargetsLocked(conn, id, m, (mx, my), d, now)) continue;
                 if (m.Hostile && GolemEnemyOrderLocked(conn, id, m, now, d)) continue;
+                // A boss's kit (BossKits): the skill that is ready and reaches the player, else its default swing. Never
+                // while a swing still runs: the attack an order names must stay the one its hit is applied with.
+                if (m.Kit.Count > 0 && now >= m.BusyUntil) m.Attack = BossKits.Choose(m, now, d);
                 if (!m.Aggro && d <= m.AggroRange) { m.Aggro = true; m.LastTarget = null; }
                 // No boss bar during an encounter's entrance: its script shows the bar as the fight starts.
                 if (m.Aggro && !m.BossBarShown && !m.EntranceGrace && m.Variety is { BossHealthBar: true } && m.States?.IndexOf("boss_life_bar") >= 0)
@@ -802,6 +830,8 @@ public static partial class Game
                     m.LastTarget = null;
                     m.SwingGeneration = ++m.ActionGeneration;
                     cadence.BeginSwing(m, m.ActionGeneration);
+                    // The order names this attack's skill: what it used now goes on cooldown.
+                    BossKits.Consume(m, a, now);
                     plan.Swings.Add((id, m, m.ActionGeneration));
                     continue;
                 }
@@ -811,11 +841,26 @@ public static partial class Game
                 // attack's reach (max range reach - 1, the player's size as the tolerance: 0x141e95400, 0x141e81950).
                 if (m.Hostile && m.Attack is { InPlace: false } melee)
                 {
+                    // A steady walker (MonsterMovement.ReorderSeconds): while it is on its way it is ordered again at most this
+                    // often, as an order restarts its walk clip (live, Izaro: every 200 ms he walked in steps).
+                    bool steady = m.Movement.ReorderSeconds is not null;
+                    if (m.Movement.ReorderSeconds is double every && now < m.Walk.ArrivesAt && !cadence.ChaseOverdue(m, now, every - MonsterAiCadence.AttackChaseSeconds))
+                    {
+                        // Between orders the client's walk-up follows the player by itself: so does the estimate, or an
+                        // order's from cell would put it back (live; a lockstep client's estimate has StepWalkUp).
+                        if (!conn.LockstepClient && m.LastTarget is { } aimed && Math.Abs(aimed.X - px) + Math.Abs(aimed.Y - py) >= MonsterAiCadence.TargetChangeCells)
+                        {
+                            var followed = m.Walk.Approach(px, py, melee.Range - 1, now, LivingCollision.PlayerSize);
+                            m.LastTarget = (px, py);
+                            if (ServerTrace.Ai) Console.WriteLine($"[gateway] monster 0x{id:x} ({m.Label}) follows from {followed.Here} to {followed.Stop}, arrives in {followed.At - now:0.000} s, speed {m.Walk.Speed:0.#}, player ({px}, {py}) (t={now:0.000})");
+                        }
+                        continue;
+                    }
                     if (!LockstepReorderDue(conn, plan, m, cadence, now) || !cadence.TryAttackChase(m, now)) continue;
                     // Far off, a Move to the cell LegCells along the walk-up instead of the attack aimed at the player,
                     // ordered again on the same cadence; the attack's own walk-up from within a leg of the reach. An
                     // estimate that finds no way at all keeps the attack order: the client's own search may.
-                    if (d > melee.Range - 1 + LegCells)
+                    if (!steady && d > melee.Range - 1 + LegCells)
                     {
                         (int X, int Y) leg = (px, py), start = m.Walk.Position(now);
                         bool placed = !double.IsNaN(plan.FrameStart);
@@ -840,7 +885,7 @@ public static partial class Game
                     {
                         var walk = m.Walk.Approach(px, py, melee.Range - 1, now, LivingCollision.PlayerSize);
                         here = walk.Here;
-                        if (ServerTrace.Ai) Console.WriteLine($"[gateway] monster 0x{id:x} ({m.Label}) chase walk from {walk.Here} to {walk.Stop}, arrives in {walk.At - now:0.000} s, "
+                        if (ServerTrace.Ai) Console.WriteLine($"[gateway] monster 0x{id:x} ({m.Label}) chase walk from {walk.Here} to {walk.Stop}, arrives in {walk.At - now:0.000} s, speed {m.Walk.Speed:0.#}, "
                             + $"reached goal {m.Walk.ReachedGoal}, player ({px}, {py}) {d:0.0} away (t={now:0.000})");
                     }
                     else

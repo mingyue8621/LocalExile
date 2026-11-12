@@ -203,9 +203,16 @@ public static partial class Game
             .Where(i => IsNormalJewel(i.Item)
                 && (PassivesFor(conn).JewelNodeForSlot(i.X) is { } node && allocated.Contains(node) || ClusterSlotOpen(conn, i.X)))
             .ToList();
+        // A Wildwood charm in one of the Primalist's three charm sockets counts like a worn item: its one Domain 35
+        // modifier reaches the stats while its Charm Socket descendancy node is allocated.
+        var charms = items.Items(PlayerInventories.PassiveJewels)
+            .Where(i => IsCharm(i.Item)
+                && PassivesFor(conn).CharmNodeForSlot(i.X) is { } charmNode && allocated.Contains(charmNode))
+            .ToList();
         int adorned = AdornedPercent(treeJewels);
         var worn = equipment.Select(e => e.Item)
             .Concat(treeJewels.Select(i => i with { Item = AdornedJewel(i.Item, adorned) }))
+            .Concat(charms)
             .ToArray();
         var before = InactiveItems.GetValueOrDefault(CharacterName(conn));
         var exemptions = GameEvents.ExemptItems(conn);
@@ -699,7 +706,7 @@ public static partial class Game
 
     sealed record AttributeRequirementSource(PassiveTree Tree, ushort[] Ordinary, ushort[] Ascendancy,
         Dictionary<ushort, ushort> Masteries, int Value);
-    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ClientState, AttributeRequirementSource> AttributeRequirementSources = new();
+    static readonly RuleTable<ClientState, AttributeRequirementSource> AttributeRequirementSources = new();
 
     /// <summary>The inputs of CharacterStatSources' passive and equipment sum, compared by value (items by reference).</summary>
     public sealed record StatSourcesKey(ushort[] Nodes, IReadOnlyDictionary<ushort, ushort> Masteries,

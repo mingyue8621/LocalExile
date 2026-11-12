@@ -83,7 +83,7 @@
   the next login, and emptying the slot went back to the default.
   Code: `InstanceMicrotransactions.cs`, `Microtransactions.cs` (`MtxCatalog`, `CosmeticEffects`), Gateway
   (`AnswerMtxRequest`, `PickCosmetic`, `Looks`, `CosmeticStats`), `CharacterSaves.Cosmetics`, `PetObject`,
-  `SpawnPets`, `RunPetFollow`, `SkillSlots`.
+  `SpawnPets`, `StepPetFollow`, `SkillSlots`.
   Docs: [23](../docs/protocol/23-microtransactions.md).
 
 ## 部分实现
