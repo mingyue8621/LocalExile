@@ -168,8 +168,6 @@ public static class CosmeticsFeature
             Console.WriteLine($"[gateway] {remote} pet slot {worn.Slot}: spawned 0x{id:x} {type} at ({x}, {y})");
         }
         if (!conn.PetFollowRunning) { conn.PetFollowRunning = true; _ = RunPetFollow(remote, stream, ciphers, conn); }
-        // The worn pet also picks up stacks near the player (PetLoot.cs); without a pet nothing runs.
-        if (!conn.PetLootRunning) { conn.PetLootRunning = true; _ = RunPetLoot(remote, stream, ciphers, conn); }
     }
 
     // Where a pet stands by the player: PetDistance cells to the player's side (side +1 or −1, the two Pet slots), on the
