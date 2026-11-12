@@ -1558,6 +1558,16 @@ public static partial class Game
         // their clip too), half the attack time without rig data.
         double contact = a.Release?.Fraction ?? (walkUp && m.Variety is { } variety
             ? SkillsFor(conn).MonsterContact(variety.Id, "Melee", seq)?.ContactFraction : null) ?? 0.5;
+        // A shot, a mortar or an area spell does not reach through a wall: the client's own projectile grid stops it
+        // there. The attack still plays (the client already got its 0x1ab), it just lands nothing. Melee is not checked:
+        // it has to walk to the player anyway, and a swing between two cells that touch cannot pass a wall.
+        bool needsLine = a.Ranged || area || a.Projectile is not null;
+        if (needsLine && LineOfFireBlocked(conn, m.Walk.Position(conn.Clock.Elapsed.TotalSeconds),
+                conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds)))
+        {
+            Console.WriteLine($"[gateway] {remote} monster 0x{id:x} ({m.Label}) holds its fire: terrain stands between it and the player");
+            return;
+        }
         if (conn.LockstepClient && a.Projectile is { Variation: > 0, Lobbed: false } nativeProjectile)
         {
             // Like the player's native shot, the monster emits at the end of the frame that crosses contact.
@@ -1576,6 +1586,13 @@ public static partial class Game
         {
             // The shot leaves at the contact and flies; its hit lands when it reaches the player (Program.ProjectileHostile.cs).
             LaunchMonsterProjectile(remote, stream, ciphers, conn, id, m, a, projectile, action, projectileAim, sequence: seq);
+            return;
+        }
+        // The windup is over: the player may have stepped behind a wall since the order went out.
+        if (needsLine && LineOfFireBlocked(conn, m.Walk.Position(conn.Clock.Elapsed.TotalSeconds),
+                conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds)))
+        {
+            Console.WriteLine($"[gateway] {remote} monster 0x{id:x} ({m.Label}) holds its fire: terrain stands between it and the player");
             return;
         }
         if (area) { await MonsterAreaContact(remote, stream, ciphers, conn, id, m, a, action, areaRadius, seq); return; }
@@ -1649,6 +1666,8 @@ public static partial class Game
                     GolemTakeHitLocked(conn, golem, id, m, a, now, area: true);
             double dx = here.X - aim.X, dy = here.Y - aim.Y;
             if (dx * dx + dy * dy > radius * radius) return null;
+            // A wall between the caster and the area absorbs the blast, however close the area lands.
+            if (LineOfFireBlocked(conn, m.Walk.Position(now), aim)) return null;
             outcome = CommitMonsterHitLocked(remote, conn, id, m, a, now, here, aim, checkRange: false, sequence: sequence);
             return outcome?.HitPacket;
         }, $"0x01af monster 0x{id:x} area hit on the player")) return;
@@ -1676,6 +1695,13 @@ public static partial class Game
             if (MonsterActionFactor(m, now) == 0)
             {
                 Console.WriteLine($"[gateway] {remote} monster 0x{id:x} ({m.Label}) frozen: its swing is cancelled");
+                return null;
+            }
+            // A ranged attack that carries no projectile (a spell the client plays from its own rig) is committed here,
+            // so this is where its line is checked: melee has to walk to the player and is never refused.
+            if (a.Ranged && LineOfFireBlocked(conn, m.Walk.Position(now), conn.Walk.Position(now)))
+            {
+                Console.WriteLine($"[gateway] {remote} monster 0x{id:x} ({m.Label}) holds its fire: terrain stands between it and the player");
                 return null;
             }
             outcome = CommitMonsterHitLocked(remote, conn, id, m, a, now, conn.Walk.Position(now), m.Walk.Position(now), checkRange: true, sequence: sequence);
