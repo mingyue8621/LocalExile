@@ -56,6 +56,17 @@ public static partial class Game
                         m.Asleep = false;
                         packets.AddRange(InstanceProtocol.EnterWakeZone(id));
                         back.Add((id, at.X, at.Y));
+                        Console.WriteLine($"[gateway] {remote} wake 0x{id:x} ({m.Label}) at ({at.X}, {at.Y}) {d:0} cells from the player"
+                            + $"{(m.Variety?.BossHealthBar == true ? ", boss" : "")}; it enters the wake zone");
+                    }
+                    // A sleeping monster the player stands next to never wakes when the wake record cannot be sent, or when
+                    // what the client holds is not the object it was created as. Say so rather than leave a boss invisible
+                    // in the middle of its room.
+                    else if (sleeping && m.Variety?.BossHealthBar == true && checkedAt >= conn.NextAsleepReportAt)
+                    {
+                        conn.NextAsleepReportAt = checkedAt + 10;
+                        Console.WriteLine($"[gateway] {remote} still sleeping: 0x{id:x} ({m.Label}) at ({at.X}, {at.Y}) "
+                            + $"{d:0} cells from the player (asleep until {WakeZoneReturn} cells), views {(conn.MonsterViews.ContainsKey(id) ? "yes" : "no")}");
                     }
                 }
                 if (conn.LockstepClient) packets.AddRange(LockstepPlace(back));

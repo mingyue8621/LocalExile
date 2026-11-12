@@ -491,6 +491,8 @@ public sealed partial class ClientState(AreaLayout layout, uint ticket, uint see
     public int FreezeGeneration, FreezeShown;
     public double FreezeHeldUntil;
     public double NextWakeZoneAt;
+    /// <summary>When the "still sleeping" line was last written for a boss the player is standing next to.</summary>
+    public double NextAsleepReportAt;
     // How far every walker's steps have been checked (Game.StepWalkers).
     public double WalkersSteppedTo;
     // When the movement skill under way ends on the client: the server has already landed it (Game.ResyncAfter).

@@ -302,7 +302,13 @@ public static partial class Game
         }
         else
         {
-            if (!await SendWorldCreate(conn, id, () => create, createLog, transport: (remote, stream, ciphers))) return 0;
+            if (!await SendWorldCreate(conn, id, () => create, createLog, transport: (remote, stream, ciphers)))
+            {
+                // The client never gets this actor: it must not be added as a monster the player can hit, or the room has
+                // a boss that deals damage while nothing stands there.
+                if (log) Console.WriteLine($"[gateway] {remote} monster 0x{id:x} {variety}: the create record was not sent, the actor is left out");
+                return 0;
+            }
             // A boss far from the player (Dominus at the top of the Sceptre, created at the area entry) stays out of the
             // wake zone until the player comes near: KeepWakeZone wakes it there. Woken at creation, the client put its far
             // copy to sleep on its own while the server still had it awake, and the boss life bar (0x2bc boss_life_bar) for
