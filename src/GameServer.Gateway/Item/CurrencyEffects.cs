@@ -197,11 +197,9 @@ public static class CurrencyEffects
     public const string VaalOrb = "Metadata/Items/Currency/CurrencyCorrupt";
 
     /// <summary>Vaal Orb, the documented LocalExile rule: a modifiable weapon, armour piece or jewellery (ring,
-    /// amulet, belt) that is not corrupted or mirrored is always corrupted. Normal/magic become rare; rare
-    /// items replace 1-5 affixes or reroll all of them; half of those uses also add one of the base's corruption
-    /// implicits. A unique keeps its modifiers and gains that implicit when its base has one. One white socket is
-    /// coloured. Missing/empty pools and unsupported or unmodifiable bases are refused before the inventory handler
-    /// spends an orb.</summary>
+    /// amulet, belt) that is not unique or corrupted/mirrored is always corrupted. Normal/magic become rare; rare
+    /// items replace 1-5 affixes or reroll all of them. One white socket is coloured. Missing/empty pools and
+    /// unsupported or unmodifiable bases are refused before the inventory handler spends an orb.</summary>
     public static Item? Vaal(Item item, ItemCatalog.BaseType type, (int Str, int Dex, int Int) requirements, ItemRolls rolls, Random random) =>
         rolls.Vaal(item, type, requirements, random);
 
@@ -376,8 +374,13 @@ public static class CurrencyEffects
         double[] weights = [0, 500, 3500, 4500, 1400, 90, 10];
         var layouts = new List<byte[]>();
         int[] sizes = new int[7];
+        int blockedEdges = 0;
+        for (int edge = 0; edge < count - 1; edge++)
+            if (item.Sockets[edge].Colour == SocketColour.Abyss || item.Sockets[edge + 1].Colour == SocketColour.Abyss)
+                blockedEdges |= 1 << edge;
         for (int mask = 0; mask < 1 << (count - 1); mask++)
         {
+            if ((mask & blockedEdges) != 0) continue;
             var groups = new List<byte> { 1 };
             for (int edge = 0; edge < count - 1; edge++)
                 if ((mask & (1 << edge)) != 0) groups[^1]++;
@@ -388,6 +391,7 @@ public static class CurrencyEffects
         }
         var choices = layouts.Where(g => !g.SequenceEqual(old)).Select(g =>
             (Links: g, Weight: weights[g.Max()] / sizes[g.Max()] * Math.Pow(1 + item.Quality / 100.0, g.Max() - 1))).ToArray();
+        if (choices.Length == 0) return null;
         double roll = random.NextDouble() * choices.Sum(c => c.Weight);
         foreach (var choice in choices)
         {
@@ -397,46 +401,12 @@ public static class CurrencyEffects
         return item with { Links = choices[^1].Links };
     }
 
-    // The game's own socket table (wiki Item socket): the count that drops or a Jeweller's Orb rolls, its item-level
-    // requirement and its weight. Six- and three-socket bases (body armour, two-handed weapons, one-handed weapons,
-    // shields) use the first weight, four-socket bases (helmet, gloves, boots) the second.
-    static readonly (int Count, int MinimumLevel, int Weight, int WeightFour)[] SocketCounts =
-        [(1, 1, 50, 100), (2, 1, 120, 90), (3, 2, 100, 80), (4, 25, 30, 30), (5, 35, 5, 0), (6, 50, 1, 0)];
-
-    public static int MaximumSockets(Item item, ItemCatalog.BaseType type) =>
-        Math.Min(SocketCapacity(item, type), LevelSocketLimit(item.ItemLevel));
-
-    /// <summary>The most sockets an item level allows, whatever its class: two from the first level, three from 2, four
-    /// from 25, five from 35 and six from 50 (the game's own table).</summary>
-    public static int LevelSocketLimit(int itemLevel) =>
-        SocketCounts.Where(c => c.MinimumLevel <= Math.Max(1, itemLevel)).Max(c => c.Count);
-
-    /// <summary>A socket count and its link groups, as a dropped item or a Jeweller's Orb rolls them: the game's weights
-    /// for the base's capacity (four-socket bases weigh differently), never a count over <paramref name="maximum"/> and
-    /// never one the item level forbids. Each socket after the first links to the one before it or starts a group.
-    /// <paramref name="not"/> is the count to avoid (a reroll onto the same count would be a wasted orb).</summary>
-    internal static (int Count, List<byte> Links) RollLayout(int capacity, int maximum, int? not, Random random)
+    // Initial local rules: 1, 2, 3, 4 or 6 sockets (five deliberately excluded).
+    // Weights and link chances are approximations, not recovered client/server constants.
+    public static int MaximumSockets(Item item, ItemCatalog.BaseType type)
     {
-        bool four = capacity == 4;
-        var allowed = SocketCounts
-            .Where(c => c.Count <= maximum && c.Count != not && (four ? c.WeightFour : c.Weight) > 0)
-            .Select(c => (c.Count, Weight: four ? c.WeightFour : c.Weight))
-            .ToArray();
-        if (allowed.Length == 0) return (Math.Min(1, maximum), [1]);
-        int roll = random.Next(allowed.Sum(c => c.Weight));
-        int count = allowed[0].Count;
-        foreach (var choice in allowed)
-        {
-            if (roll < choice.Weight) { count = choice.Count; break; }
-            roll -= choice.Weight;
-        }
-        var links = new List<byte> { 1 };
-        for (int i = 1; i < count; i++)
-        {
-            if (random.Next(2) == 0) links[^1]++;
-            else links.Add(1);
-        }
-        return (count, links);
+        int levelLimit = item.ItemLevel >= 50 ? 6 : item.ItemLevel >= 25 ? 4 : item.ItemLevel >= 2 ? 3 : 2;
+        return Math.Min(SocketCapacity(item, type), levelLimit);
     }
 
     public static int SocketCapacity(Item item, ItemCatalog.BaseType type)
@@ -453,11 +423,30 @@ public static class CurrencyEffects
     {
         int max = MaximumSockets(item, type);
         if (max == 0 || item.Sockets.Count >= SocketCapacity(item, type) || item.Sockets.Any(s => s.Gem is not null)) return null;
-        var (count, links) = RollLayout(SocketCapacity(item, type), max, item.Sockets.Count, random);
-        if (count == item.Sockets.Count) return null;
+        (int Count, int Weight)[] choices = [(1, 50), (2, 120), (3, 100), (4, 30), (6, 1)];
+        var abyss = item.Sockets.Where(s => s.Colour == SocketColour.Abyss).ToArray();
+        if (abyss.Length > 0 && ItemModStats.Local(item, Program.Items.Mods).ContainsKey("local_cannot_have_non_abyssal_sockets"))
+            return null;
+        var ordinary = item.Sockets.Where(s => s.Colour != SocketColour.Abyss).ToArray();
+        var allowed = choices.Where(c => c.Count >= abyss.Length && c.Count <= max && c.Count != item.Sockets.Count).ToArray();
+        if (allowed.Length == 0) return null;
+        int roll = random.Next(allowed.Sum(c => c.Weight));
+        int count = allowed[0].Count;
+        foreach (var choice in allowed)
+        {
+            if (roll < choice.Weight) { count = choice.Count; break; }
+            roll -= choice.Weight;
+        }
         var sockets = new List<ItemSocket>();
+        var links = new List<byte> { 1 };
         for (int i = 0; i < count; i++)
-            sockets.Add(i < item.Sockets.Count ? item.Sockets[i] : new(SocketColour.White));
+        {
+            bool isAbyss = i >= count - abyss.Length;
+            sockets.Add(isAbyss ? abyss[i - (count - abyss.Length)] : i < ordinary.Length ? ordinary[i] : new(SocketColour.White));
+            if (i == 0) continue;
+            if (!isAbyss && random.Next(2) == 0) links[^1]++;
+            else links.Add(1);
+        }
         return item with { Sockets = sockets, Links = links };
     }
 

@@ -115,24 +115,22 @@ sealed class Servers : IDisposable
         foreach (var output in _logs) lock (output) output.Dispose();
     }
 
-    /// <summary>Programs deployed inside the install that are the player's own windows, not what a stop ends: the login
-    /// launcher sits beside the game in <c>Client\</c> and is what starts it.</summary>
-    static readonly string[] KeptRunning = ["流放之路登录器.exe"];
-
-    /// <summary>"stop": what this install runs — its own LocalExile.exe, app\'s servers and the client — except this one.
-    /// Not everything under the folder: a tool the player keeps beside it (a launcher of their own) is not the install's
-    /// to kill, and killing it would end the tree that asked for the stop (live 2026-11-08: the console's Stop did
-    /// nothing because this process was its descendant).</summary>
+    /// <summary>"stop": the launcher, servers and patched client of this install, except this one.</summary>
     public static void StopInstall(string root, Output log)
     {
         int stopped = 0;
-        string install = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root));
-        string app = Path.Combine(install, "app") + Path.DirectorySeparatorChar;
-        // The client folder is the owner's setting (Client.Folder in localexile.conf, or Game_CLIENT_FOLDER), taken
-        // relative to the install so a linked client outside it is still recognised by its own path.
-        string client = Path.TrimEndingDirectorySeparator(
-            Path.GetFullPath(Path.Combine(install, GameServer.Core.ServerConfig.ClientFolder))) + Path.DirectorySeparatorChar;
-        string self = Path.Combine(install, "LocalExile.exe");
+        string client = Path.GetFullPath(GameServer.Core.ServerConfig.ClientFolder, root);
+        var comparison = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        var executables = new HashSet<string>(comparison);
+        void Include(string path)
+        {
+            executables.Add(Path.GetFullPath(path));
+            if (File.Exists(path)) executables.Add(ResolvedPath(new FileInfo(path)));
+        }
+        Include(Path.Combine(root, Platform.Program("LocalExile")));
+        foreach (string name in new[] { "Patch", "Gateway", "Auth" })
+            Include(Path.Combine(root, Tools.App, Platform.Program("GameServer." + name)));
+        Include(Path.Combine(client, "Game.patched.exe"));
         foreach (var process in Process.GetProcesses())
             using (process)
             {
@@ -140,15 +138,7 @@ sealed class Servers : IDisposable
                 try { path = process.MainModule?.FileName; }
                 catch (Exception e) when (e is System.ComponentModel.Win32Exception or InvalidOperationException) { continue; }
                 if (path is null || process.Id == Environment.ProcessId) continue;
-                // The login launcher is deployed beside the game in Client\, but it is the window the player starts the game
-                // from, not the game: a stop closes the game and leaves that window open (live 2026-11-09: Stop closed the
-                // login launcher too, so starting the servers again meant opening it once more).
-                if (KeptRunning.Contains(Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)) continue;
-                // A linked client's path is outside the install: it is told by its name.
-                bool ours = path.StartsWith(app, StringComparison.OrdinalIgnoreCase) || path.StartsWith(client, StringComparison.OrdinalIgnoreCase)
-                    || path.Equals(self, StringComparison.OrdinalIgnoreCase)
-                    || (Path.GetFileName(path).Equals("Game.patched.exe", StringComparison.OrdinalIgnoreCase) && SameFile(path, Path.Combine(client, "Game.patched.exe")));
-                if (!ours) continue;
+                if (!executables.Contains(path)) continue;
                 process.Kill(entireProcessTree: true);
                 stopped++;
             }
@@ -164,8 +154,16 @@ sealed class Servers : IDisposable
         log.Done(stopped == 0 ? "nothing was running" : $"stopped {stopped} process(es)");
     }
 
-    static bool SameFile(string a, string b) =>
-        File.Exists(b) && new FileInfo(a).Length == new FileInfo(b).Length && File.GetLastWriteTimeUtc(a) == File.GetLastWriteTimeUtc(b);
+    // The OS can report the physical path when the install or its Client directory is a link.
+    // Copies with equal lengths and timestamps still belong to their respective installations.
+    static string ResolvedPath(FileSystemInfo file)
+    {
+        var parent = Directory.GetParent(file.FullName);
+        if (parent is null) return file.FullName;
+        if (file.ResolveLinkTarget(returnFinalTarget: true) is { } target) return ResolvedPath(target);
+        return Path.Combine(ResolvedPath(parent), file.Name);
+    }
+
 }
 
 /// <summary>A job that ends every process in it when its last handle closes: when this process ends, however it ends.

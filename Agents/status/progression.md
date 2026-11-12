@@ -266,6 +266,12 @@
   not, PoB's `Threshold` pass) and adds the mapped stat when the total is met. Live: `Combat Focus Cobalt` in socket
   36634 logged `elemental_hit_cannot_roll_fire_damage 1` (60 Int); `Collateral Damage` in socket 60735 logged
   `galvanic_arrow_area_damage_+% 50` and `shrapnel_shot_radius_+% 25` (60 Dex); `Spirited Response` in socket 6
+  (cell 8) changed mana 2355 -> 2476 from its 10% maximum mana global. First Snow and Frozen Trail add projectiles, Omen on the Winds grants Ice Shot pierce,
+  and Hazardous Research and Ring of Blades enable circular volleys for their respective skills. Other skill-specific consumers remain partial and
+  an attribute threshold. `ThresholdJewels.cs` parses the target/attribute mask, sums every ordinary passive in radius
+  (allocated or not, PoB's `Threshold` pass) and adds the mapped stat when the total is met. Live: `Combat Focus Cobalt` in socket
+  36634 logged `elemental_hit_cannot_roll_fire_damage 1` (60 Int); `Collateral Damage` in socket 60735 logged
+  `galvanic_arrow_area_damage_+% 50` and `shrapnel_shot_radius_+% 25` (60 Dex); `Spirited Response` in socket 6
   (cell 8) changed mana 2355 -> 2476 from its 10% maximum mana global. The skill-specific consumers remain partial and
   targets without a client stat row are skipped. Unnatural Instinct in cell 3 changed life 5520 -> 5685, mana
   2355 -> 2326 and ES 277 -> 285 from three allocated Int smalls and three unallocated Life/ES smalls. Lioneye's Fall's
@@ -314,6 +320,37 @@
   全额退点后选择普通 Juggernaut 会恢复 Default 图谱。
   文档：[整职业证据、配置与明确建模边界](../docs/game/antiquarian.md)。
 - Juggernaut：全部 14 个普通节点都会生效并通过原生验收，[逐节点](../docs/game/juggernaut.md)。
+- Command-based ordinary ascendancy selection, separate point awards, connected allocations, paid refunds and saves.
+  A native Duelist/Slayer smoke checked ordinary nodes, ascendancy allocation/refund and both point budgets.
+  Choice and progress survived relog and a Gateway process restart; a Phrecia request left the saved JSON unchanged.
+  The read-only client trace observed class bytes, the Default graph, allocated nodes and separate point counters.
+  Automated domain, packet and production-handler tests cover ownership, separate budgets, graph connectivity,
+  multiple-choice effects, atomic refunds, stale connections and old/unknown saves.
+  Area admission validates saved progress before inventory changes, then validates items before gold migration.
+  Level changes recheck concurrent passive mutations before applying; queued tree packets publish current state.
+  Old XP events cannot undo later gains or explicit level resets; Auth follows current XP.
+  Old-area gains cannot suppress the live connection's pending level publication.
+  XP level reconciliation adopts completed saved trims/refunds atomically before updating runtime state.
+  Extra-point grants commit before runtime publication, including concurrent XP updates and failed-write checks.
+  Code: `AscendancyCatalog`, `AscendancyProgress`, `OrdinaryPassiveRules`, `CharacterSaves`, Gateway progression.
+  Docs: [scope, evidence and beginner steps](../docs/game/ascendancies.md).
+
+- Descendancy, the second ascendancy layer: `Descendancy.dat` rows (Affliction's three Wildwood specialisations and the
+  thirteen 3.29 Bloodline classes) selected through the `0x33` spare byte and saved with the character.
+  The client's class selector opens with `0x7b` kind `0x4c` (first u32 = row) and Accept sends `0x3a`; both and the
+  selector window were checked against the local 3.29.3c client.
+  The tree panel reads the row from the Player component's `+0x1b0`, so the player object now carries it too.
+  The server records the selector it opened with `0x7b` kind `0x4c` and accepts `0x3a` only while it is open in the
+  same area;
+  a Wildwood row needs its Azmeri class flag, and a layer with allocated nodes must be refunded before another is chosen.
+  The `gm-commands` mod's `/descendancy` selects or clears a row, sets the three Wildwood Azmeri flag groups and
+  reloads the area; its selection is the unrestricted development path.
+  Nodes allocate by the layer's own `DescendancyKey` tree, stay connected to its implicit start, save, and count
+  against the shared ascendancy points; a live Primalist allocation was checked in the local client.
+  The three Wildwood rows keep Affliction's separate eight points: `0x33` carries the earned points plus eight for
+  those rows, the main ascendancy stays capped at its own earned points and the layer at eight.
+  A refused allocation now replies with its reason in chat; `/descendancy refund <node|all>` reverts the layer.
+  Refunds charge the same five refund points per node; their stats are part of the passive stat list.
 - Elementalist Shaper of Flames: all three stats work. `always_ignite` adds 100% ignite chance;
   `all_damage_can_ignite` lets any hit ignite and puts every damage type into the ignite's base (90% per second,
   fire scaling plus the types the portion visited, as poison's physical part); the panel's ignite rows follow.
@@ -340,6 +377,19 @@
   当前基线的构建/测试与精确的相关 head 组合保留了已文档化的共享合并解决方式。
   Default Phrecia 准入被闸住；显式选择 Gambler 会以只读方式核验已安装图谱字节。
   文档：[Gambler 清单、范围与验证](../docs/game/gambler.md)。
+- Slayer: every ordinary node's stats apply except Impact's melee range, checked in the client except overkill leech,
+  [node by node](../docs/game/slayer.md).
+- Slayer: every ordinary node's stats apply except Impact's melee range, checked in the client except overkill leech
+  and the while-leeching defences, [node by node](../docs/game/slayer.md).
+
+- Gambler: every node in its installed graph has a gameplay consumer, including both Block Luck choices and drawbacks.
+  Legal eight-point builds, exclusive choices, paid refunds, failed-save rollback and reload have Gateway coverage.
+  Incoming ordinary monster ailments give Risk Aversion an actual avoidance consumer, alongside bounded stun recovery.
+  Native checks cover legal builds, both choices, outgoing/incoming resistance outcomes, damage, real ignite avoidance,
+  lethal death-panel/checkpoint behavior, refunds, relog and restart.
+  Current-base build/tests and exact related-head composition preserve the documented shared merge resolutions.
+  Default Phrecia admission is gated; the explicit Gambler opt-in verifies installed graph bytes read-only.
+  Docs: [Gambler checklist, scope and verification](../docs/game/gambler.md).
 - Passive masteries, with Block, Fire and Wand Mastery effects. Docs: [15](../docs/protocol/15-progression.md) §2.
 - Passive tree jewel sockets, percentage attribute mods and The Adorned (tree art check pending).
   Docs: [15](../docs/protocol/15-progression.md) §2a, [unique jewels](../docs/game/unique-jewels.md).

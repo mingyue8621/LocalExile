@@ -107,6 +107,29 @@
   持久化/重开、回滚以及原生报文组帧都有自动化覆盖。
   备注、屏蔽列表与状态编辑尚未做。
   见 [28](../docs/protocol/28-player-trade.md) §6。
+- **Trade between players** in one instance (two clients, 2026-10-28): the request shows the requester's waiting box
+  and the other player's notification, Accept opens the window on both, offered items appear on both sides, Accept
+  greys the accepting side's offer for both players, and both accepting swaps the items in one transaction for both saves.
+  Cancel, decline, a disconnect or leaving the area return every offered item. See [28](../docs/protocol/28-player-trade.md).
+- **Party** between players (two clients, 2026-11-05): "Invite to Party", also from the Friends panel, reaches the
+  player in any area; Accept puts both into the party, shown on both clients, and it survives area changes.
+  A member who follows another into an area joins their instance.
+  The party bonus follows the client's rules (monster life by rarity, currency items) and its icons (S→C 0x231).
+  "Leave Party" removes the player, and a party left with one member is disbanded on both clients.
+  Kick and cancel invitation (C→S 0x94) remove a member or drop a pending invitation: the removed player is told (S→C
+  0xaa), the rest get the smaller party list (S→C 0xa9), and a party left with one member is disbanded as on Leave.
+  Decline and disconnects are open.
+  See [28](../docs/protocol/28-player-trade.md) §5.
+  Mode integration refuses SSF, different leagues and terminal/departing owners at admission and settlement.
+  Composed automated checks cover eligibility, item ownership and rollback when the second inventory save fails.
+- **Friends:** the player context menu and Friends-panel name field add an account to the list.
+  The other account receives an invitation with Accept/Decline; Unfriend removes the relation from both lists.
+  Account GUIDs and invitations are saved transactionally, independently of character and league.
+  Native two-client checks confirmed add, invitation display, Accept, Unfriend, offline display and restoration on login.
+  Presence updates both ways when an entry finishes (a hideout's too) and at logout; an area change sends none.
+  Persistence/reopen, rollback and native packet framing have automated coverage.
+  Notes, ignore lists and status editing remain open.
+  See [28](../docs/protocol/28-player-trade.md) §6.
 
 ## 部分实现
 
