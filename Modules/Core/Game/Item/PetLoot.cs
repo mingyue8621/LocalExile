@@ -48,7 +48,7 @@ static partial class Game
     internal static async Task RunPetLoot(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
     {
         int busy = 0;
-        double nextReport = 0, nextError = 0, nextMissing = 0;
+        double nextReport = 0, nextError = 0, nextMissing = 0, nextDiagnosis = 0;
         while (!conn.Closed)
         {
             try
@@ -80,6 +80,22 @@ static partial class Game
                 {
                     nextReport = now + 30;
                     Console.WriteLine($"[gateway] {remote} pet: none of {tried} nearby item(s) fitted the inventory, they stay on the ground");
+                }
+                // 地上有东西、候选却一件都没有（tried 一直是 0）：把判据写出来，别只能靠猜。
+                else if (tried == 0 && now >= nextDiagnosis && conn.Instance.Ground.All() is { Count: > 0 } all)
+                {
+                    nextDiagnosis = now + 30;
+                    var (px, py) = conn.Walk.Position(now);
+                    Console.WriteLine($"[gateway] {remote} pet: nothing within {PetLootRange:0} cells of ({px}, {py}) is lootable; "
+                        + $"the ground holds {all.Count} item(s)");
+                    foreach (var (groundId, item) in all.Take(6))
+                    {
+                        var shape = ShapeOf(item.Item);
+                        double d = Math.Sqrt((double)(item.GridX - px) * (item.GridX - px) + (double)(item.GridY - py) * (item.GridY - py));
+                        Console.WriteLine($"[gateway] {remote} pet:   0x{groundId:x} type 0x{item.Item.TypeHash:x8} at ({item.GridX}, {item.GridY}) "
+                            + $"dist {d:0.#} gold {IsGold(item)} maxStack {(shape is { } ms ? ms.MaxStack.ToString() : "-")} "
+                            + $"class {(shape is { } cl ? cl.Class : "(no catalog row)")}");
+                    }
                 }
             }
             catch (Exception e)
