@@ -410,10 +410,17 @@ public static partial class Game
             // Item Quantity Support: the kill's loot rolls read the supported skill's share.
             if (Stats.Key("base_killed_monster_dropped_item_quantity_+%") is uint quantityKey)
                 target.KilledWithItemQuantityPct = shot.SkillStats.GetValueOrDefault(quantityKey);
+            // Item Rarity Support: the same kill's drops read the skill's rarity share.
+            if (Stats.Key("base_killed_monster_dropped_item_rarity_+%") is uint rarityKey)
+                target.KilledWithItemRarityPct = shot.SkillStats.GetValueOrDefault(rarityKey);
+            // Soul Ascension: this player hit on a rare or unique enemy eats a soul (its own cooldown).
+            SoulEaterHit(Conn, target);
             if (shot.ActualCaster is null && hit.Value.Life == 0) DevourOnKill(Conn, shot.SkillStats);
             if (!immune)
                 AilmentsOnHitLocked(Conn, target, mitigated, shot.Spell, critical, multiplier, player, shot.SkillStats,
                     at, contact.Projectile.ReactionRandomSource, poison: shot.Poison, sourceSkill: shot.SourceSkill);
+            if (!immune && hit.Value.Life > 0 && shot.EssenceDrain is { } drain)
+                EssenceDrainOnHitLocked(contact.Target.Id, target, drain, at);
             if (!immune && hit.Value.Life > 0 && shot.Ignite.CanIgnite(rolled)) IgniteOnHitLocked(this, contact.Target.Id, target, shot.Ignite, critical, at);
             if (!immune && hit.Value.Life > 0 && rolled[DamageType.Physical].Max > 0) BleedOnHitLocked(this, contact.Target.Id, target, shot.Bleed, critical, at);
             if (shot.ActualCaster is null) RageOnHitLocked(Conn, attack: !shot.Spell, melee: false, critical, shot.SkillStats,

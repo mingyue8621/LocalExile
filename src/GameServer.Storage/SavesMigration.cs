@@ -36,16 +36,24 @@ public static class SavesMigration
         log ??= Console.WriteLine;
         using var claim = Claim(SaveDatabase.LegacyPath + ".migrating");
         if (!File.Exists(SaveDatabase.LegacyPath)) return;
-        // A file that is not a database holds no saves: a tool that touched the path, or a start that stopped before the
-        // first write, leaves an empty one. It must not stop the server the way a real pre-split saves.db does, and the
-        // next start would have to move it away by hand (live 2026-11-12: a 0-byte data/saves.db refused to start).
-        if (!IsDatabase(SaveDatabase.LegacyPath))
+        // An interrupted first start may leave only an empty placeholder, and a tool that touched the path may leave
+        // something that is not a database at all (live 2026-11-12: a 0-byte data/saves.db stopped the server). Both hold
+        // no saves. Keep any journal with its database: a zero-byte main file alone cannot rule out recoverable pages.
+        string legacy = SaveDatabase.LegacyPath;
+        using (var file = new FileStream(legacy, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete))
         {
-            string aside = $"{SaveDatabase.LegacyPath}.empty-{DateTime.UtcNow:yyyyMMdd-HHmmss}";
-            log($"[migrate] {SaveDatabase.LegacyPath} is not a database (nothing to migrate): moved to {aside}");
-            try { File.Move(SaveDatabase.LegacyPath, aside, overwrite: true); }
-            catch (IOException ex) { log($"[migrate] {SaveDatabase.LegacyPath} could not be moved: {ex.Message}"); }
-            return;
+            bool journal = File.Exists(legacy + "-wal") || File.Exists(legacy + "-journal") || File.Exists(legacy + "-shm");
+            if (!journal && (file.Length == 0 || !IsDatabase(legacy)))
+            {
+                string aside = $"{legacy}.empty-{DateTime.UtcNow:yyyyMMdd-HHmmss}";
+                try
+                {
+                    File.Move(legacy, aside);
+                    log($"[migrate] nothing to migrate in {legacy}: moved to {aside}");
+                }
+                catch (IOException ex) { log($"[migrate] {legacy} could not be moved: {ex.Message}"); }
+                return;
+            }
         }
         if (File.Exists(Characters) || File.Exists(Auth))
             throw new SqlUpdateException($"{SaveDatabase.LegacyPath} is from before the player databases were split, and " +

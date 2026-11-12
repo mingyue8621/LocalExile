@@ -23,7 +23,6 @@ public sealed class InstanceWorld
     /// wake zone"), broke its object list and crashed it (live 2026-11-05). Above the player (0x1000), the lockstep tick
     /// order (ascending ids: LivingCollision.StepFrames) is kept.</summary>
     public uint NextObjectId = 0x04000000;
-
     /// <summary>The next id for a server object of this instance, taken atomically. Producers on different threads each
     /// need one of their own: the projectile pump spawns a volley's arrows while the connection's own thread casts, and a
     /// bot in the same instance does too. "NextObjectId++" reads this shared counter and writes it back without a lock, so

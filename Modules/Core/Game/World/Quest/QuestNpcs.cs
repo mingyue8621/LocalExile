@@ -115,33 +115,33 @@ public static partial class Game
     public static async Task QuestNpcsAppear(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
         MonsterCatalog.Variety variety, (int X, int Y) at)
     {
-        string area = conn.Layout.Id;
-        var added = new List<(Quests.AppearsRule Rule, NpcCatalog.Npc Npc, int X, int Y)>();
-        foreach (var rule in QuestsOf(conn).AppearOnKill(area, variety.Id))
+        var instance = conn.Instance;
+        await Show(conn, remote, stream, ciphers);
+        foreach (var peer in instance.Presence.PlayersExcept(conn.PeerId))
+            if (peer.Owner is { Closed: false, LeavingArea: false, PlayerSent: true } other
+                && ReferenceEquals(other.Instance, instance))
+                other.KillShares.Enqueue((address, output, keys) =>
+                    !other.Closed && !other.LeavingArea && ReferenceEquals(other.Instance, instance)
+                        ? Show(other, address, output, keys) : Task.CompletedTask);
+
+        async Task Show(ClientState viewer, string address, NetworkStream output, ConnectionCiphers keys)
         {
-            if (Npcs.Value.Find(rule.NpcType) is not { Supported: true } npc || npc.Id != rule.NpcType)
+            string area = viewer.Layout.Id;
+            foreach (var rule in QuestsOf(viewer).AppearOnKill(area, variety.Id))
             {
-                Console.WriteLine($"[gateway] {remote} {rule.NpcType}: unknown or unsupported NPC");
-                continue;
-            }
-            var (x, y) = conn.Layout.Walkable is { } walks && !walks(at.X, at.Y) ? conn.Layout.Near(at) : at;
-            added.Add((rule, npc, x, y));
-        }
-        if (added.Count == 0) return;
-        // Every player in the instance sees the NPC a boss's death brings: the last hit is often a bot's, and the player
-        // who was fighting it stood in the same instance watching nothing appear (live 2026-11-10, Act 5's Innocence).
-        foreach (ClientState each in InstancePlayers(conn))
-        {
-            bool changed = false;
-            foreach (var (rule, npc, x, y) in added)
-                lock (each.QuestNpcs)
+                if (Npcs.Value.Find(rule.NpcType) is not { Supported: true } npc || npc.Id != rule.NpcType)
                 {
-                    if (each.QuestNpcs.Any(c => c.Npc.Id == npc.Id && c.Id != 0)) continue;
-                    each.QuestNpcs.Add(AppearingNpc(area, rule, npc, x, y));
-                    changed = true;
+                    Console.WriteLine($"[gateway] {address} {rule.NpcType}: unknown or unsupported NPC");
+                    continue;
                 }
-            if (changed)
-                await UpdateQuestNpcs(each.Wire.Remote, each.Wire.Stream, each.Wire.Ciphers, each, $"{variety.Name} died");
+                lock (viewer.QuestNpcs)
+                {
+                    if (viewer.QuestNpcs.Any(c => c.Npc.Id == rule.NpcType && (c.Appears is not null || c.Id != 0))) continue;
+                    var (x, y) = viewer.Layout.Walkable is { } walks && !walks(at.X, at.Y) ? viewer.Layout.Near(at) : at;
+                    viewer.QuestNpcs.Add(AppearingNpc(area, rule, npc, x, y));
+                }
+            }
+            await UpdateQuestNpcs(address, output, keys, viewer, $"{variety.Name} died");
         }
     }
 

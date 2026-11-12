@@ -37,13 +37,23 @@ public static partial class Game
             log, wake: true, transport: (remote, stream, ciphers));
     }
 
-    public static async Task SyncSharedGround(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
+    public static Task SyncSharedGround(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn) =>
+        SyncGround(remote, stream, ciphers, conn, entering: false);
+
+    static async Task SyncGround(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, bool entering)
     {
         if (!GameEvents.AllowsLoot(conn)) return;
         var ground = conn.Instance.Ground;
         await SendWorldBatch(conn, [], admission =>
         {
-            if (!CurrentGameWork || conn.Closed || conn.LeavingArea || !conn.PlayerSent) return null;
+            if (!CurrentGameWork || conn.Closed || conn.LeavingArea || (!entering && !conn.PlayerSent)) return null;
+            if (entering)
+            {
+                ground.Observe(conn);
+                if (conn.Character is not null)
+                    ground.Reassign(by => by is ClientState earlier
+                        && string.Equals(earlier.Character, conn.Character, StringComparison.OrdinalIgnoreCase), conn);
+            }
             var all = ground.All();
             var now = new HashSet<uint>(all.Select(e => e.Id));
             var packets = new WorldRecordBuilder(conn, admission);
@@ -66,9 +76,11 @@ public static partial class Game
                     if (!shared && !ReferenceEquals(by, conn)
                         && (QuestFlagsOf(conn, item.Item) is null || !QuestDropVisibleTo(conn, id))) continue;
                     conn.SeenGround.Add(id);
-                    if (ReferenceEquals(by, conn)) continue; // shown where it was put down
+                    // Entering an area shows the player what they dropped there before; a drop made just now is already on
+                    // their screen because they made it.
+                    if (!entering && ReferenceEquals(by, conn)) continue;
                     packets.Create(id, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(WorldItemObject.MetadataPath),
-                        item.Blob(justDropped: ground.IsNewFor(conn, id))));
+                        item.Blob(justDropped: !entering && ground.IsNewFor(conn, id))));
                     packets.Presentation(id, InstanceProtocol.EnterWakeZone(id));
                 }
             }

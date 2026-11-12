@@ -1329,14 +1329,16 @@ public static partial class Game
     // when the client's 0x197 updates stop for ChannelSilenceSeconds (so a lost 0x199 cannot keep a channel spinning on
     // its own). A held Winter Orb is the exception: its client sends 0x198 only when the aimed cell changes, so a still
     // cursor leaves none, and the orb must keep charging the stages the bar is counting (ChannelCurrent).
+    public static double FocusedChannelMore(double seconds, int perSecond) =>
+        1 + Math.Clamp(Math.Floor(seconds) * perSecond, 0, 60) / 100d;
+
     public const double ChannelSilenceSeconds = 1.0;
 
     public static async Task RunChannel(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
         ushort skillId, (ushort Id, int Effect, string Name, int Level, int Quality, uint Gem) gem, int action)
     {
         int generation = conn.ChannelGeneration;
-        // Focused Channelling pays by the second the channel has run, so the run's own start is what it counts from.
-        double channelStartedAt = conn.Clock.Elapsed.TotalSeconds;
+        double channelStarted = conn.Clock.Elapsed.TotalSeconds;
         bool Running() => ChannelCurrent(conn, skillId, action, generation);
         // Winter Orb's orb and its firing loop live in WinterOrb.cs: the loop starts with the channel and outlives it,
         // while this channel's cast ticks only build the orb's stages.
@@ -1388,7 +1390,8 @@ public static partial class Game
                 var at = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
                 await AreaSkillHit(remote, stream, ciphers, conn, skillId, gem, at, at,
                     immediate: true, sequence: conn.ChannelSkillSequence, actionToken: action, channelGeneration: generation,
-                    damageMore: FocusedChannellingMore(conn, skillId, conn.Clock.Elapsed.TotalSeconds - channelStartedAt));
+                    damageMore: FocusedChannelMore(now - channelStarted,
+                        GolemStat(SupportedSkill(conn, skillId).Stats, "support_focus_channel_damage_+%_final_per_second_channelling_up_to_60%")));
             }
         }
         catch (Exception ex) when (ex is IOException or ObjectDisposedException) { }
@@ -1529,7 +1532,15 @@ public static partial class Game
         int effectiveness = SkillsFor(conn).DamageEffectiveness(gem.Effect, gem.Level);
         int Stat(string name) => Stats.Key(name) is uint k ? skillStats.GetValueOrDefault(k) : 0;
         if (Stat("base_deal_no_damage") != 0) return;
-        if (!hitPlan.CanHit) return;
+        if (!hitPlan.CanHit)
+        {
+            // Contagion has no hit: its cast puts a chaos damage over time on the monsters in its area (MonsterContagions.cs).
+            if (ContagionCast(conn, skillId, gem.Effect) is { } contagion)
+                await CastContagion(conn, gem.Effect, skillId, from, to,
+                    contagion with { SpreadAo = ContagionSkinAo(conn, gem.Gem) }, repeat, radiusMore,
+                    actionToken ?? cooldownUse?.ActionToken ?? conn.ActionCount, cooldownUse?.Instant == true, Current);
+            return;
+        }
         // Discharge: the charges it spends are counted as the use starts; with none it deals nothing.
         if (hitPlan.SpendsCharges) discharge ??= new(RemovableCharges(conn));
         if (discharge is not null && discharge.Total == 0)
@@ -1745,6 +1756,7 @@ public static partial class Game
                         : SupportedHitFor(conn, skillId, suppress: true, weapon: shield);
                     if (ruthless != 1) sweepHit = sweepHit.Scale(ruthless);
                     if (addedChaos > 0) sweepHit = sweepHit.Add(DamageType.Chaos, new(addedChaos, addedChaos));
+                    if (spell && repeat > 0) sweepHit = sweepHit.Scale(GreaterEchoHitMore(repeat, Stat));
                     sweepMultiplier = SupportedCriticalMultiplier(conn, skillId);
                     if (!spell) accuracy = SupportedAccuracy(conn, skillId);
                     leech = HitLeechSources(player, !spell, skillStats, local);
@@ -1833,6 +1845,11 @@ public static partial class Game
                     // Item Quantity Support: the kill's loot rolls read the supported skill's share.
                     if (Stats.Key("base_killed_monster_dropped_item_quantity_+%") is uint quantityKey)
                         m.KilledWithItemQuantityPct = skillStats.GetValueOrDefault(quantityKey);
+                    // Item Rarity Support: the same kill's drops read the skill's rarity share.
+                    if (Stats.Key("base_killed_monster_dropped_item_rarity_+%") is uint rarityKey)
+                        m.KilledWithItemRarityPct = skillStats.GetValueOrDefault(rarityKey);
+                    // Soul Ascension: this player hit on a rare or unique enemy eats a soul (its own cooldown).
+                    SoulEaterHit(conn, m);
                     // Devour: a killing blow recovers the support's life/mana.
                     if (applied.Value.Life == 0) DevourOnKill(conn, skillStats);
                     AilmentsOnHitLocked(conn, m, mitigated, spell, critical, multiplier, player, skillStats, at, Random.Shared,
@@ -2359,6 +2376,8 @@ public static partial class Game
         uint id, SpawnedMonster m, bool playerKill)
     {
         StopCorpseBlocking(remote, stream, ciphers, conn, id, m);
+        if (SpreadContagion(conn, id, m) is { } contagion)
+            await ShowContagionSpread(remote, stream, ciphers, conn, contagion.At, contagion.Radius, contagion.Ao);
         double now = conn.Clock.Elapsed.TotalSeconds;
         (int X, int Y) at, player;
         bool alive, blocked;
@@ -2442,7 +2461,7 @@ public static partial class Game
             // tier lets the rolls add their base card/scarab drops in a map.
             int mapTier = MapDevice.OpenOf(CharacterName(conn)) is { } openMap && openMap.Area.Hash16 == conn.Layout.Hash
                 ? openMap.Area.Tier : 0;
-            drops.AddRange(DropsFor(conn).Roll(m.Level, m.Rarity, Random.Shared, IncreasedItemRarity(conn),
+            drops.AddRange(DropsFor(conn).Roll(m.Level, m.Rarity, Random.Shared, IncreasedItemRarity(conn, m),
                 balance.ItemDropMultiplier * (modded?.Quantity ?? 1) * ItemQuantityFactor(conn, m), balance.EquipmentRarityMultiplier * (modded?.Rarity ?? 1), mapTier,
                 modded?.MagicRarity ?? 1, modded?.RareRarity ?? 1, modded?.UniqueRarity ?? 1));
             drops.AddRange(PartyCurrency(conn, drops, Random.Shared));
