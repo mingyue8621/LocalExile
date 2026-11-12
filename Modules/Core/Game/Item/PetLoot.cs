@@ -168,7 +168,7 @@ static partial class Game
     static string Label(WorldItemObject ground) =>
         IsGold(ground) ? "Gold" : ShapeOf(ground.Item)?.Class ?? "(no catalog row)";
 
-    // Takes one ground item into the main inventory, the way the player's own stacking pickup does, without the walk.
+    // Takes one ground item into the main inventory, the way the player's own pickup does, without the walk.
     static async Task<PetPick> PetPickUp(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, uint id, WorldItemObject ground)
     {
         if (IsGold(ground))
@@ -178,6 +178,21 @@ static partial class Game
             return conn.Instance.Ground.Get(id) is null ? PetPick.Taken : PetPick.Gone;
         }
         if (!PetLootable(ground)) return PetPick.NotLootable;
+        // A stack goes through the same shared pickup the player's own click uses (TakeGroundStack/SendPickup, upstream
+        // PR #737) instead of a second copy here: one implementation owns the take, the save-failure restore, the
+        // remainder on the ground and the three packets. Only the currencies that do not stack keep the hand-rolled
+        // branch below, because TakeGroundStack takes stacks alone.
+        if (ShapeOf(ground.Item) is { MaxStack: > 1 })
+        {
+            GroundPickup? pickup;
+            lock (conn.Monsters) pickup = TakeGroundStack(conn, id, ground);
+            if (pickup is null)
+                // TakeGroundStack says no for both "no room" and "someone else took it": what is still on the ground
+                // had no room, what is gone was taken first.
+                return conn.Instance.Ground.Get(id) is null ? PetPick.Gone : PetPick.NoRoom;
+            await SendPickup(remote, stream, ciphers, conn, id, pickup);
+            return PetPick.Taken;
+        }
         var items = ItemsOf(conn);
         PlayerInventories.Stacking stacked;
         WorldItemObject? rest = null;
