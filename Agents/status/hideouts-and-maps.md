@@ -58,6 +58,68 @@
   代码：`HideoutCatalog.cs`、`InstanceHideouts.cs`、`WorldAreaHideouts.cs`、Gateway（`WarpToHideout`、
   `SpawnHideoutDoodads`、`UseMapDevice`、`ActivateMapDevice`、`UseMapPortal`）、`MapDevice.cs`。
   文档：[21](../docs/protocol/21-hideouts.md)。
+- Heist Locker is placed in each hideout and opens its native window (0x7b kind 0x37).
+  The native window handler and visible state were verified through the real client.
+  Its placement supports the hideout editor; storage transfers were not added by this change.
+  See [21](../docs/protocol/21-hideouts.md), Heist Locker.
+- Horticrafting Station (2026-10-27): placed beside the ordinary bench in every selected hideout; interaction opens
+  the native recipe browser (0x7b kind 0x39).
+  C→S 0x274 carries the selected HarvestCraftOptions HASH16 (captured live: ReforgeFire 0xa3e5); S→C 0x276 carries the
+  crafted item id and clears the panel's pending state, so Craft can be clicked repeatedly without reopening.
+  Targeted/affinity reforges, augments and modifier conversions execute on the item in HarvestCraftingItem; the exact
+  Wild/Vivid/Primal/Sacred lifeforce cost is split across the main inventory and personal stash and commits with the
+  item atomically.
+  Refusals spend nothing; unsupported influence, exchange, divination-card, gem, corrupted-map and quality-enchant
+  recipes are reported in chat and wait for their prerequisite systems.
+  Automated tests cover raw rows/costs, every supported operation family, payment, insufficient funds and save
+  rollback; station, window and the request were confirmed live.
+  See [21](../docs/protocol/21-hideouts.md), Horticrafting Station.
+- Generic 3.29 maps, first slice (2026-10-27): `MapKeyTierN` items serialize their MapKey component and `/item Map
+  (Tier N)` creates one; the map device accepts them and uses `MapKeys.dat` for the tier. The native hideout Atlas
+  window (S?C 0x7b kind 0x2b) shows the four starting layouts; a node click (C?S 0x00e7) selects one and Activate opens
+  it. Every character has the epilogue quest flag `EndGameAvailable`, without which the client refuses Atlas activation
+  (until Kitava earns it, only in a hideout and the maps, so the Epilogue's gates stay shut; checked offline).
+  Live 2026-10-29: selecting Estuary opened Estuary; Cells is the default.
+  Basic monster map drops use a local approximation.
+  Atlas passive tree foundation (2026-10-30): the three saved presets are sent with their node lists and point budget
+  (S→C 0x3d); C→S 0x3e/0x3f allocate/refund nodes and save them; `/atlas_tree` opens the tree and
+  `/atlas_points <n>` sets the dev budget. Live: with 30 points, three "Map Drop Chance" nodes allocated and the
+  client updated the tree; the presets are saved. The budget now comes from the Atlas's completed maps: one point per
+  map first completed, up to 100 (#382), derived at login/area entry from the saved completed set and awarded on a real
+  completion. A fresh save earns its first map point on its first completion. The Atlas
+  graph itself is still the client's, so connectivity is left to it.
+  The selected layout is kept in the character save (an AtlasNode Id, `CharacterSaves.SelectedAtlasLayout`, chosen with
+  `/atlas <layout>`), and a restarted Gateway reads it back instead of resetting to the starting node (#382). Generic
+  maps use their tier as the area level (tier + 67).
+  Atlas progress (2026-11-01): killing a map's WorldAreas boss (or any unique) in it completes its AtlasNode, saved per
+  character; S→C 0x1a4 and one chat line mark it the first time only. Area entry sends one 0x1a3 (both masks still include all on-Atlas rows) with the 0x3d
+  presets, before 0x21, so login does not announce every saved map. `/atlas_complete <map | all>` and `/atlas_reset` (dev).
+  Live: 0x1a4 for Chateau showed it completed and opened Springs and Arachnid Nest; the boss-kill trigger still needs a
+  real-client check. Bonus objectives, Voidstones, map stash placement and official drop pools remain open.
+  Code: `AtlasCatalog.cs`, `AtlasPassives.cs`, `AtlasProgress.cs`, `MapDevice.cs`, `ItemDrops.cs`, `InstanceItems.cs`.
+  Docs: [21](../docs/protocol/21-hideouts.md), [re/013](../docs/re/013-atlas-progress.md), [maps](../docs/game/maps.md), [05](../docs/protocol/05-inventories-and-ui.md).
+- Portal Scroll and the Portal skill (its 2.5 s cast): outside towns and hideouts a portal opens beside the player,
+  replacing the previous one; from a map it leads to the hideout, anywhere else to the last town.
+  That town or hideout gets a portal back, which brings the player to the portal's cell of the same instance;
+  there the portal stands again (`OpenTownPortal`, `SpawnTownPortals`, `OpenPortals`;
+  while the server runs, being tested 2026-10-23).
+  Code: Gateway (`UsePortalScroll`, `UseMapReturnPortal`).
+  Docs: [21](../docs/protocol/21-hideouts.md) §5.
+- Hideouts: every character has the hideout unlocked (quest flags HideoutUnlocked, CanEditHideout …;
+  league quest flags UnlockedHideouts, HaveHideout, UnlockedMapDevice in the Player component, sent as bit id − 1) and
+  owns the Lush Hideout; `/hideout` (C→S 0x16 command 45) and the World panel's Hideout button (C→S 0x17a) take the
+  player there (its own instance, seed 1) next to its waypoint;
+  its Waypoint (with HideoutDoodad data), Stash, Nessa and map device come from its decoration (`scripts/re/atlas
+  hideouts` → `data/hideouts.json`); the HUD shows the Edit button;
+  the map device can be clicked and opens its window (S→C 0x7b kind 5);
+  maps go into its slots, Activate (C→S 0x00d8) checks them (maps and map fragments only, one map), consumes them and
+  opens six portals (MultiplexPortal + S→C 0x008f) into one instance of the map's area, each used once (the one taken
+  stays gone); `An Audience With The King` is a fragment that opens the Crux of Nothingness by itself; in the map, a
+  portal back to the hideout, the map's own monster packs (Maps.dat) and its boss arena
+  gates (teleports); Nessa sells Beach Maps; `/league_flag`, `/hideout_keys` (dev, answered in chat).
+  Code: `HideoutCatalog.cs`, `InstanceHideouts.cs`, `WorldAreaHideouts.cs`, Gateway (`WarpToHideout`,
+  `SpawnHideoutDoodads`, `UseMapDevice`, `ActivateMapDevice`, `UseMapPortal`), `MapDevice.cs`.
+  Docs: [21](../docs/protocol/21-hideouts.md).
 
 ## 部分实现
 
@@ -243,7 +305,7 @@
     map quantity and the owner's legacy scarab bonus, cap at equipment capacity, and survive reentry/module reload.
     Fumes adds mine guards and a native enrage visual with +50% item quantity on affected monsters; its radius,
     guard placement and exact official combat tuning remain server approximations.
-    Full resource snapshots are followed by 0x226 gauge updates on entry and chart opening.
+    Entry sends a full snapshot without a zero-gain event; chart opening refreshes its gauge with 0x226.
     Two unchanged-value updates settle the paused chart and invalidate its label position; the number follows the fill edge.
     A third update suppresses the native invalidation. Both the fill and label were verified without client changes.
   - The native HUD gauge is permanent in mine areas (type 27). Niko maps now keep its transient display visible
@@ -276,6 +338,8 @@
     Tunnel stragglers do not block completion; the next direction requires a new selection.
     Death, leaving or module reload discards the unfinished trip, retains spent sulphite and restores the saved point.
     The Crawler follows authored rails, waits at 70 cells (resumes below 60), and speeds up along the rails when led.
+    Departure waits for the player to leave a 180-cell-diameter native circle, with no travel debit while waiting.
+    Completion keeps a permanent endpoint light and plays the native checkpoint activation animation with its success sound.
     The Crawler's own forward axis leads each rail segment; rounded cells do not change its heading, and only clear
     sleeve connections are smoothed. Wheels, engine, torch, checkpoint pads, 30-cell lamps and cables remain in place.
     Supported Weta/Spider packs
@@ -284,7 +348,7 @@
     Newly opened destinations receive one completion reward; revisiting opened points cannot farm free rewards.
     Native walking/Kinetic Blast completed a route with exact 24 sulphite debit and one reward. Native checks also
     confirmed cross-character checkpoint sharing and unfinished-trip death reset.
-    Chart continuity inside the mine requires the now-sent DelveOwner flag.
+    DelveOwner enables chart continuity; Niko and Crawler center it on the last saved account checkpoint.
     General biome/encounter parity, darkness damage and consumable use remain partial.
   - The Crawler stands on the rails by the mine entrance at (408, 310), facing 90°, on every entry; the stash and the
     guild stash are at (355, 295) and (344, 295), facing 180°. Lioneye's Watch has them at (327, 270) and (317, 270).

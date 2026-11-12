@@ -624,5 +624,7 @@
   the nine ailment and avoidance rows, five rows that need new consumers (corpse consumption, Fortify-on-stun,
   guard duration, hinder and herald effect), the ten Loyalty summons and the seven Forbidden ascendancy tattoos.
 - Saving quest progress, quest passive/refund rewards and native Labyrinth/Altar acquisition (#151).
-- Tattoos: 75 rows work in the client; 22 rows (new consumers, Loyalty summons, Forbidden tattoos) are missing.
+- Tattoos: 87 rows work in the client and 11 are partial (Ancestral Bloodlines, the three Loyalty summons Akoya,
+  Ikiaho and Rakiata whose Leadership buff stats have no reader, and the seven Forbidden ascendancy tattoos,
+  whose client use flow is untraced); two are inert.
   Docs: [tattoos](../docs/game/tattoos.md).

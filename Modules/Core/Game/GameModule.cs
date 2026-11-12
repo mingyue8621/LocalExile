@@ -16,6 +16,10 @@ public sealed class GameModule : IModule
         // town body, drawn without a connection, asks for one skin at a time (BotSkin).
         ControlledPlayers.BotSkin = global::Game.BotSkin;
         ControlledPlayers.GearFitsClass = global::Game.GearFitsClass;
+        GameEvents.Tick.Add(module.Manifest.Id, (conn, _) => global::Sirus.Tick(conn));
+        GameEvents.PlayerLeaving.Add(module.Manifest.Id, (conn, _) => global::Sirus.Leaving(conn));
+        GameEvents.PlayerStatSources.Add(module.Manifest.Id, global::Sirus.PlayerStats);
+        module.Lifetime.Own(global::Sirus.CleanupOnUnload());
         Program.SetGameLogic(new GameLogic(module.Lifetime));
         string id = module.Manifest.Id;
         GameEvents.Tick.Add(id, (conn, _) => global::DoedreSewers.Tick(conn));

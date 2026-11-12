@@ -628,6 +628,8 @@
   CoE beta pool and simulated-probability checks, ordinary/Shift inventory/stash dispatch and save reloads have
   automated coverage. The old live check (2026-10-21) predates these admission checks; native re-acceptance is pending.
   See [13](../docs/protocol/13-items.md), "Orb of Augmentation", and
+- Optional backpack mods can enable the native 20 slots; stored items remain removable after disabling the mod.
+
 - Character-build previews and imports through the mod SDK; the POB mod and converter are external.
   Docs: [modding](../docs/dev/modding.md).
 - On-kill explosions and Eater of Worlds attribute damage reduction.

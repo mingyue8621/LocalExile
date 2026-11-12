@@ -17,7 +17,7 @@ public static partial class Game
         InstanceEntities.CreateInWakeZone(id, InstanceEntities.ObjectTypeHash(EffectObject.TypePath), effect.Blob());
 
     /// <summary>One gameplay pump and one presentation consumer per connection, regardless of projectile count.</summary>
-    public sealed class ProjectileSession : IProjectileWorld, IProjectileRuntime
+    public sealed partial class ProjectileSession : IProjectileWorld, IProjectileRuntime
     {
         public readonly string remote;
         public readonly NetworkStream stream;
@@ -129,6 +129,7 @@ public static partial class Game
                 if (invalid) return;
                 invalid = true;
                 lifetime?.Dispose();
+                ClearPods();
                 Runtime.Clear();
                 foreach (var visual in visuals.Values) Conn.ProjectileObjects.Remove(visual.Id);
                 visuals.Clear(); output.Writer.TryComplete();
@@ -321,6 +322,7 @@ public static partial class Game
                         + $"the target is not this instance's living monster");
                 return ProjectileHitResult.Miss;
             }
+            if (contact.Phase == 0 && shot.ExcludedTarget == contact.Target) return ProjectileHitResult.Miss;
             var random = contact.Projectile.RandomSource;
             if (shot.RampageEpoch is long ownedEpoch)
             {
@@ -416,6 +418,8 @@ public static partial class Game
             // Soul Ascension: this player hit on a rare or unique enemy eats a soul (its own cooldown).
             SoulEaterHit(Conn, target);
             if (shot.ActualCaster is null && hit.Value.Life == 0) DevourOnKill(Conn, shot.SkillStats);
+            if (shot.MirageSource is not null && target.Hostile && contact.Projectile.Use.Emitter.Id == PlayerId)
+                MirageOnArrowHit(shot);
             if (!immune)
                 AilmentsOnHitLocked(Conn, target, mitigated, shot.Spell, critical, multiplier, player, shot.SkillStats,
                     at, contact.Projectile.ReactionRandomSource, poison: shot.Poison, sourceSkill: shot.SourceSkill);

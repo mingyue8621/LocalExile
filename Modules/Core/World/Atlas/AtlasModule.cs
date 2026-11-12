@@ -227,10 +227,9 @@ static class AtlasFeature
         // No map is completed by logging in: the Atlas panel already draws every on-atlas row from the first mask
         // (AtlasProgress.FullMessage), and a completion is what a boss kill earns — marking them all here gave every
         // character the tree's full 100 points on its first login (live 2026-11-09).
-
         var completed = AtlasProgress.Completed(data);
         // One Atlas passive point per map completed, up to the 100 the tree's map half has (#382 item 3). The completed set
-        // is read, so a character whose Atlas was filled before the award existed gets its points too.
+        // is read from the save. Entering an area does not complete any new maps.
         bool pointsChanged = false;
         if (Math.Min(AtlasModule.MapCompletionPoints, completed.Count) is int earned and > 0 && earned > conn.AtlasPassivePoints)
         {

@@ -230,7 +230,8 @@ public static partial class Game
         // A bow is held in the left hand, and its model slot is not the main hand's: BowSetup holds the record the live server
         // sends (the bow's art in slot 1, an arrow in slot 0 with the weapon type and stance, the quiver on the back in 7).
         bool bowHand = false;
-        if (HandType(conn, PlayerInventories.Weapon1) is { Class: "Bow" } bow)
+        var weapon = HandType(conn, PlayerInventories.Weapon1);
+        if (weapon is { Class: "Bow" } bow)
         {
             int quiver = looks.FindIndex(l => l.Slot == 1 && l.VisualIdentity != 0);
             ushort quiverArt = quiver >= 0 ? looks[quiver].VisualIdentity : ItemsFor(conn).Visual("DefaultQuiver") ?? 0x328b;
@@ -260,8 +261,13 @@ public static partial class Game
             // hand's slot 0 holds the drawn arrow and the off hand's art is the quiver in slot 7. The Cosmetics tab still
             // names the model slots the ordinary way (Weapon 0, Off Hand 1), so without this a weapon skin dressed the
             // arrow and an off-hand one dressed the bow (reported live 2026-11-08: "the weapon's and off-hand's looks are
-            // in the wrong place"). Only the two hand slots move; every other cosmetic slot is the same either way.
-            byte target = bowHand ? model switch { 0 => (byte)1, 1 => (byte)7, _ => model } : model;
+            // in the wrong place"). A bow has no second weapon, so an off-hand cosmetic has no model here to dress.
+            if (weapon is { Class: "Bow" } && model is 0 or 1)
+            {
+                if (model == 1) continue; // no second weapon; this model entry is the bow
+                model = 1;
+            }
+            byte target = model;
             var held = HeldItem(target);
             if (held is not null && !MtxEffects.FitsItem(worn.MtxTypeHash, held)) continue;
             int at = looks.FindIndex(l => l.Slot == target);
@@ -278,12 +284,12 @@ public static partial class Game
                 // that picture the cosmetic's: the quiver slot showed the alternate art whatever quiver was worn (live
                 // 2026-11-09). The client swaps an item's icon from a hash-keyed table (MicrotransactionAppliedInventoryItemArt
                 // Variations / EquippedIconVariations), so without the hash it has nothing to match and keeps the item's own
-                // art, while the art in this reference still dresses the model. The main hand keeps its hash until that is
-                // confirmed live, as the control of the comparison.
+                // art, while the art in this reference still dresses the model. The bow's own slot keeps its hash: the skin
+                // has to reach the bow model (BowCosmeticSlotTests, 2026-11-12).
                 looks[at] = looks[at] with
                 {
                     SkinVisual = fx?.Visual ?? 0,
-                    SkinHash = target is 1 or 7 ? 0u : worn.MtxTypeHash,
+                    SkinHash = target is 7 ? 0u : worn.MtxTypeHash,
                 };
         }
         return [.. looks, .. cosmeticSlots.Values];

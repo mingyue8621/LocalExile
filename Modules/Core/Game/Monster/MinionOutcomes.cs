@@ -87,6 +87,7 @@ public static partial class Game
         }
         state.FlaskRewards.Add(new(monster.Rarity));
         if (Environment.GetEnvironmentVariable("Game_DROPS") == "0") return;
+        if (BossMods.GivesNoItems(variety)) return;
         var balance = LeagueFor(conn).Rules;
         var modded = GameEvents.RunDrops(ConnOf(killer), modMonster);
         var drops = new List<ItemDrops.Drop>();
@@ -105,6 +106,7 @@ public static partial class Game
         foreach (string query in modded?.Items ?? [])
             if (ModDrop(conn, query, monster.Level) is { } extra) drops.Add(extra);
             else Console.WriteLine($"[mods] a mod's drop \"{query}\" is no item type or unique the server can create");
+        if (modded is not { Cancel: true }) drops.AddRange(Sirus.Rewards(conn, monster));
         foreach (var drop in ItemDrops.Stacked(drops))
         {
             double angle = Random.Shared.NextDouble() * Math.Tau, radius = 3 + Random.Shared.NextDouble() * 3;
