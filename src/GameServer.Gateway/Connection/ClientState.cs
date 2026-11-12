@@ -1216,10 +1216,12 @@ public sealed partial class ClientState(AreaLayout layout, uint ticket, uint see
 }
 
 /// <summary>A worn pet the server walks after the player (RunPetFollow): its walk estimate, which side of the player it
-/// keeps (+1 or −1) and where it was last sent.</summary>
-public sealed class SpawnedPet(WalkEstimator walk, int side)
+/// keeps (+1 or −1), the Cosmetics slot it was worn in (18 or 19) and where it was last sent.</summary>
+public sealed class SpawnedPet(WalkEstimator walk, int side, byte slot = 0)
 {
     public WalkEstimator Walk { get; } = walk;
     public int Side { get; } = side;
+    /// <summary>Its Pet slot: 18 (the first) or 19 (the second). Only 19 picks items up (PetLoot).</summary>
+    public byte Slot { get; } = slot;
     public (int X, int Y)? Target { get; set; }
 }
