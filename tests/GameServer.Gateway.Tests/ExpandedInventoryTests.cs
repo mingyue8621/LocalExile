@@ -36,10 +36,8 @@ public sealed class ExpandedInventoryTests
     [Fact]
     public void Removing_grant_keeps_saved_contents_visible_but_rejects_both_deposit_packets()
     {
-        // The operator setting hands the grid to every character (expanded_inventory_for_all); this test is about the
-        // ascendancy grant being taken away, so it runs with that setting off (0 = the ascendancy node alone).
-        SystemSettings.Default.Replace(new Dictionary<string, double>(SystemSettings.Default.Values)
-            { ["expanded_inventory_for_all"] = 0 });
+        // The grant is the stat itself (the backpack mod adds it through GameEvents.Stats, as the Primalist node does):
+        // this test is about that stat going away, so the grid has to fall back to recovery mode.
         using var f = new Fixture();
         uint key = Program.Stats.Key(Game.ExpandedInventoryStat)!.Value;
         var items = Game.ItemsOf(f.Conn);

@@ -4,12 +4,11 @@ static partial class Game
 {
     internal const string ExpandedInventoryStat = "primalist_ascendancy_expanded_main_inventory";
 
-    // The grant is the real source value, never the presentation-only recovery flag below.
+    // The grant is the real source value, never the presentation-only recovery flag below. What grants it is the
+    // backpack mod's stat hook (GameEvents.Stats, the same stat the Primalist's "Might of the Bear" carries) or that
+    // ascendancy node itself — the server has no setting of its own for it.
     internal static bool ExpandedInventoryGranted(ClientState conn)
     {
-        // The setting hands the 4×5 grid to every character: it is the client's own inventory row 84, so no ascendancy
-        // node and no client edit is needed. Operators turn it off with expanded_inventory_for_all = 0.
-        if (SystemSettings.Default.ExpandedInventoryForAll) return true;
         if (Stats.Key(ExpandedInventoryStat) is not uint key) return false;
         long value = CharacterStatSources(conn).Stats.GetValueOrDefault(key);
         if (GameEvents.Stats.Any)
