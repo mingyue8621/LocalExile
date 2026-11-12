@@ -4,7 +4,7 @@ using GameServer.Core.Protocol.Login;
 
 static partial class Game
 {
-    // 捡物宠物（装扮里 Pet 槽那两只，见 CosmeticsModule.SpawnPets）：每 0.4 秒把玩家周围 80 格内的通货与金币收进主背包。
+    // 捡物宠物（装扮里 Pet 槽那两只，见 CosmeticsModule.SpawnPets）：每 0.4 秒把玩家周围 120 格内的通货与金币收进主背包。
     //   只用 2 号槽（slot 19）那只；1 号槽（slot 18）那只只跟着走，不捡东西。
     //   通货 = 能堆叠的（MaxStack > 1：通货、碎片、精华、命运卡、圣甲虫）加上同样算通货但不堆叠的（共振器、诱饵、
     //   部分门票碎片，见 PetLootClasses）。装备、宝石、药剂、地图一律不碰。
@@ -12,7 +12,7 @@ static partial class Game
     //   一轮最多收 3 件，由近到远；收不下的直接跳过，不会堵住后面能收的（以前是取最近 3 件，3 件都塞不下就原地卡死）。
     // 落库与封包和玩家自己点拾取（PickUpGroundItem 的堆叠分支）完全同一条路径：Ground.Take → AddStacked → 保存，
     // 再发 0x2bd 移除物件、0x00bf 背包变更。不走路、不播玩家动作，所以看起来就是宠物在身边把东西收了。
-    const double PetLootRange = 80;
+    const double PetLootRange = 120;   // 之前 80：玩家走两步，脚边的东西就出圈了（2026-11-12 日志里最近的通货在 125 格）
     const int PetLootIntervalMs = 400;
     const int PetLootBusyIntervalMs = 1000;   // 地上有货但一件都收不进来（背包满）时放慢，别空转
     const int PetLootPerTick = 3;
@@ -86,14 +86,21 @@ static partial class Game
                 {
                     nextDiagnosis = now + 30;
                     var (px, py) = conn.Walk.Position(now);
-                    Console.WriteLine($"[gateway] {remote} pet: nothing within {PetLootRange:0} cells of ({px}, {py}) is lootable; "
-                        + $"the ground holds {all.Count} item(s)");
-                    foreach (var (groundId, item) in all.Take(6))
+                    var ranked = all
+                        .Select(e => (e.Id, e.Item, Dist: Math.Sqrt((double)(e.Item.GridX - px) * (e.Item.GridX - px)
+                            + (double)(e.Item.GridY - py) * (e.Item.GridY - py))))
+                        .OrderBy(e => e.Dist).ToList();
+                    int inRange = ranked.Count(e => e.Dist <= PetLootRange);
+                    int lootable = ranked.Count(e => PetLootable(e.Item));
+                    int both = ranked.Count(e => e.Dist <= PetLootRange && PetLootable(e.Item));
+                    Console.WriteLine($"[gateway] {remote} pet: nothing to take at ({px}, {py}); the ground holds {ranked.Count} item(s) — "
+                        + $"{inRange} within {PetLootRange:0} cells, {lootable} lootable anywhere, {both} lootable and in range");
+                    foreach (var e in ranked.Take(6))
                     {
-                        var shape = ShapeOf(item.Item);
-                        double d = Math.Sqrt((double)(item.GridX - px) * (item.GridX - px) + (double)(item.GridY - py) * (item.GridY - py));
-                        Console.WriteLine($"[gateway] {remote} pet:   0x{groundId:x} type 0x{item.Item.TypeHash:x8} at ({item.GridX}, {item.GridY}) "
-                            + $"dist {d:0.#} gold {IsGold(item)} maxStack {(shape is { } ms ? ms.MaxStack.ToString() : "-")} "
+                        var shape = ShapeOf(e.Item.Item);
+                        Console.WriteLine($"[gateway] {remote} pet:   0x{e.Id:x} type 0x{e.Item.Item.TypeHash:x8} "
+                            + $"at ({e.Item.GridX}, {e.Item.GridY}) dist {e.Dist:0.#} gold {IsGold(e.Item)} lootable {PetLootable(e.Item)} "
+                            + $"maxStack {(shape is { } ms ? ms.MaxStack.ToString() : "-")} "
                             + $"class {(shape is { } cl ? cl.Class : "(no catalog row)")}");
                     }
                 }
