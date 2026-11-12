@@ -185,14 +185,19 @@ public static class DoedreSewers
             cloudDps = catalog.EffectStats(744, catalog.MaxLevelAt(744, boss.Level))
                 .Where(s => Stats.Name(s.Item1) == "base_chaos_damage_to_deal_per_minute").Sum(s => s.Item2) / 60d;
             // What her six granted effects say at this level, in one line: the numbers every hit below is built from
-            // (client.db GrantedEffects 406/6437/6440/6447/6743/6742 and the Creeping Fire cloud, 744).
+            // (client.db GrantedEffects 406/6437/6440/6447/6743/6742 and the Creeping Fire cloud, 744). Purely a reading of
+            // the tables, so a failure here must not cost the fight: the encounter is built by the caller from this ctor.
             if (boss.Variety is { } bossVariety)
-                Console.WriteLine($"[gateway] Doedre data at level {boss.Level}: " + string.Join("; ",
-                    Effects.Select(effect =>
-                    {
-                        var a = Attack(c, bossVariety, boss.Level, effect, 0);
-                        return $"{catalog.EffectId(effect) ?? effect.ToString()} {a.Damage.MinTotal:0}-{a.Damage.MaxTotal:0} / {a.Seconds:0.##} s";
-                    })) + $"; chaos cloud {cloudDps:0.#}/s");
+                try
+                {
+                    Console.WriteLine($"[gateway] Doedre data at level {boss.Level}: " + string.Join("; ",
+                        Effects.Select(effect =>
+                        {
+                            var a = Attack(c, bossVariety, boss.Level, effect, 0);
+                            return $"{catalog.EffectId(effect) ?? effect.ToString()} {a.Damage.MinTotal:0}-{a.Damage.MaxTotal:0} / {a.Seconds:0.##} s";
+                        })) + $"; chaos cloud {cloudDps:0.#}/s");
+                }
+                catch (Exception e) { Console.WriteLine($"[gateway] Doedre data line failed: {e.GetType().Name}: {e.Message}"); }
             var placements = new QuestObjectTypes.AreaPlacements(Area, c.Seed, []);
             centre = boss.Walk.Position(c.Clock.Elapsed.TotalSeconds);
             foreach (string name in new[] { "DoedreCauldronValve", "DoedreSewersCauldron", "DoedreSewerFaceDoor" })
