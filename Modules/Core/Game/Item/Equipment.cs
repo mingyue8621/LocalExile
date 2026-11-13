@@ -229,68 +229,42 @@ public static partial class Game
                 looks[hand] = VisibleItem.Empty(slot);
         // A bow is held in the left hand, and its model slot is not the main hand's: BowSetup holds the record the live server
         // sends (the bow's art in slot 1, an arrow in slot 0 with the weapon type and stance, the quiver on the back in 7).
-        bool bowHand = false;
         var weapon = HandType(conn, PlayerInventories.Weapon1);
+        // The ItemClasses row of the item in each model slot (LookOf's type is the row + 1): a skin or a weapon effect is
+        // drawn only on an item of a class it lists.
+        var classes = looks.Where(l => l.VisualIdentity != 0).GroupBy(l => l.Slot).ToDictionary(g => g.Key, g => g.First().Type - 1);
         if (weapon is { Class: "Bow" } bow)
         {
             int quiver = looks.FindIndex(l => l.Slot == 1 && l.VisualIdentity != 0);
             ushort quiverArt = quiver >= 0 ? looks[quiver].VisualIdentity : ItemsFor(conn).Visual("DefaultQuiver") ?? 0x328b;
+            // The bow moves to the left hand's entry and the worn quiver to the back; the default quiver is no item.
+            classes.Remove(0);
+            classes.Remove(7);
+            if (quiver >= 0) classes[7] = looks[quiver].Type - 1;
+            classes[1] = bow.ClassRow;
             looks.RemoveAll(l => l.Slot is 0 or 1 or 7);
             looks.AddRange(BowSetup.Entries(bow, ItemsFor(conn).Visual("DefaultArrow") ?? 0xb2f6, quiverArt));
-            bowHand = true;
         }
         var cosmeticSlots = CosmeticEffects.CosmeticOnlySlots.ToDictionary(s => s, VisibleItem.Empty);
-        // The item each hand slot holds, so a cosmetic can be checked against the class it fits (CosmeticEffects
-        // .FitsItem): a bow skin cannot dress a sceptre, and worn anyway it has no art for it.
-        var mainHeld = HandType(conn, PlayerInventories.Weapon1);
-        var offHeld = HandType(conn, PlayerInventories.Offhand1);
-        ItemCatalog.BaseType? HeldItem(byte slot) => bowHand
-            ? slot switch { 0 or 1 => mainHeld, 7 => offHeld, _ => null }
-            : slot switch { 0 => mainHeld, 1 => offHeld, _ => null };
         foreach (var worn in WornCosmetics(conn))
         {
-            if (MtxEffects.SlotOf(worn.Slot) is not { ModelSlot: byte model } slot) continue;
-            var fx = MtxEffects.Of(worn.MtxTypeHash);
+            if (MtxEffects.SlotOf(worn.Slot) is not { ModelSlot: byte model } slot || MtxEffects.Of(worn.MtxTypeHash) is not { } fx) continue;
             if (cosmeticSlots.ContainsKey(model))
             {
-                if (fx is { Visual: not 0 } own)
-                    cosmeticSlots[model] = new VisibleItem(model, own.Visual) { SkinVisual = own.Visual, SkinHash = worn.MtxTypeHash };
+                if (fx.Visual != 0)
+                    cosmeticSlots[model] = new VisibleItem(model, fx.Visual) { SkinVisual = fx.Visual, SkinHash = worn.MtxTypeHash };
                 continue;
             }
-            // A bow character's hands are laid out differently: its weapon (the bow) is the record in slot 1, the main
-            // hand's slot 0 holds the drawn arrow and the off hand's art is the quiver in slot 7. The Cosmetics tab still
-            // names the model slots the ordinary way (Weapon 0, Off Hand 1), so without this a weapon skin dressed the
-            // arrow and an off-hand one dressed the bow (reported live 2026-11-08: "the weapon's and off-hand's looks are
-            // in the wrong place"). A bow has no second weapon, so an off-hand cosmetic has no model here to dress.
-            if (weapon is { Class: "Bow" } && model is 0 or 1)
-            {
-                if (model == 1) continue; // no second weapon; this model entry is the bow
-                model = 1;
-            }
-            byte target = model;
-            var held = HeldItem(target);
-            if (held is not null && !MtxEffects.FitsItem(worn.MtxTypeHash, held)) continue;
-            int at = looks.FindIndex(l => l.Slot == target);
+            // With a bow the main hand's cosmetics dress the bow, which is the left hand's entry, and the off hand's dress
+            // the quiver on the back ("Changes the appearance of any equipped Quiver").
+            if (weapon is { Class: "Bow" } && model is 0 or 1) model = model == 0 ? (byte)1 : (byte)7;
+            int at = looks.FindIndex(l => l.Slot == model);
             if (at < 0 || looks[at].VisualIdentity == 0) continue;   // nothing equipped there to dress
-            // The skin's own art is the reference the client draws: its ItemVisualIdentity row answers that art with the
-            // held model for the item's class (the weapon-skin rows carry one .ao per class group, the shield rows their
-            // Held .ao), so this is what makes a skin appear at all — the hash alone draws nothing (live 2026-11-08). The
-            // hash always goes with it, tiers and the client's cosmetic lookup needing it, and an item outside the skin's
-            // classes was left off above.
-            if (slot.IsWeaponEffect)
-                looks[at] = looks[at] with { EffectVisual = fx?.WeaponEffect ?? 0, EffectHash = worn.MtxTypeHash };
-            else
-                // An off hand's entry is also what the client draws the slot's own picture from, and the cosmetic's hash made
-                // that picture the cosmetic's: the quiver slot showed the alternate art whatever quiver was worn (live
-                // 2026-11-09). The client swaps an item's icon from a hash-keyed table (MicrotransactionAppliedInventoryItemArt
-                // Variations / EquippedIconVariations), so without the hash it has nothing to match and keeps the item's own
-                // art, while the art in this reference still dresses the model. The bow's own slot keeps its hash: the skin
-                // has to reach the bow model (BowCosmeticSlotTests, 2026-11-12).
-                looks[at] = looks[at] with
-                {
-                    SkinVisual = fx?.Visual ?? 0,
-                    SkinHash = target is 7 ? 0u : worn.MtxTypeHash,
-                };
+            if (!classes.TryGetValue(model, out int itemClass) || !fx.Fits(itemClass)) continue;   // not an item it dresses
+            if (slot.IsWeaponEffect && fx.WeaponEffect != 0)
+                looks[at] = looks[at] with { EffectVisual = fx.WeaponEffect, EffectHash = worn.MtxTypeHash };
+            else if (!slot.IsWeaponEffect && fx.Visual != 0)
+                looks[at] = looks[at] with { SkinVisual = fx.Visual, SkinHash = worn.MtxTypeHash };
         }
         return [.. looks, .. cosmeticSlots.Values];
     }
@@ -298,11 +272,16 @@ public static partial class Game
     // The stats worn cosmetics give the character (footprints, apparitions, …), summed per stat. A pet is the stat the client
     // spawns it from: pet_slot1 for the first Pet slot (MicrotransactionSlot 18), pet_slot2 for the second (19).
     // Skill Gem Effect (slot 49) is left out: its skill_art_variation belongs to one skill's stats, not the character's.
-    public static IEnumerable<(uint Stat, int Value)> CosmeticStats(ClientState conn) =>
-        WornCosmetics(conn).Where(w => w.Slot != 49).SelectMany(w => MtxEffects.Of(w.MtxTypeHash) is not { } fx ? [] :
+    // The stats the client reads in place of a cosmetic's own join them (CosmeticDerivedStats): it does not work out a
+    // derived stat for a player the server describes.
+    public static IEnumerable<(uint Stat, int Value)> CosmeticStats(ClientState conn)
+    {
+        var worn = WornCosmetics(conn).Where(w => w.Slot != 49).SelectMany(w => MtxEffects.Of(w.MtxTypeHash) is not { } fx ? [] :
                 fx.Pet != 0 && Stats.Key(w.Slot == 19 ? "pet_slot2" : "pet_slot1") is uint pet ? [.. fx.Stats, (pet, fx.Pet)] : fx.Stats)
-            .GroupBy(s => s.Stat, s => s.Value).Select(g => (g.Key,
-                ActorScale.IsInput(g.Key) ? ActorScale.Saturate(g.Sum(v => (long)v)) : g.Sum()));
+            .GroupBy(s => s.Stat, s => s.Value).Select(g => (Stat: g.Key,
+                Value: ActorScale.IsInput(g.Key) ? ActorScale.Saturate(g.Sum(v => (long)v)) : g.Sum())).ToList();
+        return [.. worn, .. CosmeticDerivedStats(conn, worn.ToDictionary(s => s.Stat, s => s.Value))];
+    }
 
     public static IEnumerable<(uint Stat, int Value)> CosmeticScaleSources(ClientState conn) =>
         CosmeticStats(conn).Where(s => ActorScale.IsInput(s.Stat));

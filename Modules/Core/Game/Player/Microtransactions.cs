@@ -38,12 +38,14 @@ public sealed class MtxCatalog
     /// record no longer exists (another game version's data) is left out, so the client never gets a hash it cannot
     /// resolve.
     /// </summary>
+    /// The Portal slot's choice of random effects (record 0, option 1 or 2) is an entry with no cosmetic and its option.
     public List<InstanceMicrotransactions.Equipped> Equipped(IReadOnlyDictionary<byte, CharacterSaves.SavedCosmetic> worn) =>
         [.. worn.Where(w => w.Key < InstanceMicrotransactions.SlotCount)
             .Select(w => (w.Key, w.Value, Record: Resolve(w.Value)))
-            .Where(w => w.Record is not null)
+            .Where(w => w.Record is not null || (w.Key == InstanceMicrotransactions.PortalSlot && w.Value is { Record: 0, Option: 1 or 2 }))
             .OrderBy(w => w.Key)
-            .Select(w => new InstanceMicrotransactions.Equipped(w.Key, w.Record!.Id, w.Record.MtxTypeHash, w.Record.Qword, w.Value.Option))];
+            .Select(w => w.Record is null ? new InstanceMicrotransactions.Equipped(w.Key, 0, 0, 0, w.Value.Option)
+                : new InstanceMicrotransactions.Equipped(w.Key, w.Record.Id, w.Record.MtxTypeHash, w.Record.Qword, w.Value.Option))];
 
     static List<InstanceMicrotransactions.Record> Load()
     {
@@ -87,6 +89,13 @@ public sealed class CosmeticEffects(string folder = "data")
         public IReadOnlyList<string>? PetComponents { get; init; }
         public StateMachineData? PetStates { get; init; }
 
+        /// <summary>The ItemClasses rows of the items this cosmetic dresses (a quiver skin: Quiver; a "Bow and Quiver"
+        /// skin: both), empty for any. A skin or weapon effect is drawn only on an item of one of them.</summary>
+        public IReadOnlyList<int> ItemClasses { get; init; } = [];
+
+        /// <summary>Whether the cosmetic dresses an item of this ItemClasses row.</summary>
+        public bool Fits(int classRow) => ItemClasses.Count == 0 || ItemClasses.Contains(classRow);
+
         /// <summary>A portrait's variation (MicrotransactionCharacterPortraitVariations <c>__col1</c>), 0 otherwise: the
         /// Player component's u16 at +0x1aa and the character list's U46.</summary>
         public ushort Portrait { get; init; }
@@ -94,13 +103,6 @@ public sealed class CosmeticEffects(string folder = "data")
         /// <summary>A portrait frame's variation (MicrotransactionSocialFrameVariations <c>Index</c>), 0 otherwise: the
         /// client draws <c>Art/2DArt/UIImages/Common/MTX/SupporterIconFrame{Frame}</c> around the portrait.</summary>
         public ushort Frame { get; init; }
-
-        /// <summary>The item classes and base types the cosmetic fits (ItemisedVisualEffect <c>ItemClasses</c> /
-        /// <c>BaseItemTypes</c>), empty for anything. 627 of the 629 weapon and off-hand cosmetics limit them — 93 fit a
-        /// shield alone, 33 a bow, 16 only two-handers, 11 a quiver, 15 staves — and one worn off its class has no art
-        /// for the item it is on.</summary>
-        public IReadOnlyList<int> ItemClasses { get; init; } = [];
-        public IReadOnlyList<int> BaseItemTypes { get; init; } = [];
     }
 
     public sealed record SkillRestriction(int SlotType, IReadOnlyList<int> Gems, IReadOnlyList<int> Classes);
@@ -111,14 +113,6 @@ public sealed class CosmeticEffects(string folder = "data")
         Of(hash)?.Skill is { } skill && skill.SlotType == slotType
         && (skill.Gems.Count == 0 || skill.Gems.Contains(gem.Row))
         && (skill.Classes.Count == 0 || skill.Classes.Contains(gem.ClassRow));
-
-    /// <summary>Whether a cosmetic may dress this item at all: its row lists the item classes and base types it fits,
-    /// and an empty list fits anything. A skin worn on an item outside its lists has no art for it (the row's own
-    /// ItemVisualIdentity is the placeholder orb), so it is left off rather than drawn as that placeholder.</summary>
-    public bool FitsItem(uint hash, ItemCatalog.BaseType item) =>
-        Of(hash) is not { } fx
-        || ((fx.ItemClasses.Count == 0 || fx.ItemClasses.Contains(item.ClassRow))
-            && (fx.BaseItemTypes.Count == 0 || fx.BaseItemTypes.Contains(item.Row)));
 
     /// <summary>A Cosmetics tab slot: its name and the model slot it dresses (null: none).</summary>
     public sealed record Slot(string Name, byte? ModelSlot)
@@ -135,11 +129,12 @@ public sealed class CosmeticEffects(string folder = "data")
     /// <summary>The effect of the cosmetic with this MtxTypeGameSpecific HASH32, or null.</summary>
     public Effect? Of(uint hash) => _data.Value.Effects.GetValueOrDefault(hash);
 
+    /// <summary>Every Cosmetics tab slot by its MicrotransactionSlot row (the bot cosmetics pick one that dresses a
+    /// model slot). The slots live beside the effects inside this class's loaded data.</summary>
+    public IReadOnlyDictionary<byte, Slot> Slots => _data.Value.Slots;
+
     /// <summary>The Cosmetics tab slot with this MicrotransactionSlot Id, or null.</summary>
     public Slot? SlotOf(byte id) => _data.Value.Slots.GetValueOrDefault(id);
-
-    /// <summary>Every Cosmetics tab slot by its Id (the ones the client's worn table is keyed by).</summary>
-    public IReadOnlyDictionary<byte, Slot> Slots => _data.Value.Slots;
 
     static (Dictionary<uint, Effect>, Dictionary<byte, Slot>) Load(string folder)
     {
@@ -161,7 +156,7 @@ public sealed class CosmeticEffects(string folder = "data")
             foreach (var (stat, v) in row.Ints("Stats").Zip(row.Ints("__col7"))) stats.Add(((uint)stat + 1, v));
             effects.TryAdd(hash, new Effect(visual, effect, stats)
             {
-                ItemClasses = row.Ints("ItemClasses"), BaseItemTypes = row.Ints("BaseItemTypes"),
+                ItemClasses = row.Ints("ItemClasses"),
                 Skill = skillEffects.Contains(hash) && row.Ints("__col8").Contains(27)
                     && Int(row, "EffectSlotType") is int slotType
                     ? new(slotType, row.Ints("BaseItemTypes"), row.Ints("ItemClasses")) : null,

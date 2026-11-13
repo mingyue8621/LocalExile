@@ -14,10 +14,6 @@ public sealed class PortalsModule : IModule
     /// <inheritdoc/>
     public void Load(IModuleContext module)
     {
-
-        // A portal cosmetic is the portal's own 0x008f entry, so the game module re-lists the standing portals when one
-        // is picked; the town portals are this module's (they are no map device's), hence this.
-        TownPortals = StandingTownPortals;
         GameEvents.AreaGenerated.Add(module.Manifest.Id, async conn =>
         {
             var (remote, stream, ciphers) = conn.Wire;
@@ -68,9 +64,19 @@ public sealed class PortalsModule : IModule
                 var (homeAction, homeNow, _, _, homeArrive) = homeWalk;
                 if (homeArrive > homeNow) await Task.Delay(TimeSpan.FromSeconds(homeArrive - homeNow));
                 if (!PlayerActionCurrent(conn, homeAction)) return true;
-                await ChangeArea(remote, stream, ciphers, conn, new PendingTransfer(origin.Area, origin.Instance, false, ArriveAt: (origin.X, origin.Y)),
-                    "back through the town portal");
+                if (await ExpireTownPortal(conn, origin))
+                {
+                    if (!conn.Closed && !conn.LeavingArea && conn.BackPortal?.Id == home.Id)
+                    {
+                        conn.BackPortal = null;
+                        await global::Game.SendWorldRemoval(remote, stream, ciphers, conn, home.Id, "expired town portal");
+                    }
                     return true;
+                }
+                if (PlayerActionCurrent(conn, homeAction) && OpenPortals.TryGetValue(CharacterName(conn), out var current) && current == origin)
+                    await ChangeArea(remote, stream, ciphers, conn, new PendingTransfer(origin.Area, origin.Instance, false, ArriveAt: (origin.X, origin.Y)),
+                        "back through the town portal");
+                return true;
             }
             if (conn.ReturnPortal is { } back && use.TargetId == back.Id)
             {

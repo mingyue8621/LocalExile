@@ -1,4 +1,4 @@
-﻿using System.Net.Sockets;
+using System.Net.Sockets;
 using GameServer.Core.Protocol.Instance;
 using GameServer.Core.Protocol.Login;
 using GameServer.Core.World;
@@ -22,14 +22,7 @@ static class PortalsFeature
         await global::Game.SendWorldRecord(remote, stream, ciphers, conn, id, InstanceProtocol.EnterWakeZone(id), null);
         conn.ReturnPortal = (id, x, y);
         conn.ReturnPortalTo = 0;
-        string owner = CharacterName(conn);
-        _ = Task.Delay(MapPortalEntryMs).ContinueWith(async _ =>
-        {
-            if (!conn.Closed)
-                await Send(remote, stream, ciphers, InstanceMapDevice.Portals(0,
-                    [new(id, destination, owner, Variation: conn.CosmeticPortalVariation)]),
-                    $"0x008f the return portal 0x{id:x} leads to 0x{destination:x4}");
-        });
+        global::Game.ListPortal(remote, stream, ciphers, conn, id, destination, "the return portal", MapPortalEntryMs);
     }
 
     // A click on a map portal (C→S 0x24): walk there, then the portal is used up and the player goes into the open map, a new
@@ -135,12 +128,7 @@ static class PortalsFeature
             await ChangeArea(remote, stream, ciphers, conn,
                 new PendingTransfer(origin.Area, origin.Instance, false, ArriveAt: (origin.X, origin.Y)), "return to the Reverie Device");
         else if (conn.ReturnPortalTo is ushort town and not 0)
-        {
-            // 回城之前先把「到了城镇要建一道回这里的门」登记好：点门会开一条新连接，新连接上不一定还拿得到角色名。
-            if (conn.ReturnPortal is { } herePortal)
-                PendingBackPortals[town] = (conn.Layout.Hash, conn.InstanceNumber, herePortal.X, herePortal.Y);
             await ChangeArea(remote, stream, ciphers, conn, new PendingTransfer(town, 0, false, AtSpawn: true), "portal to town");
-        }
         else
             await WarpToHideout(remote, stream, ciphers, conn, "map portal back");
     }
@@ -179,72 +167,38 @@ static class PortalsFeature
             $"0x00e8 Ctrl + click: item {request.ItemId} into row {move.To} at ({move.Placed.X}, {move.Placed.Y})");
     }
 
+    // Whether Auth's list of the area's live instances, when it answered, no longer has the portal's instance.
+    internal static bool OriginExpired(ControlResponse response, ulong instance) =>
+        response.Ok && response.Instances is { } available && available.All(i => i.Id != instance);
+
+    internal static async Task<bool> ExpireTownPortal(ClientState conn, OpenPortal portal)
+    {
+        var response = await InstanceControl.CallAsync(new ControlRequest { Op = "list", Ticket = conn.Ticket, Area = portal.Area });
+        if (!OriginExpired(response, portal.Instance)) return false;
+        OpenPortals.TryRemove(new KeyValuePair<string, OpenPortal>(CharacterName(conn), portal));
+        return true;
+    }
+
     // The character's open town portal (OpenPortals) on entering an area: in the area it stands in (the same instance), the
     // portal again at its cell; in the town or hideout it leads to, a portal back beside the arrival, which brings the player
     // to that cell (SpotArrivals).
     internal static async Task SpawnTownPortals(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
     {
-        string? name = CharacterName(conn);
-        string owner = name ?? "";
-        OpenPortal? found = null;
-        if (name is { Length: > 0 } && OpenPortals.TryGetValue(name, out var known)) found = known;
-        else if (PendingBackPortals.TryRemove(conn.Layout.Hash, out var pending))
-        {
-            // 回城那条路：点门之前就登记好了，这里不依赖角色名。
-            found = new OpenPortal(pending.FromArea, pending.FromInstance, pending.X, pending.Y, conn.Layout.Hash);
-            Console.WriteLine($"[gateway] {remote} 回城门：按回城登记建门，回去 0x{pending.FromArea:x4} 实例 {pending.FromInstance} 的 ({pending.X}, {pending.Y})");
-        }
-        else if (OpenPortals.Count == 1)
-        {
-            // 进入新区域是新的连接，区域生成时角色名有时还没绑上：只有一条记录时直接认它（单人/小服的常态）。
-            var only = OpenPortals.First();
-            owner = only.Key;
-            found = only.Value;
-            Console.WriteLine($"[gateway] {remote} 回城门：角色名未就绪（{name ?? "null"}），按唯一记录 {owner} 处理");
-        }
-        if (found is not { } open)
-        {
-            Console.WriteLine($"[gateway] {remote} 回城门：{name ?? "无角色名"} 没有开着的城传送门记录，也不在回城登记里（当前区域 0x{conn.Layout.Hash:x4}）");
-            return;
-        }
-        Console.WriteLine($"[gateway] {remote} 回城门：{owner} 记录 0x{open.Area:x4}/{open.Instance} → 通向 0x{open.LeadsTo:x4}；当前 0x{conn.Layout.Hash:x4} 实例 {conn.InstanceNumber}");
+        if (!OpenPortals.TryGetValue(CharacterName(conn), out var open)) return;
         if (open.Area == conn.Layout.Hash && open.Instance == conn.InstanceNumber)
         {
             await OpenTownPortal(remote, stream, ciphers, conn, open.X, open.Y, "town portal again", replace: false);
             return;
         }
-        if (open.LeadsTo != conn.Layout.Hash)
-        {
-            Console.WriteLine($"[gateway] {remote} 回城门：不建，记录通向 0x{open.LeadsTo:x4} 但当前是 0x{conn.Layout.Hash:x4}");
-            return;
-        }
+        if (open.LeadsTo != conn.Layout.Hash || await ExpireTownPortal(conn, open) || conn.Closed || conn.LeavingArea
+            || !OpenPortals.TryGetValue(CharacterName(conn), out var current) || current != open) return;
         var (x, y) = conn.Layout.Near((conn.Layout.SpawnX + 4, conn.Layout.SpawnY));
         uint id = conn.TakeObjectId();
-        byte[] blob = new MapPortalObject(x, y, -1, MapPortalType, Open: 1).Blob();
-        byte[] create = InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(MapPortalObject.MetadataPath), blob);
-        string line = $"0x02bb create the portal back 0x{id:x} at ({x}, {y}) to 0x{open.Area:x4}";
-        bool sent = await global::Game.SendWorldCreate(remote, stream, ciphers, conn, id, create, line);
-        if (!sent)
-        {
-            // 世界输出还没开始接纳（帧未启动、或这个连接正在离开区域）时，这次发送会被静默拒掉：
-            // 退避重试几次，否则门只在服务端"存在"，客户端什么也收不到。
-            for (int attempt = 0; attempt < 5 && !sent && !conn.Closed; attempt++)
-            {
-                await Task.Delay(120 << attempt);
-                sent = await global::Game.SendWorldCreate(remote, stream, ciphers, conn, id, create, line);
-            }
-        }
-        if (sent) await global::Game.SendWorldRecord(remote, stream, ciphers, conn, id, InstanceProtocol.EnterWakeZone(id), null);
+        await global::Game.SendWorldCreate(remote, stream, ciphers, conn, id, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(MapPortalObject.MetadataPath),
+            new MapPortalObject(x, y, -1, MapPortalType, Open: 1).Blob()), $"0x02bb create the portal back 0x{id:x} at ({x}, {y}) to 0x{open.Area:x4}");
+        await global::Game.SendWorldRecord(remote, stream, ciphers, conn, id, InstanceProtocol.EnterWakeZone(id), null);
         conn.BackPortal = (id, x, y);
-        Console.WriteLine($"[gateway] {remote} 回城门：门 0x{id:x} 在 ({x}, {y})，通向 0x{open.Area:x4} 的 ({open.X}, {open.Y})；"
-            + $"create 发送={sent} 长度={create.Length} 组件={Convert.ToHexString(blob)}");
-        _ = Task.Delay(MapPortalListMs).ContinueWith(async _ =>
-        {
-            if (!conn.Closed && conn.BackPortal?.Id == id)
-                await Send(remote, stream, ciphers, InstanceMapDevice.Portals(0,
-                    [new(id, open.Area, owner, conn.MapPortalStyle, conn.CosmeticPortalVariation)]),
-                    $"0x008f the portal back 0x{id:x} leads to 0x{open.Area:x4}");
-        });
+        global::Game.ListPortal(remote, stream, ciphers, conn, id, open.Area, "the portal back", MapPortalListMs);
     }
 
     // A Portal Scroll used (C→S 0x58) outside towns and hideouts: one scroll is spent and a portal opens where the player
@@ -301,37 +255,10 @@ static class PortalsFeature
         string owner = CharacterName(conn);
         OpenPortals[owner] = new OpenPortal(here, conn.InstanceNumber, x, y, leadsTo);
         Console.WriteLine($"[gateway] {remote} {why}: town portal at ({x}, {y}) of 0x{here:x4} instance {conn.InstanceNumber} → 0x{leadsTo:x4}");
-        // 0x8f only reaches a portal the client has finished creating (MapPortalListMs, as the device's portals). The
-        // entry's variation is the portal cosmetic: the scroll's portal shows the shop effect too, not just the device's.
-        _ = Task.Delay(MapPortalListMs).ContinueWith(async _ =>
-        {
-            if (!conn.Closed && conn.ReturnPortal?.Id == id)
-                await Send(remote, stream, ciphers, InstanceMapDevice.Portals(0,
-                    [new(id, leadsTo, owner, conn.MapPortalStyle, conn.CosmeticPortalVariation)]),
-                    $"0x008f the Portal Scroll's portal 0x{id:x} leads to 0x{leadsTo:x4} ({(toHideout ? "the hideout" : "the last town")})");
-        });
+        // 0x8f only reaches a portal the client has finished creating (Game.ListPortal).
+        global::Game.ListPortal(remote, stream, ciphers, conn, id, leadsTo,
+            $"the Portal Scroll's portal, to {(toHideout ? "the hideout" : "the last town")}", MapPortalListMs);
     }
-
-    // The town portals standing in this area, as 0x008f entries with the portal cosmetic's variation: the one this area
-    // opened (a Portal Scroll's or the Portal skill's, or a map's own way back) and, in the town or hideout it leads to,
-    // the portal back to it. The game module asks for these when a cosmetic changes, since a re-sent entry is what makes
-    // the client swap an open portal's visual (Game.TownPortals).
-    internal static List<InstanceMapDevice.Portal> StandingTownPortals(ClientState conn)
-    {
-        var list = new List<InstanceMapDevice.Portal>();
-        string owner = CharacterName(conn);
-        if (conn.ReturnPortal is { } town && ReturnPortalLeads(conn) is ushort leads and not 0)
-            list.Add(new(town.Id, leads, owner, conn.MapPortalStyle, conn.CosmeticPortalVariation));
-        if (conn.BackPortal is { } back && OpenPortals.TryGetValue(owner, out var open) && open.Area != 0)
-            list.Add(new(back.Id, open.Area, owner, conn.MapPortalStyle, conn.CosmeticPortalVariation));
-        return list;
-    }
-
-    // Where the portal this area opened leads: the hideout when a map's device opened the area, else the character's last
-    // town (ReturnPortalTo, 0 for the hideout, is only set with its hash when it is a town).
-    static ushort ReturnPortalLeads(ClientState conn) =>
-        MapDevices.Value.IsMapArea(conn.Layout.Hash) && HomeHideout(conn) is { } home ? home.AreaHash16 : conn.ReturnPortalTo;
-
     // C→S 0x00e7: an Atlas map node picked in the hideout map device (u16 WorldAreas HASH16, u8). The layout becomes
     // what the next generic map key opens.
     internal static async Task SelectAtlasMap(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, (ushort Area, byte Mode) picked)
