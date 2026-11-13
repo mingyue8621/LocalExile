@@ -1,4 +1,5 @@
 ﻿using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using GameServer.Core.Protocol.Instance;
 using GameServer.Core.Protocol.Login;
 using GameServer.Modding;
@@ -184,6 +185,21 @@ public static class CosmeticsFeature
         return conn.Layout.Walkable is { } w && !w(spot.X, spot.Y) ? player : spot;
     }
 
+    // 被模组占住的宠物（petloot 的拾取）：占用期间它不跟随主人 —— 否则刚走到通货旁、或者刚捡完一个，
+    // 就会被「离玩家超过 PetFollowRange」那条规则拉回去，来回抖。按连接存，WeakTable 随连接一起消失。
+    static readonly ConditionalWeakTable<ClientState, System.Collections.Concurrent.ConcurrentDictionary<uint, byte>> BusyPets = new();
+
+    /// <summary>A mod takes this pet for a moment: it does not follow its owner until released (petloot).</summary>
+    public static void SetPetBusy(ClientState conn, uint id, bool busy)
+    {
+        var map = BusyPets.GetOrCreateValue(conn);
+        if (busy) map[id] = 1;
+        else map.TryRemove(id, out _);
+    }
+
+    static bool PetBusy(ClientState conn, uint id) =>
+        BusyPets.TryGetValue(conn, out var map) && map.ContainsKey(id);
+
     // One finite walk. Ordinary following resumes after arrival, including when the caller has gone away.
     public static Task<bool> WalkPetTo(ClientState conn, uint id, (int X, int Y) to, Func<bool>? still = null) =>
         global::Game.SendWorldRecord(conn, id, () =>
@@ -223,6 +239,8 @@ public static class CosmeticsFeature
             lock (conn.Pets)
                 foreach (var (id, pet) in conn.Pets)
                 {
+                    // 被模组占住（petloot 正在拾取）：站在原地不跟随，等它把这批通货捡完再解除占用。
+                    if (PetBusy(conn, id)) continue;
                     if (pet.Target is null && now <= pet.Walk.ArrivesAt + PlayerTickMs / 1000d) continue;
                     var here = pet.Walk.Position(now);
                     if (Dist(here, player) <= PetFollowRange) continue;
