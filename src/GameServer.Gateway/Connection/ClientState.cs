@@ -179,6 +179,9 @@ public sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange
     /// <summary>The action it takes now. A boss with a kit of its own swaps this for the chosen skill of that kit each
     /// AI pass (BossKits.Choose); everything downstream — the walk-up, the swing's clip, its hit — reads this one.</summary>
     public MonsterAttack? Attack { get; set; }
+    /// <summary>The attack it was created with, before a kit's rotation replaced <see cref="Attack"/>. A melee one tells
+    /// <see cref="BossKits.Choose"/> to walk up first instead of standing at a spell's reach.</summary>
+    public MonsterAttack? DefaultAttack { get; init; }
     /// <summary>The rest of a boss's skills (BossKits): the effect each one comes from, its action and its cooldown.
     /// Empty for every monster that swings one attack.</summary>
     public IReadOnlyList<MonsterKitSkill> Kit { get; init; } = [];
@@ -187,6 +190,8 @@ public sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange
     public bool Hostile { get; init; } = true;
     /// <summary>A controller drives every action (a Survivors gate boss): the ordinary AI neither chases nor swings.</summary>
     public bool Scripted { get; init; }
+    /// <summary>When this unique's next AI state line goes to the log (a boss that stands still and never swings says why).</summary>
+    public double NextAiTrace;
     public uint? OwnerId { get; init; }
     // The monster whose summoning skill brought it (MonsterAttack.Summon), whether its death gives no experience or items
     // (summoned_monsters_no_drops_or_experience), and when its own summoning skill is off cooldown.

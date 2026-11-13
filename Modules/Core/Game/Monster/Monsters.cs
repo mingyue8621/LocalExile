@@ -375,6 +375,7 @@ public static partial class Game
                 Math.Max(2, variety.ObjectSize + 1), life, (int)Math.Max(3, variety.AggroRange))
             {
                 Attack = skill is null && kit.Count == 0 ? null : kit.Count > 0 ? kit[0].Attack : attack,
+                DefaultAttack = attack,
                 Kit = kit, Hostile = !friendly, Variety = variety, Level = level, Rarity = rarity, Movement = movement,
                 Scripted = !friendly && (scripted || atlas),
                 Life = Math.Min(damagedLife ?? life, life), Stage = stageSkill is null ? null : stage, States = states,
@@ -743,6 +744,17 @@ public static partial class Game
                     if (ReferenceEquals(pendingMinion.Monster, m) && conn.Minions.Fights(id))
                     { plan.MinionSwings.Add(pendingMinion); continue; }
                     conn.Minions.Attacks.Remove(id);
+                }
+                // 不动的 boss 要能自己说明原因：唯一怪每 2 秒一行，含卡在哪一个判定上
+                // （没有 aggro / AI 节奏没到 / 攻击还没结束 / 走不动 / 选中了原地技能）。
+                if (m.Rarity == MonsterRarity.Unique && d <= 220 && now >= m.NextAiTrace)
+                {
+                    m.NextAiTrace = now + 2;
+                    var traced = m.Attack;
+                    Console.WriteLine($"[gateway] ai 0x{id:x} ({m.Label}) d={d:0.0} aggro={m.Aggro} due={MonsterAiCadence.Due(now, m.BusyUntil)} "
+                        + $"busy={m.BusyUntil - now:0.00} pending={cadence.SwingPending(m)} speed={m.Walk.Speed:0.0} moving={m.Walk.Moving(now)} "
+                        + $"still={(m.Variety is { MovementSpeed: 0 } or { Immobile: true })} scripted={m.Scripted} kit={m.Kit.Count} "
+                        + $"attack={(traced is null ? "none" : $"inPlace={traced.InPlace} range={traced.Range:0.0} ranged={traced.Ranged} spell={traced.Spell} scripted={traced.Scripted}")}");
                 }
                 if (!m.Aggro || !MonsterAiCadence.Due(now, m.BusyUntil) || cadence.SwingPending(m)) continue;
                 // The player's fighting minions attack his enemies near them; with none they follow him.

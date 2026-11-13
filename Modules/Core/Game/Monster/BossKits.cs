@@ -168,6 +168,12 @@ public static class BossKits
     public static MonsterAttack? Choose(SpawnedMonster monster, double now, double distance)
     {
         if (monster.Kit.Count == 0) return monster.Attack;
+        // A boss whose own attack is a melee one walks up before it uses anything: its kit's spells reach a whole aggro
+        // range (AttackFor), so choosing one from far away parked it at a spell's distance and it never closed in
+        // (live 2026-11-13: General Adus and Boulderback stood at 100 cells throwing skills while the player walked up).
+        // A spell that reaches farther than its melee swing is still played once the player is inside the swing's reach.
+        if (monster.DefaultAttack is { InPlace: false } walkUp && distance > walkUp.Range)
+            return walkUp;
         MonsterKitSkill? best = null;
         int bestTier = -1;
         double bestUsed = 0;
