@@ -22,13 +22,21 @@ public sealed class PortalsModule : IModule
 
         {
             var (remote, stream, ciphers) = conn.Wire;
-            await SpawnHideoutDoodads(remote, stream, ciphers, conn);
-            await SpawnMapReturnPortal(remote, stream, ciphers, conn);
-            await SpawnTownPortals(remote, stream, ciphers, conn);
+            // 每一步各自兜住：前面任何一步失败（例如角色名还没绑上就去查地图装置），都不能把后面的步骤带掉。
+            // 回城门原来排在最后，被前面的异常吃掉过，城镇里因此一直没有返回的门。
+            async Task Step(string name, Func<Task> run)
+            {
+                try { await run(); }
+                catch (Exception e) { Console.WriteLine($"[gateway] {remote} 区域生成：{name} 失败 {e.GetType().Name}: {e.Message}"); }
+            }
+            await Step("回城门", () => SpawnTownPortals(remote, stream, ciphers, conn));
+            await Step("藏身处摆设", () => SpawnHideoutDoodads(remote, stream, ciphers, conn));
+            await Step("地图返回门", () => SpawnMapReturnPortal(remote, stream, ciphers, conn));
             // The portals of the character's open map stand at the device again.
-            if (MapDeviceHere(conn) is { } device && MapDevice.OpenOf(CharacterName(conn)) is { PortalsLeft: > 0 } open
+            string? who = CharacterName(conn);
+            if (who is { Length: > 0 } && MapDeviceHere(conn) is { } device && MapDevice.OpenOf(who) is { PortalsLeft: > 0 } open
                 && (open.ReturnTo is null ? !device.Campaign : open.ReturnTo.Area == conn.Layout.Hash && open.ReturnTo.Instance == conn.InstanceNumber))
-                await SpawnMapPortals(remote, stream, ciphers, conn, open, firstAfterMs: MapPortalEntryMs);
+                await Step("地图装置的门", () => SpawnMapPortals(remote, stream, ciphers, conn, open, firstAfterMs: MapPortalEntryMs));
         });
         GameEvents.ObjectUse.Add(module.Manifest.Id, async (conn, use, requestedAt) =>
         {
