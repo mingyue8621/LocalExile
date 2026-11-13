@@ -220,11 +220,24 @@ static class PortalsFeature
         }
         var (x, y) = conn.Layout.Near((conn.Layout.SpawnX + 4, conn.Layout.SpawnY));
         uint id = conn.TakeObjectId();
-        await global::Game.SendWorldCreate(remote, stream, ciphers, conn, id, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(MapPortalObject.MetadataPath),
-            new MapPortalObject(x, y, -1, MapPortalType, Open: 1).Blob()), $"0x02bb create the portal back 0x{id:x} at ({x}, {y}) to 0x{open.Area:x4}");
-        await global::Game.SendWorldRecord(remote, stream, ciphers, conn, id, InstanceProtocol.EnterWakeZone(id), null);
+        byte[] blob = new MapPortalObject(x, y, -1, MapPortalType, Open: 1).Blob();
+        byte[] create = InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(MapPortalObject.MetadataPath), blob);
+        string line = $"0x02bb create the portal back 0x{id:x} at ({x}, {y}) to 0x{open.Area:x4}";
+        bool sent = await global::Game.SendWorldCreate(remote, stream, ciphers, conn, id, create, line);
+        if (!sent)
+        {
+            // 世界输出还没开始接纳（帧未启动、或这个连接正在离开区域）时，这次发送会被静默拒掉：
+            // 退避重试几次，否则门只在服务端"存在"，客户端什么也收不到。
+            for (int attempt = 0; attempt < 5 && !sent && !conn.Closed; attempt++)
+            {
+                await Task.Delay(120 << attempt);
+                sent = await global::Game.SendWorldCreate(remote, stream, ciphers, conn, id, create, line);
+            }
+        }
+        if (sent) await global::Game.SendWorldRecord(remote, stream, ciphers, conn, id, InstanceProtocol.EnterWakeZone(id), null);
         conn.BackPortal = (id, x, y);
-        Console.WriteLine($"[gateway] {remote} 回城门：已在 ({x}, {y}) 建好门 0x{id:x}，通向 0x{open.Area:x4} 的 ({open.X}, {open.Y})");
+        Console.WriteLine($"[gateway] {remote} 回城门：门 0x{id:x} 在 ({x}, {y})，通向 0x{open.Area:x4} 的 ({open.X}, {open.Y})；"
+            + $"create 发送={sent} 长度={create.Length} 组件={Convert.ToHexString(blob)}");
         _ = Task.Delay(MapPortalListMs).ContinueWith(async _ =>
         {
             if (!conn.Closed && conn.BackPortal?.Id == id)

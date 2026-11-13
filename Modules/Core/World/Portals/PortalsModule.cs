@@ -19,24 +19,41 @@ public sealed class PortalsModule : IModule
         // is picked; the town portals are this module's (they are no map device's), hence this.
         TownPortals = StandingTownPortals;
         GameEvents.AreaGenerated.Add(module.Manifest.Id, async conn =>
-
         {
             var (remote, stream, ciphers) = conn.Wire;
+            ushort area = conn.Layout.Hash;
+            ulong instance = conn.InstanceNumber;
             // 每一步各自兜住：前面任何一步失败（例如角色名还没绑上就去查地图装置），都不能把后面的步骤带掉。
-            // 回城门原来排在最后，被前面的异常吃掉过，城镇里因此一直没有返回的门。
             async Task Step(string name, Func<Task> run)
             {
                 try { await run(); }
                 catch (Exception e) { Console.WriteLine($"[gateway] {remote} 区域生成：{name} 失败 {e.GetType().Name}: {e.Message}"); }
             }
-            await Step("回城门", () => SpawnTownPortals(remote, stream, ciphers, conn));
-            await Step("藏身处摆设", () => SpawnHideoutDoodads(remote, stream, ciphers, conn));
-            await Step("地图返回门", () => SpawnMapReturnPortal(remote, stream, ciphers, conn));
-            // The portals of the character's open map stand at the device again.
-            string? who = CharacterName(conn);
-            if (who is { Length: > 0 } && MapDeviceHere(conn) is { } device && MapDevice.OpenOf(who) is { PortalsLeft: > 0 } open
-                && (open.ReturnTo is null ? !device.Campaign : open.ReturnTo.Area == conn.Layout.Hash && open.ReturnTo.Instance == conn.InstanceNumber))
-                await Step("地图装置的门", () => SpawnMapPortals(remote, stream, ciphers, conn, open, firstAfterMs: MapPortalEntryMs));
+            // 这几步都要创建世界对象，而 0x7d 的收尾阶段 WorldOutput 还没有 Begin（StartWorldFrames 是在本回调
+            // 返回之后才调用的）：这时 lockstep 的批次发送会在 SendRecords 里被静默拒掉 —— 返回 false，
+            // 一条日志都不写 —— 门在服务端"建好了"却从来没有发到客户端，城镇里一直没有返回的门就是这个原因。
+            // 所以这些步骤排到世界帧启动之后的独立任务里跑：本回调立即返回，不阻塞 StartWorldFrames（否则死锁）。
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    for (int i = 0; i < 300 && !conn.Closed && !conn.WorldOutput.Started; i++) await Task.Delay(10);
+                    Console.WriteLine($"[gateway] {remote} 区域生成：帧已启动={conn.WorldOutput.Started}，开始放置传送门/摆设");
+                    if (conn.Closed || conn.Layout.Hash != area || conn.InstanceNumber != instance) return;
+                    await Step("回城门", () => SpawnTownPortals(remote, stream, ciphers, conn));
+                    await Step("藏身处摆设", () => SpawnHideoutDoodads(remote, stream, ciphers, conn));
+                    await Step("地图返回门", () => SpawnMapReturnPortal(remote, stream, ciphers, conn));
+                    // The portals of the character's open map stand at the device again.
+                    string? who = CharacterName(conn);
+                    if (who is { Length: > 0 } && MapDeviceHere(conn) is { } device && MapDevice.OpenOf(who) is { PortalsLeft: > 0 } open
+                        && (open.ReturnTo is null ? !device.Campaign : open.ReturnTo.Area == conn.Layout.Hash && open.ReturnTo.Instance == conn.InstanceNumber))
+                        await Step("地图装置的门", () => SpawnMapPortals(remote, stream, ciphers, conn, open, firstAfterMs: MapPortalEntryMs));
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine($"[gateway] {remote} 区域生成：帧后放置失败 {e.GetType().Name}: {e.Message}");
+                }
+            });
         });
         GameEvents.ObjectUse.Add(module.Manifest.Id, async (conn, use, requestedAt) =>
         {
