@@ -99,3 +99,6 @@ desktop.ini
 /scripts/re/levelgen/loads-latest.json
 
 *.iml
+
+# --- zhpatcher release output (a 57 MB single-file exe per build; the source beside it is what matters) ---
+/zhpatcher/publish/

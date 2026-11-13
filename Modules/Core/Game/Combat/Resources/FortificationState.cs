@@ -102,7 +102,19 @@ public sealed class FortificationState
 
     void Advance(double now)
     {
-        if (!double.IsFinite(now) || now < 0 || now < lastTime) throw new ArgumentOutOfRangeException(nameof(now));
+        if (!double.IsFinite(now) || now < 0) throw new ArgumentOutOfRangeException(nameof(now));
+        // The clock is the area's (ClientState.Clock is that instance's stopwatch), so entering another area starts it
+        // again from zero. A session kept on the connection then still holds deadlines from the old time base, and its
+        // first advance would see time run backwards (a boss room, 2026-11-13: every hit on The Depraved Trinity threw
+        // out of the whole frame). A new time base is not a caller error: start over on it.
+        if (now < lastTime)
+        {
+            grants.Clear();
+            StackSeconds = 0;
+            nextHitGain = double.NegativeInfinity;
+            lastTime = now;
+            return;
+        }
         if (double.IsFinite(lastTime))
         {
             double from = lastTime;
