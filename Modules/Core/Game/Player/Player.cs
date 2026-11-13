@@ -552,6 +552,12 @@ public static partial class Game
             double seconds = tickNow - last;
             last = tickNow;
             if (conn.LeavingArea || conn.Paused || seconds <= 0) continue;
+            // Gold inside the auto-loot radius first: this tick is 250 ms and everything below may end the loop early
+            // (PlayerUpdatesCurrent fails when a newer update batch takes over, which happens most while the character
+            // runs). Auto-loot at the bottom of the tick was therefore skipped exactly when the character was moving
+            // past piles - it only worked while standing still (live 2026-11-13).
+            await PickUpNearbyGold(remote, stream, ciphers, conn);
+            if (!PlayerUpdatesCurrent(conn, updates)) return;
             await GameEvents.RunTick(conn, seconds);
             if (!PlayerUpdatesCurrent(conn, updates)) return;
             await SyncExpandedInventory(conn);
@@ -660,12 +666,9 @@ public static partial class Game
                 && Dist(conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds), (waypoint.GridX, waypoint.GridY)) <= WaypointActivationRange)
                 await ActivateWaypoint(remote, stream, ciphers, conn, "the player came near");
             if (!PlayerUpdatesCurrent(conn, updates)) return;
-            // Gold within the configured auto-loot radius is picked up unless a league system suppresses loot.
-            var at = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
-            await PickUpNearbyGold(remote, stream, ciphers, conn);
-            if (!PlayerUpdatesCurrent(conn, updates)) return;
             lock (conn.Monsters)
                 if (HardcoreProgressBlocked(conn)) continue;
+            var at = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
             // Quests that start when the player comes near a monster (a1q1: Hillock, "Kill Hillock").
             if (QuestsOf(conn).Watched(conn.Layout.Id) is { Count: > 0 } watched)
             {

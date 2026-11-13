@@ -882,32 +882,52 @@ public static partial class Game
     {
         if (!CurrentGameWork || conn.Closed || conn.LeavingArea || conn.Paused || conn.PlayerLife == 0
             || !GameEvents.AllowsLoot(conn)) return;
+        lock (conn.Monsters)
+            if (HardcoreProgressBlocked(conn)) return;
+        // The sample point travels with the pickup: the gate re-checks the radius later (the send gate can be held by
+        // another packet for a while), and a running character has moved on by then. Measuring against where the tick
+        // saw the character is what "picked up on the way past" means; measuring against its position at send time
+        // dropped piles at the edge of the radius, which is what made auto-loot work only sometimes (live 2026-11-13).
         var at = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
-        foreach (var (id, gold) in conn.Instance.Ground.Within(at.X, at.Y, SystemSettings.Default.GoldAutoLootRadius, IsGold))
+        double radius = SystemSettings.Default.GoldAutoLootRadius;
+        foreach (var (id, gold) in conn.Instance.Ground.Within(at.X, at.Y, radius, IsGold))
         {
-            await PickUpGold(remote, stream, ciphers, conn, id, gold, "auto-looted");
+            if (!await PickUpGold(remote, stream, ciphers, conn, id, gold, "auto-looted", at))
+                Console.WriteLine($"[gateway] {remote} gold 0x{id:x} at ({gold.GridX}, {gold.GridY}) stayed on the ground: "
+                    + $"character at ({at.X}, {at.Y}), {Dist(at, (gold.GridX, gold.GridY)):0.0} of {radius:0.#} cells");
             if (!CurrentGameWork || conn.Closed || conn.LeavingArea) return;
         }
     }
 
     // Gold goes to the stash's gold of the character's league (S→C 0x2aa), not into the inventory.
-    public static async Task PickUpGold(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, uint id, WorldItemObject ground, string how)
+    // Returns whether it went in; an auto-loot that did not says why in the gateway log, so a pile that keeps being
+    // skipped is visible instead of silently left behind.
+    public static async Task<bool> PickUpGold(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn,
+        uint id, WorldItemObject ground, string how, (int X, int Y)? from = null)
     {
+        string? why = null;
         await Send(remote, stream, ciphers, [], $"gold 0x{id:x} {how} (+{ground.Item.StackSize})", atGate: () =>
         {
             lock (conn.Monsters)
             {
-                if (!CurrentGameWork || conn.Closed || conn.LeavingArea || conn.PlayerLife == 0 || conn.Paused
-                    || HardcoreProgressBlocked(conn) || !GameEvents.AllowsLoot(conn) || !IsGold(ground)) return null;
-                if (how == "auto-looted" && Dist(conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds), (ground.GridX, ground.GridY))
-                    > SystemSettings.Default.GoldAutoLootRadius) return null;
+                if (!CurrentGameWork) return null;
+                if (conn.Closed || conn.LeavingArea) return null;
+                if (conn.PlayerLife == 0 || conn.Paused) return null;
+                if (HardcoreProgressBlocked(conn)) { why = "hardcore progress blocked"; return null; }
+                if (!GameEvents.AllowsLoot(conn)) { why = "loot suppressed"; return null; }
+                if (!IsGold(ground)) { why = "not gold any more"; return null; }
+                var measuredFrom = from ?? conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
+                double radius = SystemSettings.Default.GoldAutoLootRadius;
+                if (how == "auto-looted" && Dist(measuredFrom, (ground.GridX, ground.GridY)) > radius)
+                { why = $"out of the {radius:0.#}-cell auto-loot radius"; return null; }
                 var (by, shared) = conn.Instance.Ground.Origin(id);
-                if (!shared && !ReferenceEquals(by, conn)) return null;
-                if (TakeGroundStack(conn, id, ground) is not { } pickup) return null;
-                conn.SeenGround.Remove(id);
+                if (!shared && !ReferenceEquals(by, conn)) { why = "another character's drop"; return null; }
+                if (TakeGroundStack(conn, id, ground) is not { } pickup) { why = "already taken"; return null; }
+                lock (conn.SeenGround) conn.SeenGround.Remove(id);
                 return [.. InstanceProtocol.RemoveObject(id), .. pickup.Update];
             }
         });
+        return why is null;
     }
 
     public sealed record GroundPickup(byte[] Update, string Log, uint RestId = 0, WorldItemObject? Rest = null);
