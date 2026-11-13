@@ -176,6 +176,8 @@ static class PortalsFeature
         var response = await InstanceControl.CallAsync(new ControlRequest { Op = "list", Ticket = conn.Ticket, Area = portal.Area });
         if (!OriginExpired(response, portal.Instance)) return false;
         OpenPortals.TryRemove(new KeyValuePair<string, OpenPortal>(CharacterName(conn), portal));
+        // 门过期了，城镇里那道回程门的落点也不再算数。
+        BackPortalCells.TryRemove(CharacterName(conn) ?? "", out _);
         return true;
     }
 
@@ -192,7 +194,13 @@ static class PortalsFeature
         }
         if (open.LeadsTo != conn.Layout.Hash || await ExpireTownPortal(conn, open) || conn.Closed || conn.LeavingArea
             || !OpenPortals.TryGetValue(CharacterName(conn), out var current) || current != open) return;
-        var (x, y) = conn.Layout.Near((conn.Layout.SpawnX + 4, conn.Layout.SpawnY));
+        // 门立在哪一格：第一次进城时定下，之后一直立在那里。不能每次按出生点算 —— 用传送点回城时出生点被改成
+        // 传送点旁，门就会"跑到角色身边"（live 2026-11-13）。
+        string who = CharacterName(conn) ?? "";
+        var (x, y) = BackPortalCells.TryGetValue(who, out var cell) && cell.Area == conn.Layout.Hash && cell.Instance == conn.InstanceNumber
+            ? (cell.X, cell.Y)
+            : conn.Layout.Near((conn.Layout.SpawnX + 4, conn.Layout.SpawnY));
+        BackPortalCells[who] = (conn.Layout.Hash, conn.InstanceNumber, x, y);
         uint id = conn.TakeObjectId();
         await global::Game.SendWorldCreate(remote, stream, ciphers, conn, id, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(MapPortalObject.MetadataPath),
             new MapPortalObject(x, y, -1, MapPortalType, Open: 1).Blob()), $"0x02bb create the portal back 0x{id:x} at ({x}, {y}) to 0x{open.Area:x4}");
@@ -254,6 +262,8 @@ static class PortalsFeature
         ushort leadsTo = toHideout ? home!.AreaHash16 : town;
         string owner = CharacterName(conn);
         OpenPortals[owner] = new OpenPortal(here, conn.InstanceNumber, x, y, leadsTo);
+        // 野外又开了一道新门：城镇里那道旧的「回野外」门随之作废，下次进城重新找落点。
+        if (replace) BackPortalCells.TryRemove(owner, out _);
         Console.WriteLine($"[gateway] {remote} {why}: town portal at ({x}, {y}) of 0x{here:x4} instance {conn.InstanceNumber} → 0x{leadsTo:x4}");
         // 0x8f only reaches a portal the client has finished creating (Game.ListPortal).
         global::Game.ListPortal(remote, stream, ciphers, conn, id, leadsTo,
