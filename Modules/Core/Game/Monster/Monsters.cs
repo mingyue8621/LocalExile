@@ -203,12 +203,13 @@ public static partial class Game
         // had it shooting from 58 and noticing from four screens away. A melee attack keeps the row's number as a cell
         // count: the chase's walk-up stops `Range - 1` cells short of the player (the player's size), so its 6 units
         // as 0.55 cells would park the monster inside them; see the roadmap.
+        // 不追人的怪（远程投射、施法、召唤）站在原地打：它的攻击范围必须覆盖到能注意到玩家的地方。
+        // 原来取仇恨范围的一半，玩家在更远处把它唤醒，它就永远够不到 —— 站着不动、也不出手
+        // (live 2026-11-13：沸水湖泊的蛇怪 The Basilisk，仇恨 135、攻击读数 9，玩家在 145 格外)。
+        bool standsAndShoots = summon is not null || rangedAttack && !kingActor || castTime && !kingActor;
         double reach = movement.Reach is double share ? variety.AttackRange * share
-            : summon is not null || rangedAttack && !kingActor
-                ? Math.Max(variety.AttackRange, variety.AggroRange) / 2 : variety.AttackRange;
-        // 不会移动的怪物够不到自己的仇恨范围，就永远立在原处看着玩家不动手：日耀神殿的「日耀守卫者」
-        // (SolarisCelestialFormDawn, MovementSpeed 0, 仇恨 200 格, 技能 SolarisSkyBeamCelestialDawn) 整场
-        // 站着不动就是它 (live 2026-11-13)。它既走不过去，攻击范围就必须覆盖到它能注意到的地方。
+            : standsAndShoots ? Math.Max(variety.AttackRange, variety.AggroRange) : variety.AttackRange;
+        // 不会走的怪（MovementSpeed 0）够不到自己仇恨范围时同样永远不动手，一并提到仇恨范围。
         if (variety.MovementSpeed == 0 && variety.AggroRange > variety.AttackRange)
             reach = Math.Max(reach, variety.AggroRange);
         double swing = !kingActor && effect >= 0 && catalog.IsSpell(effect) && catalog.CastTimeMs(effect) > 0
@@ -248,7 +249,8 @@ public static partial class Game
                 attack.Projectile is null ? WithBehaviourVariation(conn, effect, attack.SkillStats()) : MonsterProjectileSkillStats(conn, effect, level, attack)) : null;
         // A boss is worth a line: which effect it picked, how far it thinks it reaches and whether it has a skill the client
         // can play at all — the Act 5 boss stood through the whole fight and this is what says why (live 2026-11-10).
-        if (variety.BossHealthBar || variety.MovementSpeed == 0 && variety.GrantedEffects is [_, ..])
+        if (variety.BossHealthBar || rarity == MonsterRarity.Unique && variety.GrantedEffects is [_, ..]
+            || variety.MovementSpeed == 0 && variety.GrantedEffects is [_, ..])
             Console.WriteLine($"[gateway] {remote} boss {variety}@{level}: effect {effect} ({catalog.EffectId(effect) ?? "none"}), "
                 + $"skill 0x{skillId:x4} {(skill is null ? "not built" : "built")}, reach {reach:0.#}, ranged {rangedAttack}, "
                 + $"projectile {(projectile is null ? "none" : projectile.Metadata)}, cast {attack.CastTime:0.###} s, swing {attack.Seconds:0.###} s");
