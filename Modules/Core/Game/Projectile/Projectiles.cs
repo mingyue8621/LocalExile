@@ -1,5 +1,6 @@
 ﻿using System.Net.Sockets;
 using System.Threading.Channels;
+using GameServer.Core;
 using GameServer.Core.Diagnostics;
 using GameServer.Core.Projectiles;
 using GameServer.Core.Protocol.Instance;
@@ -15,6 +16,40 @@ public static partial class Game
 
     public static byte[] CreateEffectObject(uint id, EffectObject effect) =>
         InstanceEntities.CreateInWakeZone(id, InstanceEntities.ObjectTypeHash(EffectObject.TypePath), effect.Blob());
+
+    /// <summary>
+    /// Whether the projectile type's .ot appends a StateMachine, which the client reads after Animated. A shot's blob
+    /// writes Positioned and Animated only, so for such a type (the mortars: DelveMonkeyMortar, HeistThugTorchBombMortar)
+    /// the client takes the task byte as the state count and throws Buffer Underflow; the empty state machine's two counts
+    /// have to follow. Read from client.db's object_types: its component list, capped at the count the client reads.
+    /// </summary>
+    static readonly Dictionary<string, bool> StateMachineProjectiles = new(StringComparer.Ordinal);
+    static object? stateMachineProjectilesKey;
+    public static bool ProjectileAppendsStateMachine(string type)
+    {
+        lock (StateMachineProjectiles)
+        {
+            var key = ClientTables.CacheKey;
+            if (!Equals(key, stateMachineProjectilesKey))
+            {
+                StateMachineProjectiles.Clear();
+                stateMachineProjectilesKey = key;
+            }
+            if (StateMachineProjectiles.Count == 0 && ClientTables.Has("object_types"))
+                foreach (var row in ClientTables.Table("object_types"))
+                {
+                    if (row.Text("type") is not { } path) continue;
+                    string[] read = [.. row.Texts("components").Take(row.IntOrNull("read") ?? int.MaxValue)];
+                    // Only the layout this blob writes: Positioned, BaseEvents, Animated, Projectile, then StateMachine.
+                    // A type that puts StateMachine before Animated or adds Transitionable/Timer/Functions reads more
+                    // than the shot's blob has in a different order; writing the empty machine there would only move
+                    // the mismatch, so those keep the previous (dataless) blob.
+                    StateMachineProjectiles[path] = Array.IndexOf(read, "StateMachine") > Array.IndexOf(read, "Animated")
+                        && read.All(c => c is "Positioned" or "BaseEvents" or "Animated" or "Projectile" or "StateMachine" or "Render");
+                }
+            return StateMachineProjectiles.TryGetValue(type, out bool found) && found;
+        }
+    }
 
     /// <summary>One gameplay pump and one presentation consumer per connection, regardless of projectile count.</summary>
     public sealed partial class ProjectileSession : IProjectileWorld, IProjectileRuntime
@@ -508,9 +543,9 @@ public static partial class Game
                         Team: p.Use.Team == 1 ? (ushort)0 : (ushort)1,
                         Height: (visual.Arc is { } arc ? arc.Height(arc.Fraction(p.Distance)) : visual.Height).ObjectHeight)
                         { AnimatedObject = flightVisual,
-                            // DelveMonkeyMortar.ot appends an empty StateMachine; omitting its two counts
+                            // A type whose .ot appends StateMachine (the mortars) needs its two counts; omitting them
                             // makes the client consume the task byte as a count and throw Buffer Underflow.
-                            StateMachine = p.Profile.Id == "Metadata/Projectiles/DelveMonkeyMortar" ? new([], 0) : null };
+                            StateMachine = ProjectileAppendsStateMachine(p.Profile.Id) ? new([], 0) : null };
                     visual.Created = true;
                     if (p.ParentId == 0 && ServerTrace.Projectiles && !Quiet(p.Use.Payload))
                         Console.WriteLine($"[gateway] {remote} projectile visual use={p.UseId} entity={p.Id} object={id}"
