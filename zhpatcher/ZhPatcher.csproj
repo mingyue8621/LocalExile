@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ZhPatcher</RootNamespace>
+    <AssemblyName>ZhPatcher</AssemblyName>
+    <Version>1.2.0</Version>
+    <FileVersion>1.2.0.0</FileVersion>
+    <InformationalVersion>1.2.0</InformationalVersion>
+    <Product>流放之路客户端简体中文汉化工具</Product>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <!-- 单文件自包含发布：双击即用，不要求机器装 .NET -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\src\GameServer.Data\GameServer.Data.csproj" />
+    <PackageReference Include="LibGGPK3.LibBundledGGPK3" Version="2.7.5" />
+    <!-- 服务端自己的 Oodle 解码器（node + ooz），客户端不带 oo2core.dll -->
+    <Compile Include="..\scripts\re\ggdump\NodeOodleDecoder.cs" Link="NodeOodleDecoder.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="t2s-map.json" />
+    <EmbeddedResource Include="cjk-font-bold.ttf" />
+  </ItemGroup>
+
+</Project>
