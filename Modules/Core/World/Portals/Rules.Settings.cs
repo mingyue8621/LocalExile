@@ -25,6 +25,11 @@ static partial class PortalsRules
     /// cell) and where it leads (a town's HASH16, or the hideout's). While the server runs.</summary>
     internal static readonly System.Collections.Concurrent.ConcurrentDictionary<string, OpenPortal> OpenPortals = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>回城时登记的待办：进入这个城镇/藏身处时，在出生点旁建一道回野外的门。键是目标区域的 HASH16，
+    /// 值是回去的区域、实例与门所在的格子。进入该区域建好就删 —— 这条路不依赖新连接上的角色名，
+    /// 因为点门回城是一条新连接，区域生成那一刻角色名可能还没绑上。</summary>
+    internal static readonly System.Collections.Concurrent.ConcurrentDictionary<ushort, (ushort FromArea, ulong FromInstance, int X, int Y)> PendingBackPortals = new();
+
     // WorldAreas' own mods (AreaModCatalog); loaded with the first Portal Scroll.
     internal static readonly Lazy<AreaModCatalog> AreaMods = new(() => AreaModCatalog.Load());
     internal const string PortalScroll = "Metadata/Items/Currency/CurrencyPortal";

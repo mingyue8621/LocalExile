@@ -135,7 +135,12 @@ static class PortalsFeature
             await ChangeArea(remote, stream, ciphers, conn,
                 new PendingTransfer(origin.Area, origin.Instance, false, ArriveAt: (origin.X, origin.Y)), "return to the Reverie Device");
         else if (conn.ReturnPortalTo is ushort town and not 0)
+        {
+            // 回城之前先把「到了城镇要建一道回这里的门」登记好：点门会开一条新连接，新连接上不一定还拿得到角色名。
+            if (conn.ReturnPortal is { } herePortal)
+                PendingBackPortals[town] = (conn.Layout.Hash, conn.InstanceNumber, herePortal.X, herePortal.Y);
             await ChangeArea(remote, stream, ciphers, conn, new PendingTransfer(town, 0, false, AtSpawn: true), "portal to town");
+        }
         else
             await WarpToHideout(remote, stream, ciphers, conn, "map portal back");
     }
@@ -179,20 +184,47 @@ static class PortalsFeature
     // to that cell (SpotArrivals).
     internal static async Task SpawnTownPortals(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
     {
-        if (!OpenPortals.TryGetValue(CharacterName(conn), out var open)) return;
+        string? name = CharacterName(conn);
+        string owner = name ?? "";
+        OpenPortal? found = null;
+        if (name is { Length: > 0 } && OpenPortals.TryGetValue(name, out var known)) found = known;
+        else if (PendingBackPortals.TryRemove(conn.Layout.Hash, out var pending))
+        {
+            // 回城那条路：点门之前就登记好了，这里不依赖角色名。
+            found = new OpenPortal(pending.FromArea, pending.FromInstance, pending.X, pending.Y, conn.Layout.Hash);
+            Console.WriteLine($"[gateway] {remote} 回城门：按回城登记建门，回去 0x{pending.FromArea:x4} 实例 {pending.FromInstance} 的 ({pending.X}, {pending.Y})");
+        }
+        else if (OpenPortals.Count == 1)
+        {
+            // 进入新区域是新的连接，区域生成时角色名有时还没绑上：只有一条记录时直接认它（单人/小服的常态）。
+            var only = OpenPortals.First();
+            owner = only.Key;
+            found = only.Value;
+            Console.WriteLine($"[gateway] {remote} 回城门：角色名未就绪（{name ?? "null"}），按唯一记录 {owner} 处理");
+        }
+        if (found is not { } open)
+        {
+            Console.WriteLine($"[gateway] {remote} 回城门：{name ?? "无角色名"} 没有开着的城传送门记录，也不在回城登记里（当前区域 0x{conn.Layout.Hash:x4}）");
+            return;
+        }
+        Console.WriteLine($"[gateway] {remote} 回城门：{owner} 记录 0x{open.Area:x4}/{open.Instance} → 通向 0x{open.LeadsTo:x4}；当前 0x{conn.Layout.Hash:x4} 实例 {conn.InstanceNumber}");
         if (open.Area == conn.Layout.Hash && open.Instance == conn.InstanceNumber)
         {
             await OpenTownPortal(remote, stream, ciphers, conn, open.X, open.Y, "town portal again", replace: false);
             return;
         }
-        if (open.LeadsTo != conn.Layout.Hash) return;
+        if (open.LeadsTo != conn.Layout.Hash)
+        {
+            Console.WriteLine($"[gateway] {remote} 回城门：不建，记录通向 0x{open.LeadsTo:x4} 但当前是 0x{conn.Layout.Hash:x4}");
+            return;
+        }
         var (x, y) = conn.Layout.Near((conn.Layout.SpawnX + 4, conn.Layout.SpawnY));
         uint id = conn.TakeObjectId();
         await global::Game.SendWorldCreate(remote, stream, ciphers, conn, id, InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(MapPortalObject.MetadataPath),
             new MapPortalObject(x, y, -1, MapPortalType, Open: 1).Blob()), $"0x02bb create the portal back 0x{id:x} at ({x}, {y}) to 0x{open.Area:x4}");
         await global::Game.SendWorldRecord(remote, stream, ciphers, conn, id, InstanceProtocol.EnterWakeZone(id), null);
         conn.BackPortal = (id, x, y);
-        string owner = CharacterName(conn);
+        Console.WriteLine($"[gateway] {remote} 回城门：已在 ({x}, {y}) 建好门 0x{id:x}，通向 0x{open.Area:x4} 的 ({open.X}, {open.Y})");
         _ = Task.Delay(MapPortalListMs).ContinueWith(async _ =>
         {
             if (!conn.Closed && conn.BackPortal?.Id == id)
