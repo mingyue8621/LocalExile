@@ -206,6 +206,11 @@ public static partial class Game
         double reach = movement.Reach is double share ? variety.AttackRange * share
             : summon is not null || rangedAttack && !kingActor
                 ? Math.Max(variety.AttackRange, variety.AggroRange) / 2 : variety.AttackRange;
+        // 不会移动的怪物够不到自己的仇恨范围，就永远立在原处看着玩家不动手：日耀神殿的「日耀守卫者」
+        // (SolarisCelestialFormDawn, MovementSpeed 0, 仇恨 200 格, 技能 SolarisSkyBeamCelestialDawn) 整场
+        // 站着不动就是它 (live 2026-11-13)。它既走不过去，攻击范围就必须覆盖到它能注意到的地方。
+        if (variety.MovementSpeed == 0 && variety.AggroRange > variety.AttackRange)
+            reach = Math.Max(reach, variety.AggroRange);
         double swing = !kingActor && effect >= 0 && catalog.IsSpell(effect) && catalog.CastTimeMs(effect) > 0
             ? catalog.CastTimeMs(effect) / 1000.0 : variety.AttackMs / 1000.0;
         // Its hit: the level's Damage is the DPS every monster of that level shares (wiki "Monster damage"), so one hit is
@@ -243,7 +248,7 @@ public static partial class Game
                 attack.Projectile is null ? WithBehaviourVariation(conn, effect, attack.SkillStats()) : MonsterProjectileSkillStats(conn, effect, level, attack)) : null;
         // A boss is worth a line: which effect it picked, how far it thinks it reaches and whether it has a skill the client
         // can play at all — the Act 5 boss stood through the whole fight and this is what says why (live 2026-11-10).
-        if (variety.BossHealthBar)
+        if (variety.BossHealthBar || variety.MovementSpeed == 0 && variety.GrantedEffects is [_, ..])
             Console.WriteLine($"[gateway] {remote} boss {variety}@{level}: effect {effect} ({catalog.EffectId(effect) ?? "none"}), "
                 + $"skill 0x{skillId:x4} {(skill is null ? "not built" : "built")}, reach {reach:0.#}, ranged {rangedAttack}, "
                 + $"projectile {(projectile is null ? "none" : projectile.Metadata)}, cast {attack.CastTime:0.###} s, swing {attack.Seconds:0.###} s");
