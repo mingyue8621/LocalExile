@@ -847,6 +847,10 @@ public static partial class Game
     // keeps its own default.
     public static async Task SendSkillBar(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
     {
+        // 死亡界面在的时候不重建技能栏：客户端已经切到死亡状态，这时再让它 rebuild 一次是
+        // 「打 boss 死亡后客户端 0xc0000005 崩溃」前最后几个包里唯一会重建 UI 的那个
+        // (live 2026-11-13 23:20，0x0053 发出后 14 s 崩)。复活先恢复生命，随后进区域的流程会照常重发一次。
+        if (conn.PlayerLife == 0) return;
         FillSkillBar(conn);
         var save = CharacterSaves.Load(CharacterName(conn));
         var saved = save?.SkillBar;
@@ -1236,6 +1240,10 @@ public static partial class Game
     public static async Task SendCharacterStats(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, string why)
     {
         conn.PlayerSkillsCache = null;   // a build change: the skill list is built again
+        // 死亡界面已经在屏幕上时不再推全量属性：这一份是上千条 key（本服实测 7859 字节），
+        // 客户端切到死亡状态之后解析它是 live 2026-11-13 23:20 那次 0xc0000005 崩溃前的最后几个包。
+        // 复活（PlayerLife 恢复）之后照常发，进城镇的那次 ChangeArea 也会走完整的一套。
+        if (conn.PlayerLife == 0) return;
         if (QuestKillCommitOutput is not null)
         {
             conn.Minions.StatRevision++;
