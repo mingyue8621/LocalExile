@@ -38,7 +38,11 @@ public sealed class PortalsModule : IModule
                 try
                 {
                     for (int i = 0; i < 300 && !conn.Closed && !conn.WorldOutput.Started; i++) await Task.Delay(10);
-                    Console.WriteLine($"[gateway] {remote} 区域生成：帧已启动={conn.WorldOutput.Started}，开始放置传送门/摆设");
+                    // 还要等客户端把 Network Mode 报上来：LockstepClient 默认 false，客户端连上后约 1 s 才随 tick 到达。
+                    // 在那之前建的对象会按 predictive 写出（0x2bb 的 ordering 是 0），lockstep 客户端解析不了，
+                    // 于是门"发出去了"却从不出现（19:07 抓包对比：野外 ordering=ffffffff，城镇 00000000）。
+                    for (int i = 0; i < 250 && !conn.Closed && !conn.LockstepClient; i++) await Task.Delay(10);
+                    Console.WriteLine($"[gateway] {remote} 区域生成：帧已启动={conn.WorldOutput.Started} lockstep={conn.LockstepClient}，开始放置传送门/摆设");
                     if (conn.Closed || conn.Layout.Hash != area || conn.InstanceNumber != instance) return;
                     await Step("回城门", () => SpawnTownPortals(remote, stream, ciphers, conn));
                     await Step("藏身处摆设", () => SpawnHideoutDoodads(remote, stream, ciphers, conn));
