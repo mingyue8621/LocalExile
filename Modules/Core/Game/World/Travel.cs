@@ -164,10 +164,11 @@ public static partial class Game
             // progress instead of sending the player back to the entrance.
             var (cx, cy) = conn.Layout.GateCheckpoint((transition.GridX, transition.GridY), (tx, ty), transition.ToBossRoom);
             conn.Checkpoint = (conn.Layout.Hash, cx, cy);
-            await SendWorldRecord(remote, stream, ciphers, conn, PlayerId, InstanceProtocol.Teleport(PlayerId, tx, ty),
+            if (await SendWorldRecord(conn, PlayerId, () => InstanceProtocol.Teleport(PlayerId, tx, ty),
                 $"0x01b7 player through the gate 0x{use.TargetId:x} to ({tx}, {ty}), destination gate at ({pair.X}, {pair.Y}): " +
                 $"checkpoint ({cx}, {cy}){(transition.ToBossRoom ? " outside the boss room" : "")}",
-                still: () => PlayerActionCurrent(conn, action));
+                still: () => PlayerActionCurrent(conn, action)))
+                await GameEvents.RunLocalGateUsed(conn);
             return;
         }
         if (use.Ctrl)

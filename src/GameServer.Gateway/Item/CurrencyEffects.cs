@@ -412,11 +412,13 @@ public static class CurrencyEffects
     public static int SocketCapacity(Item item, ItemCatalog.BaseType type)
     {
         if (!item.Components.Contains("Sockets") || !type.Components.Contains("Sockets")) return 0;
-        // The class setting is a cap, and so is the base's shape: the client lays sockets out in columns of at most
-        // three, one column per inventory cell of width (two at most). A 1x4 base such as Gnarled Branch (Staff1) given
-        // six sockets drew them as a single column of six, running out of the item (2026-11-14); it takes three.
-        int byShape = Math.Min(Math.Max((int)type.Width, 1), 2) * 3;
-        return Math.Min(SystemSettings.Default.SocketMax(type.Class), byShape);
+        // A base that takes one socket (Unset Ring and the like) keeps that one, whatever its class says.
+        if (type.HasOneSocket) return Math.Max(1, item.Sockets.Count);
+        // The class setting is the cap, not the inventory cell count: a wand is 1x3 cells but may be given six sockets by
+        // the setting, as the old Game_SOCKET_CAPACITY dev flag already allowed. Natural drops cap by the base's shape
+        // instead (ItemCatalog.DropSockets): a divination reward must still be able to ask for the six sockets its card
+        // names (The Dark Mage draws Gnarled Branch at 6L).
+        return SystemSettings.Default.SocketMax(type.Class);
     }
 
     /// <summary>Reroll the socket count and link groups. Refused targets spend no currency. 3.29: only the sockets the

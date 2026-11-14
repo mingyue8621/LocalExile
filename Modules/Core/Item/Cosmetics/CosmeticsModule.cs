@@ -17,6 +17,7 @@ public sealed class CosmeticsModule : IModule
         {
             return CosmeticsFeature.SpawnPets(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers, conn);
         });
+        GameEvents.LocalGateUsed.Add(module.Manifest.Id, CosmeticsFeature.FollowThroughGate);
         GameEvents.Tick.Add(module.Manifest.Id, (conn, _) => CosmeticsFeature.StepPetFollow(conn));
         GameEvents.Packet(InstanceMicrotransactions.RequestId).Add(module.Manifest.Id, async (conn, bytes) =>
         {
@@ -185,6 +186,25 @@ public static class CosmeticsFeature
         return conn.Layout.Walkable is { } w && !w(spot.X, spot.Y) ? player : spot;
     }
 
+    internal static async Task FollowThroughGate(ClientState conn)
+    {
+        uint[] ids;
+        lock (conn.Pets) ids = [.. conn.Pets.Keys];
+        foreach (var id in ids)
+            await global::Game.SendWorldRecord(conn, id, () =>
+            {
+                lock (conn.Pets)
+                {
+                    if (conn.Closed || conn.LeavingArea || !conn.Pets.TryGetValue(id, out var pet)) return null;
+                    double now = conn.Clock.Elapsed.TotalSeconds;
+                    var to = PetSpot(conn, conn.Walk.Position(now), pet.Side);
+                    pet.Walk.Teleport(to.X, to.Y, now);
+                    pet.Target = to;
+                    return InstanceProtocol.Teleport(id, to.X, to.Y);
+                }
+            }, "pet follows owner through local gate");
+    }
+
     // 被模组占住的宠物（petloot 的拾取）：占用期间它不跟随主人 —— 否则刚走到通货旁、或者刚捡完一个，
     // 就会被「离玩家超过 PetFollowRange」那条规则拉回去，来回抖。按连接存，WeakTable 随连接一起消失。
     static readonly ConditionalWeakTable<ClientState, System.Collections.Concurrent.ConcurrentDictionary<uint, byte>> BusyPets = new();
@@ -199,7 +219,6 @@ public static class CosmeticsFeature
 
     static bool PetBusy(ClientState conn, uint id) =>
         BusyPets.TryGetValue(conn, out var map) && map.ContainsKey(id);
-
     // One finite walk. Ordinary following resumes after arrival, including when the caller has gone away.
     public static Task<bool> WalkPetTo(ClientState conn, uint id, (int X, int Y) to, Func<bool>? still = null) =>
         global::Game.SendWorldRecord(conn, id, () =>

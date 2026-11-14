@@ -125,6 +125,12 @@
 
 - **传送点到达。** 进入藏身处时，出生点与移动原点都使用保存的精确传送点格子，登录与从其他区域返回也一样。
   实机中玩家与传送点记录用的是同一个保存格。
+- Simulacrum: five arenas and a 15-wave controller; opening and the wave-start prompt checked in the client, wave
+  combat and the reward display not yet.
+
+- **Waypoint arrival.** Hideout entry uses the exact saved waypoint cell for spawn and movement origin,
+  including login and returns from other areas.
+  Live player and waypoint records used the same saved cell.
 
 - 藏身处编辑能通过原生 C→S 0x5b 移动并旋转已安装的家具、传送点与 NPC。
   摆放按角色/模板持久化；运行时的交互与寻路阻挡跟随移动后的物件。

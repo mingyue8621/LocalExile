@@ -53,3 +53,25 @@
   `An Audience With The King` 已经能打开虚无之核（其他碎片仍然无效）。
   个人模板选择与登录到所选家宅已实现（见状态文档）。
 - **完成标准：** 藏身处看起来与真实版本一致，能编辑并保存，地图能从它的装置里开。
+- **Known:** the Lush Hideout works: travel, waypoint, stash, Nessa, the Edit button and the map device: slots,
+  Activate and six portals into the map ([21](../docs/protocol/21-hideouts.md) §5).
+  Its decoration (`data/hideouts.json`) lists every doodad with its type and model.
+  The Heist Locker is placed and opens its native storage window; contract/blueprint transfers need separate work.
+  Moving/rotating installed furniture and NPCs now saves per character/template through C→S 0x5b.
+  The map device, Nessa and stash were checked live, including restored positions after reconnect.
+  Other installed objects use the same handler; their individual editor interactions need manual verification.
+  Device edits rebuild native walkability through 0x161 and replace the server footprint at the saved position.
+  Small-device underfoot escape and walking across its former position are verified in the real client.
+  NPCs and functional furniture now use inherited OT footprints and static-model hulls through one registry.
+  Waypoints and loot remain passable. Check large MTX models and wall-adjacent layouts separately.
+  Save/reentry persistence and collision escape for all supported NPC types have automated coverage.
+  The dev `/statue` command creates a stone Monster Statue of any MonsterVarieties row at the player and
+  saves it per character/template; C→S 0x0209 replaces a targeted hideout monster the same way. The
+  statues play their idle and are recreated on entry. See [21](../docs/protocol/21-hideouts.md), Monster Statue.
+- **Start:** create the rest of the decorations (`HideoutObject`, each type's components from
+  data/object-types.json); the Edit mode's placement/removal and appearance messages;
+  maps: the arrival point, a return portal, fragments and device recipes and map mods;
+  `An Audience With The King` opens the Crux; Simulacrum has arena selection and a wave controller.
+  Simulacrum's native reward/fog presentation, specialised boss behaviour and full clear need verification.
+  Personal template selection and login to the selected home are implemented (see Status).
+- **Done when:** the hideout looks like the real one, can be edited and saved, and maps can be run from its device.

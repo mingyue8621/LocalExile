@@ -113,6 +113,8 @@
   JSON 存档与 accounts.json 只会被导入一次（`Saves.cs`、`ItemMoves.cs`、`GameServer.Storage/SaveDatabase.cs`、
   `SqliteAccountStore.cs`；[存档](../docs/saves.md)）。
 
+- One connection per character: a newer login ends the older connection and loads the character after it saved; an
+  area change is not a second login (not checked with two clients in the real game).
 - Selected league modes have server rules with automated coverage and native entry, exit and migration checks.
   Ordinary Hardcore death migrates to the matching softcore base while preserving SSF; Hardcore Ruthless stays dead.
   Carried progress and the death record commit together, source stash/gold stay behind, and stale writes cannot undo it.
