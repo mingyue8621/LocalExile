@@ -5,6 +5,15 @@ namespace GameServer.Modules.Delve;
 /// <summary>Native terrain windows: the camp entrance is only the first trip, later trips join two mine checkpoints.</summary>
 static class DelveTerrain
 {
+    /// <summary>The mine cell features a corridor may use: the ones DelveRooms.datc64 has a room for and the procedural
+    /// Mines pass (<see cref="GameServer.Data.Terrain.Generation.DelveGeneration"/>) can build. 10, 16 and 20 have no
+    /// room, and 1 … 6 are the entrance/checkpoint cells the pass refuses: a corridor of them throws, and
+    /// <see cref="ServerLevels.PrepareDelve"/> then has no layout for the client's terrain. Live probe of features
+    /// 1 … 25 (2026-11-14): 7, 8, 9, 11 … 15 and 17 … 19 build, everything else does not.</summary>
+    static readonly byte[] Features = [11, 12, 13, 14, 15, 17, 18, 19];
+
+    static byte Feature() => Features[Random.Shared.Next(Features.Length)];
+
     public static DelveMine.Plan Procedural(DelveMine mine, DelveMine.Plan plan)
     {
         int minX = plan.Route.Min(p => p.X), minY = plan.Route.Min(p => p.Y);
@@ -19,12 +28,12 @@ static class DelveTerrain
         System.Buffers.Binary.BinaryPrimitives.WriteInt16LittleEndian(terrain.AsSpan(2), (short)minX);
         System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(terrain.AsSpan(4), (ushort)minY);
         byte previousFeature = mine.LastScene?.DestinationFeature ?? 7;
-        byte destination = (byte)Random.Shared.Next(10, 21);
-        while (destination == previousFeature) destination = (byte)Random.Shared.Next(10, 21);
+        byte destination = Feature();
+        while (destination == previousFeature) destination = Feature();
         for (int i = 0; i < path.Count; i++)
         {
             int at = 10 + (path[i].Y * w + path[i].X) * 5;
-            terrain[at] = i == 0 ? previousFeature : i == path.Count - 1 ? destination : (byte)Random.Shared.Next(10, 21);
+            terrain[at] = i == 0 ? previousFeature : i == path.Count - 1 ? destination : Feature();
             if (i == 0) terrain[at + 4] = 1;
             if (i == 0) continue;
             var a = path[i - 1]; var b = path[i];

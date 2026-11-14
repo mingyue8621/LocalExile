@@ -27,7 +27,10 @@ public sealed partial class DelveModule
         if (mine.Pending?.Id == plan.Id) return;
         if (Sulphite(world.CharacterData) < plan.Cost)
         { await player.Tell($"This trip requires {plan.Cost} sulphite."); return; }
-        if (DelveTerrain.Seed(plan.From, plan.To) != 1)
+        // Every trip gets its own terrain window, the first one included. The first trip's two-cell corridor from the
+        // camp entrance used to keep the hand-written FirstMineTerrain, which the procedural Mines pass cannot build:
+        // the Gateway then had no layout for Delve_Main and the client opened an empty screen ("This map is generated
+        // on client-side and is not supported yet by the Server"). Its route is a corridor like any other.
         {
             IEnumerable<string> previousShapes = mine.SeenRoutes ?? [];
             if (mine.LastScene is { SceneSeed: > 0 } last && last.RailShape?.StartsWith("v1:", StringComparison.Ordinal) != true
