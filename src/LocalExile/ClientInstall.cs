@@ -77,7 +77,8 @@ static class ClientInstall
     /// <summary>Client\ holds the checked client when this returns.</summary>
     public static void Ensure(Options options, Output log)
     {
-        log.Step("client-check", "checking the client ...");
+        // No "client-check" step: the server only looks for the client it reads its game data from, and the launcher
+        // that starts it is not the client's business (2026-11-14). A missing or unsupported build still fails here.
         if (Directory.Exists(Folder))
         {
             string? exe = FindExecutable(Folder, out string problem, out var current);
