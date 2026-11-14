@@ -150,6 +150,10 @@ static class AtlasFeature
         "KiracOnTheMapDeviceSeen", "KiracOnTangleLureSeen", "KiracOnCleansingFireLureSeen",
         "KiracOnCleansingFireKey1Seen", "KiracOnCleansingFireKey2Seen",
         "KiracOnTangleKey1Seen", "KiracOnTangleKey2Seen",
+        // Kirac's "talk to me" objectives (The Elder, The Elderslayers, The Throne): their NPCTalk rows carry no
+        // script at all, so no dialogue can raise these — without them the quest tracker keeps four entries that
+        // can never be finished (live 2026-11-14 20:02, "npc option category Quests/QuestReward: no module answers it").
+        "KiracOnTheElderslayersSeen", "KiracOnTheElderSeen", "KiracOnZanaCaeseriusSeen",
         "ShaperDefeated", "ElderDefeated", "SirusDefeated",
     ];
 
