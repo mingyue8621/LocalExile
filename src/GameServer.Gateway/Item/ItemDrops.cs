@@ -382,17 +382,32 @@ public sealed class ItemDrops(ItemCatalog catalog, ItemRolls? rolls = null, stri
     /// rates until the game pools are known.</summary>
     public Drop? Map(int monsterLevel, MonsterRarity monster, int mapTier, Random rng, int voidstones = 0)
     {
-        double chance = monster switch { MonsterRarity.Normal => 0.004, MonsterRarity.Magic => 0.012, MonsterRarity.Rare => 0.05, _ => 0.20 };
+        double chance = monster switch { MonsterRarity.Normal => 0.012, MonsterRarity.Magic => 0.03, MonsterRarity.Rare => 0.08, _ => 0.25 };
         chance = Math.Min(1, chance * SystemSettings.Default.DropMultiplier("maps"));
-        if (maps is null || chance <= 0 || rng.NextDouble() >= chance) return null;
+        if (chance <= 0) { MapRefused("the maps drop multiplier is 0 (world.db drop_multiplier_maps)"); return null; }
+        if (maps is null) { MapRefused("there is no Atlas catalogue (MapKeys / AtlasNode)"); return null; }
+        if (rng.NextDouble() >= chance) return null;
         int stones = Math.Max(0, voidstones);
         int tier = Math.Clamp((mapTier > 0 ? mapTier : 1) + (stones > 0 ? 1 : 0), 1, 16);
         // Socketed Voidstones convert found maps below tier 16 to gold (maps.md).
         if (stones > 0 && tier < 16) return Gold(monsterLevel, monster, rng);
-        if (maps.KeyOfTier(tier) is not uint hash || catalog.ByHash(hash) is not { Supported: true } type) return null;
+        if (maps.KeyOfTier(tier) is not uint hash) { MapRefused($"no map key for tier {tier}"); return null; }
+        if (catalog.ByHash(hash) is not { Supported: true } type)
+        {
+            MapRefused($"the tier {tier} map key 0x{hash:x8} is not a base the server can create");
+            return null;
+        }
         var item = ItemCatalog.Create(type) with { ItemLevel = (byte)Math.Clamp(monsterLevel + ItemLevelBonus(monster), 1, 100) };
         if (rolls is not null && rng.NextDouble() < 0.10) item = rolls.Roll(item, ItemRarity.Magic, rng) with { Identified = true };
         return new(item, type);
+    }
+
+    // Why a map did not drop, once per reason: "the Atlas drops no maps" needs the branch it stopped in, and the
+    // chance alone is 0.4% on a normal monster, so silence looks the same as a broken table (2026-11-14).
+    static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> MapRefusals = new();
+    static void MapRefused(string why)
+    {
+        if (MapRefusals.TryAdd(why, 0)) Console.WriteLine($"[drops] no map drops: {why}");
     }
 
     // One item: its kind, for equipment its slot and base, then its rarity (the class summary's stages 2 to 4).
