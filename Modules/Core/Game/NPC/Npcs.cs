@@ -21,6 +21,10 @@ public static partial class Game
     /// (<see cref="NpcCatalog.Npc.AsPlain"/>).</summary>
     public const string PlainNpcType = "Metadata/NPC/NPC";
 
+    /// <summary>Our own record that Helena has spoken (a11q1's first step). QuestFlags has no row of this name, so it
+    /// stays on the server: the client is never sent a bit for it. See <see cref="TalkToNpc"/>.</summary>
+    public const string HelenaTalkedFlag = "a11q1-HelenaTalked";
+
     // Creates one NPC (0x2bb, its NPCs.dat Id is an .ot type) and puts it in the wake zone; kept for clicks and /npcs.
     public static async Task<uint> SpawnNpc(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, NpcCatalog.Npc npc,
         int x, int y, float rotation, string? wireType = null)
@@ -40,6 +44,15 @@ public static partial class Game
     // The town's NPCs (NpcCatalog.In) at their cells.
     public static async Task SpawnTownNpcs(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
     {
+        // Oriath sets Visited-11_town on every entry (WorldAreas StartQuestFlags), which would put a11q1's "Talk to
+        // Helena" back in the tracker after Helena has spoken: take it back again each time.
+        if (conn.Layout.Id == "2_11_endgame_town" && conn.EarnedQuestFlag(HelenaTalkedFlag) && conn.EarnedQuestFlag("Visited-11_town"))
+            await SetQuestFlags(remote, stream, ciphers, conn, ["Visited-11_town"], on: false);
+        // heist_intro "The Rogue Harbour" is the same shape: its step Order 8 ("Enter the Portal") waits for
+        // UsedHeistCoin and every later step carries no flag at all, so the client could never finish it. Reaching the
+        // harbour is that step's end in the real game, where the contract line (heist) takes over.
+        if (conn.Layout.Id == "HeistHub" && conn.EarnedQuestFlag("UsedHeistCoin"))
+            await SetQuestFlags(remote, stream, ciphers, conn, ["UsedHeistCoin"], on: false);
         var notes = new List<string>();
         var placements = HideoutFurniture(conn)?.Npcs ?? NpcCatalog.In(conn.Layout.Hash, conn.Seed, notes);
         if (conn.Layout.Id == "1_4_town")
@@ -130,6 +143,18 @@ public static partial class Game
         }
         uint id;
         lock (conn.Npcs) id = conn.Npcs.FirstOrDefault(n => ReferenceEquals(n.Value, npc)).Key;
+        // The terminal's opening task, a11q1 "A Call to Arms": its QuestStates carry no flags on any step after Order 7
+        // ("Talk to Helena"), and Order 7 waits for Visited-11_town alone — which Oriath sets on every entry. So the
+        // tracker could never leave that step (live 2026-11-14). In the real game the entry simply leaves the tracker
+        // once she has spoken. Doing that here: our own a11q1-HelenaTalked (QuestFlags has no such row, so the client
+        // never sees it) remembers the talk, and Oriath takes Visited-11_town back from then on (SpawnTownNpcs).
+        if (npc.Npc.Id.Contains("/Helena", StringComparison.Ordinal) && !conn.EarnedQuestFlag(HelenaTalkedFlag))
+        {
+            await SetQuestFlags(remote, stream, ciphers, conn, [HelenaTalkedFlag]);
+            if (conn.EarnedQuestFlag("Visited-11_town"))
+                await SetQuestFlags(remote, stream, ciphers, conn, ["Visited-11_town"], on: false);
+            Console.WriteLine($"[gateway] {remote} a11q1: Helena has spoken; the \"Talk to Helena\" tracker entry leaves the log");
+        }
         conn.AutomaticNpcTalkRows.Clear();
         conn.TalkingTo = id;
         conn.InNpcTalk = false;
