@@ -16,6 +16,11 @@ public static partial class Game
     };
     public static string WireTypeOf(string npcId) => DryGroundTwin.GetValueOrDefault(npcId, npcId);
 
+    /// <summary>The type whose six components every NPC type reads (object_types: Positioned, Animated, BaseEvents,
+    /// InteractionAction, NPC, MinimapIcon): what an NPC whose own type reads more is sent as, with its model
+    /// (<see cref="NpcCatalog.Npc.AsPlain"/>).</summary>
+    public const string PlainNpcType = "Metadata/NPC/NPC";
+
     // Creates one NPC (0x2bb, its NPCs.dat Id is an .ot type) and puts it in the wake zone; kept for clicks and /npcs.
     public static async Task<uint> SpawnNpc(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn, NpcCatalog.Npc npc,
         int x, int y, float rotation, string? wireType = null)
@@ -49,10 +54,52 @@ public static partial class Game
         {
             // A town NPC a quest stages (DiallaTown / DiallaTownWithered …) comes with the quest NPCs (World/Quest/QuestNpcs.cs).
             if (quests.ManagesNpc(conn.Layout.Id, p.Id)) continue;
-            if (Npcs.Value.Place(p) is not { Supported: true } npc) { Console.WriteLine($"[gateway] {remote} npc {p.Id}: unknown or unsupported components"); continue; }
-            if (!p.FromRoom && conn.Layout.Walkable is { } w && !w(p.X, p.Y)) Console.WriteLine($"[gateway] {remote} npc {npc.Name}: ({p.X}, {p.Y}) is not walkable");
-            await SpawnNpc(remote, stream, ciphers, conn, npc, p.X, p.Y, p.Rotation);
+            if (Npcs.Value.Place(p) is not { } placed) { Console.WriteLine($"[gateway] {remote} npc {p.Id}: not in NPCs.dat"); continue; }
+            // Several NPC types read components the server does not write (Kingsmarch's villagers: StateMachine,
+            // ControlZone, Functions, Brackets). Rather than dropping them — which left the town empty — send the plain
+            // type with the villager's own model: the six components every NPC has, and the model the type names.
+            var npc = placed.Supported ? placed : placed.AsPlain();
+            if (npc.Model is null)
+            {
+                Console.WriteLine($"[gateway] {remote} npc {p.Id}: unknown or unsupported components ({string.Join(", ", placed.Components ?? [])}) and no model to send with the plain type");
+                continue;
+            }
+            if (!placed.Supported)
+                Console.WriteLine($"[gateway] {remote} npc {npc.Name}: type reads {string.Join(", ", placed.Components ?? [])}; sent as Metadata/NPC/NPC with {npc.Model}");
+            // A guessed cell (the hubs' offsets around the arrival, 17-npcs.md) can land in a wall — The Rogue Harbour's
+            // thirteen did, all of them (live 2026-11-14) — and an NPC inside a wall cannot be reached or clicked.
+            int x = p.X, y = p.Y;
+            if (!p.FromRoom && conn.Layout.Walkable is { } walk && !walk(x, y))
+            {
+                (x, y) = NearestWalkable(walk, x, y);
+                Console.WriteLine($"[gateway] {remote} npc {npc.Name}: ({p.X}, {p.Y}) is not walkable; placed at ({x}, {y})");
+            }
+            await SpawnNpc(remote, stream, ciphers, conn, npc, x, y, p.Rotation, placed.Supported ? null : PlainNpcType);
         }
+    }
+
+    // The nearest cell a player can stand on, searched ring by ring (the cell itself first). A placement that lands in
+    // a wall stays where it is when nothing walkable is within the radius: better the logged cell than a guess.
+    static (int X, int Y) NearestWalkable(Func<int, int, bool> walkable, int x, int y, int radius = 40)
+    {
+        if (walkable(x, y)) return (x, y);
+        for (int r = 1; r <= radius; r++)
+        {
+            (int X, int Y)? best = null;
+            int bestDistance = int.MaxValue;
+            for (int dy = -r; dy <= r; dy++)
+                for (int dx = -r; dx <= r; dx++)
+                {
+                    if (Math.Max(Math.Abs(dx), Math.Abs(dy)) != r) continue;
+                    if (!walkable(x + dx, y + dy)) continue;
+                    int distance = dx * dx + dy * dy;
+                    if (distance >= bestDistance) continue;
+                    bestDistance = distance;
+                    best = (x + dx, y + dy);
+                }
+            if (best is { } cell) return cell;
+        }
+        return (x, y);
     }
 
     // A click on an NPC (C→S 0x24 on its object): the client walks to it first; follow it and answer once the player is there.

@@ -21,7 +21,22 @@ public sealed class NpcCatalog
         public int HardModeShopRow { get; init; } = -1;
         /// <summary>The type's Transitionable num_states (object-types.json; 1 when it has none): the last state.</summary>
         public byte TransitionStates { get; init; } = 1;
+        /// <summary>The type's own model (object_types animated_object), for <see cref="AsPlain"/>: a plain NPC type
+        /// names none, so the model has to be sent with it.</summary>
+        public string? PlainModel { get; init; }
         public bool Supported => Components is { } c && NpcObject.CanSerialize(c, StateMachine is not null);
+
+        /// <summary>
+        /// The same NPC as the plain type every NPC shares (Metadata/NPC/NPC: the six components read below), with its
+        /// own model sent explicitly. A few NPC types read more than those six — Kingsmarch's nine villagers read
+        /// StateMachine, ControlZone, Functions and Brackets, which the server does not write — and sending the type's
+        /// own object type would leave the client reading four components that are not there. Dialogue, the NPCs row and
+        /// the shop are the server's own and do not depend on the type.
+        /// </summary>
+        public Npc AsPlain() => this with
+        {
+            Components = NpcObject.BaseComponents, StateMachine = null, TransitionState = 1, Model = Model ?? PlainModel,
+        };
         public override string ToString() => $"{Name} ({Id}, row {Row})";
     }
 
@@ -280,11 +295,13 @@ public sealed class NpcCatalog
         var components = new Dictionary<string, IReadOnlyList<string>>();
         var stateMachines = new Dictionary<string, StateMachineData>();
         var transitionStates = new Dictionary<string, byte>();
+        var animatedObjects = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var sharedStates = ObjectTypes.SharedStates();
         foreach (var (type, t) in ObjectTypes.All())
         {
             if (!type.StartsWith("Metadata/NPC/", StringComparison.OrdinalIgnoreCase)) continue;
             components[type] = ObjectTypes.Components(t);
+            if (t.TextOrNull("animated_object") is { Length: > 0 } model) animatedObjects[type] = model;
             if (ObjectTypes.StateMachine(t, sharedStates) is { } machine) stateMachines[type] = machine;
             if (t.IntOrNull("transitionable_num_states") is int numStates)
                 transitionStates[type] = (byte)Math.Clamp(numStates, 1, 127);
@@ -314,6 +331,7 @@ public sealed class NpcCatalog
             {
                 Model = TownNpcs.ModelOf(id),
                 TransitionStates = transitionStates.GetValueOrDefault(type, (byte)1),
+                PlainModel = animatedObjects.GetValueOrDefault(type),
                 HardModeShopRow = set >= 0 && set < hardModeShopOfSet.Count ? hardModeShopOfSet[set] : -1,
             });
         }
