@@ -1,11 +1,14 @@
 using GameServer.Core.Protocol.Instance;
 
 /// <summary>
-/// 3.29 socket colours. Item sockets are white by default; each generated socket has a chance to roll red, green or blue
-/// instead, in proportion to the item's attribute requirements, and that chance rises with the item level (and, for
-/// Chromatic Orbs and the non-white bench crafts, with the item's quality). New sockets added by currency or the bench
-/// stay white. GGG has not published the curve, so <see cref="NonWhiteChance"/> is an approximation
-/// (13-items.md, "Socket colours (3.29)").
+/// 3.x socket colours. A socket generated on a drop takes red, green or blue, in proportion to the base's attribute
+/// requirements; white sockets are not rolled (the game gives them through the bench's all-white craft, a few uniques'
+/// own mods and corrupted implicits, none of which go through <see cref="Roll"/>). The bench's Chromatic-like crafts
+/// ask for the same three colours.
+///
+/// (Until 2026-11-14 this class made every socket white first and rolled a colour only at a chance that rose with the
+/// item level — 21% at level 65 — which turned nearly every dropped item into five or six white sockets, live items in
+/// saves included. Item 58742's staff reads [4,4,4,4,2,4]: five white, one green.)
 /// </summary>
 public static class SocketColours
 {
@@ -13,20 +16,11 @@ public static class SocketColours
     /// The client's exact weights are unknown.</summary>
     public const int AttributeWeight = 12;
 
-    /// <summary>The chance that a generated socket is one of the three colours, 5% at item level 1 and 0.25 points per
-    /// level (30% at level 100). <paramref name="chromatic"/> adds 0.25 points per 1% item quality (5 points at 20%).
-    /// Approximate: the official patch notes give no numbers.</summary>
-    public static double NonWhiteChance(int itemLevel, int quality = 0, bool chromatic = false) =>
-        Math.Clamp(0.05 + 0.0025 * Math.Clamp(itemLevel, 0, 100)
-            + (chromatic ? 0.0025 * Math.Clamp(quality, 0, 100) : 0), 0.05, 0.6);
-
-    /// <summary>One freshly generated socket: white, or one of the three colours at the item's chance.
-    /// <paramref name="noWhite"/> is the 3.29 hidden property some uniques carry (<c>local_sockets_cannot_be_white</c>),
-    /// which makes every socket one of the three colours.</summary>
+    /// <summary>One freshly generated socket: red, green or blue, weighted by the base's attribute requirements.
+    /// <paramref name="noWhite"/> (the 3.29 hidden property some uniques carry, <c>local_sockets_cannot_be_white</c>)
+    /// changes nothing now that white is never rolled, but callers still pass it and the signature stays.</summary>
     public static SocketColour Roll((int Str, int Dex, int Int) requirements, int itemLevel, int quality, Random random,
-        bool chromatic = false, bool noWhite = false) =>
-        noWhite || random.NextDouble() < NonWhiteChance(itemLevel, quality, chromatic)
-            ? Colour(requirements, random) : SocketColour.White;
+        bool chromatic = false, bool noWhite = false) => Colour(requirements, random);
 
     /// <summary>A forced colour: red, green or blue, weighted by the base's strength, dexterity and intelligence
     /// requirements plus <see cref="AttributeWeight"/>.</summary>
