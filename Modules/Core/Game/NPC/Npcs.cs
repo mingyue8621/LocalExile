@@ -58,8 +58,10 @@ public static partial class Game
             // Several NPC types read components the server does not write (Kingsmarch's villagers: StateMachine,
             // ControlZone, Functions, Brackets). Rather than dropping them — which left the town empty — send the plain
             // type with the villager's own model: the six components every NPC has, and the model the type names.
+            // Only that fallback needs a model: a supported type draws its own (2026-11-14, when this test was applied to
+            // every NPC, the hideout's Nessa, Kirac, Helena and the rest all vanished).
             var npc = placed.Supported ? placed : placed.AsPlain();
-            if (npc.Model is null)
+            if (!placed.Supported && npc.Model is null)
             {
                 Console.WriteLine($"[gateway] {remote} npc {p.Id}: unknown or unsupported components ({string.Join(", ", placed.Components ?? [])}) and no model to send with the plain type");
                 continue;
@@ -67,9 +69,11 @@ public static partial class Game
             if (!placed.Supported)
                 Console.WriteLine($"[gateway] {remote} npc {npc.Name}: type reads {string.Join(", ", placed.Components ?? [])}; sent as Metadata/NPC/NPC with {npc.Model}");
             // A guessed cell (the hubs' offsets around the arrival, 17-npcs.md) can land in a wall — The Rogue Harbour's
-            // thirteen did, all of them (live 2026-11-14) — and an NPC inside a wall cannot be reached or clicked.
+            // thirteen did, all of them (live 2026-11-14) — and an NPC inside a wall cannot be reached or clicked. A room
+            // line and a hideout's decoration carry their real cells, so those are left alone.
             int x = p.X, y = p.Y;
-            if (!p.FromRoom && conn.Layout.Walkable is { } walk && !walk(x, y))
+            bool guessed = !p.FromRoom && HideoutCatalog.ByArea(conn.Layout.Hash) is null;
+            if (guessed && conn.Layout.Walkable is { } walk && !walk(x, y))
             {
                 (x, y) = NearestWalkable(walk, x, y);
                 Console.WriteLine($"[gateway] {remote} npc {npc.Name}: ({p.X}, {p.Y}) is not walkable; placed at ({x}, {y})");
