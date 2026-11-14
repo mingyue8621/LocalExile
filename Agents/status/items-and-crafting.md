@@ -629,7 +629,7 @@
   automated coverage. The old live check (2026-10-21) predates these admission checks; native re-acceptance is pending.
   See [13](../docs/protocol/13-items.md), "Orb of Augmentation", and
 - NPC divination card exchange supports all 456 active 3.29.3d card definitions and keeps the 14 client-disabled
-  cards; random selection uses local weights, the official exchange probabilities are unknown.
+  cards, including all Grand Spectrum bases and corruption implicits; local weights are not official probabilities.
   Docs: [17](../docs/protocol/17-npcs.md).
 - Heist enchantment magnitudes apply through Core Game. Current native tooltip comparison is pending ([13 §2c](../docs/protocol/13-items.md)).
 - Optional backpack mods can enable the native 20 slots; stored items remain removable after disabling the mod.
