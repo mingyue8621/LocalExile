@@ -51,7 +51,7 @@ public static partial class Game
     // Predictive only (a lockstep client's chase walk-up swings by its own goal test, StepFrames): how long after its order
     // a melee swing can still turn out not to have begun on the client, and how far inside its reach a monster must be to
     // swing at a walking player (37 cells a second over the order's way to the client). Neither is sourced yet.
-    const double SwingOrderSeconds = .15, MovingReachMargin = 2;
+    const double SwingOrderSeconds = .15, MovingReachMargin = 2, SwingWaitSeconds = 2.5;
     // A melee walk-up farther than this past the reach goes in legs of this many cells (07 §5): the client paths every
     // order out of one budget per frame, which a search toward a player a long way off spends, finding nothing 27–57 %
     // of the time, and one of a dozen cells leaves whole, finding its path 94 % (live 2026-11-03).
@@ -755,6 +755,25 @@ public static partial class Game
                         + $"busy={m.BusyUntil - now:0.00} pending={cadence.SwingPending(m)} speed={m.Walk.Speed:0.0} moving={m.Walk.Moving(now)} "
                         + $"still={(m.Variety is { MovementSpeed: 0 } or { Immobile: true })} scripted={m.Scripted} kit={m.Kit.Count} "
                         + $"attack={(traced is null ? "none" : $"inPlace={traced.InPlace} range={traced.Range:0.0} ranged={traced.Ranged} spell={traced.Spell} scripted={traced.Scripted}")}");
+                }
+                // A lockstep client's monster swings on its own walk-up and its swing cannot be called off (07 §5). Should
+                // the client neither begin that swing nor report a hit — a refused order, or a monster that could not walk
+                // there — the pending flag then skips every later decision and the monster stands for good: Avarius,
+                // Reassembled stood at 12 cells from the player with busy climbing, live 2026-11-14 07:58. Give a swing
+                // SwingWaitSeconds, then let the AI plan again (a chase, a walk-up, or the next kit skill).
+                if (conn.LockstepClient && cadence.SwingPending(m))
+                {
+                    if (m.SwingOrderedAt <= 0) m.SwingOrderedAt = now;
+                    else if (now - m.SwingOrderedAt > SwingWaitSeconds)
+                    {
+                        cadence.CompleteSwing(m, m.ActionGeneration);
+                        m.BusyUntil = now;
+                        m.SwingOrderedAt = now;
+                        m.SwingGeneration = null;
+                        m.LastTarget = null;
+                        if (m.Rarity == MonsterRarity.Unique && d <= 220)
+                            Console.WriteLine($"[gateway] 0x{id:x} ({m.Label}) swing ordered {now - SwingWaitSeconds:0.00} s ago never came back; planning again");
+                    }
                 }
                 if (!m.Aggro || !MonsterAiCadence.Due(now, m.BusyUntil) || cadence.SwingPending(m)) continue;
                 // The player's fighting minions attack his enemies near them; with none they follow him.
