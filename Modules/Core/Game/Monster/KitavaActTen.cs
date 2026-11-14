@@ -192,8 +192,20 @@ static partial class KitavaActTen
             uint obj = await SpawnMonster(c.Wire.Remote, c.Wire.Stream, c.Wire.Ciphers, c, v, body.Level, MonsterRarity.Unique,
                 at.X, at.Y, friendly: true, rotation: anchor.Rotation, scripted: true);
             if (obj == 0) throw new InvalidOperationException("Unsupported Kitava ally");
-            lock (c.Monsters) { var m = c.Monsters[obj]; m.SummonerId = id; m.EntranceGrace = true; }
-            if (c.MinionOrigins.TryRemove(obj, out var origin)) c.Instance.World.MonsterOrigins[obj] = origin;
+            lock (c.Monsters)
+            {
+                var m = c.Monsters[obj]; m.SummonerId = id; m.EntranceGrace = true;
+                // It was created on this client as an ally, so its create record is already out: once it becomes an
+                // instance monster, this client has seen it. Without the view, the same tick's SyncInstanceMonsters
+                // takes it for a new monster and creates it again under an id that is still alive (WorldOutput throws
+                // "World object ID ... is still Ready"), which drops the whole player update — the fight then stands
+                // there without ever advancing (live 2026-11-14 14:49:44, 0x40000ee). Sirus.Intro.IntroAlly does the same.
+                if (c.MinionOrigins.TryRemove(obj, out var origin))
+                {
+                    c.Instance.World.MonsterOrigins[obj] = origin;
+                    c.MonsterViews[obj] = new((at.X, at.Y), (at.X, at.Y), m.Life);
+                }
+            }
             return obj;
         }
         async Task Allies(ClientState c, double now)
