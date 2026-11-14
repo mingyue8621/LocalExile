@@ -363,7 +363,12 @@ public static partial class Game
             // it crashed the client at 0x1401297ca (an Actor lookup on an object without components, live 2026-11-05).
             // A boss waiting to rise (Yugul) stays out of conn.Monsters until it does, where nothing would wake it: it is
             // created awake, as every other buried monster is; its bar only comes after the rise.
-            bool farBoss = !waits && variety.BossHealthBar && Dist((x, y), conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds)) > WakeZoneRadius;
+            // A scripted fight plays its own animations from its own code, and an object created asleep can stay in its
+            // sleep pose on the client: A10 Kitava was created at 1003 cells, woke at 161, and then stood through the
+            // whole fight while the server played its skills (live 2026-11-14 18:36). Its controller wakes it when the
+            // player reaches the arena, and its bar only comes after the fight begins.
+            bool farBoss = !waits && variety.BossHealthBar && !KitavaActTen.IsActor(variety)
+                && Dist((x, y), conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds)) > WakeZoneRadius;
             if (farBoss) lock (conn.Monsters) conn.AsleepMonsters.Add(id);
             else await SendWorldRecord(remote, stream, ciphers, conn, id, InstanceProtocol.EnterWakeZone(id), !log ? null : $"0x01a9 monster 0x{id:x} enters wake zone");
             if (farBoss && log) Console.WriteLine($"[gateway] {remote} boss 0x{id:x} {variety} created asleep: far from the player");

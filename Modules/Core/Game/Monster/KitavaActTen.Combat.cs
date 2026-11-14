@@ -125,7 +125,9 @@ static partial class KitavaActTen
             lock (c.Monsters) { generation = ++body.ActionGeneration; body.SwingGeneration = null; body.BusyUntil = ready = now + attack.Seconds + .2; }
             int cast = ++group;
             await All(id, [InstanceProtocol.ActionStarted(id, anchor.X, anchor.Y, aim.X, aim.Y, attack.SkillId, c.NextActionSequence(), 0x0408), InstanceProtocol.ActionEnded(id)], true);
-            Console.WriteLine($"[Kitava A10] interval {Round + 1}, {Game.SkillsFor(c).EffectId(effect)}");
+            Console.WriteLine($"[Kitava A10] interval {Round + 1}, {Game.SkillsFor(c).EffectId(effect)}"
+                + $", skill 0x{attack.SkillId:x4} {attack.Seconds:0.###} s, anchor ({anchor.X}, {anchor.Y}) aim ({aim.X}, {aim.Y}),"
+                + $" players {Present.Count(p => Awake(p))}, asleep {body.Asleep}, view {(c.MonsterViews.ContainsKey(id) ? "yes" : "no")}");
             if (Tracks.TryGetValue(effect, out var contacts))
             {
                 for (int i = 0; i < contacts.Length; i++)
