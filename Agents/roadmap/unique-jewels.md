@@ -20,6 +20,21 @@
   `0-100% increased Effect of Jewel Socket Passive Skills containing Corrupted Magic Jewels` 会缩放普通天赋孔里的
   腐化魔法珠宝。实机核对：一颗腐化魔法珠宝给了 +15% 火焰抗性，100% 的 The Adorned 把它变成 +30%
   （225% -> 240% -> 255%）。集群插孔里的珠宝与 3.25 之前的 50-150% 变体未覆盖。
+- The 21 ordinary large jewel sockets are mapped to the `PassiveJewels1` pane (Inventories.dat row 23, inventory id
+  24, 60x1). The pane cell is the `PassiveJewelSlots.dat` row; that row's `Slot` column is the `PassiveSkills.dat` row
+  of the socket node.
+- A normal, magic or rare jewel can be placed in an allocated socket (C->S 0x2a or 0x4a), picked up (0x28), saved with
+  the character's inventories, and its global mods are applied through `ItemModStats` like a worn item's.
+- Allocation is checked on the server: the socket node must be allocated, the item must be a non-cluster `Jewel`, and
+  its level requirement must be met. Refunding a socket that still holds a jewel is refused until the jewel is taken
+  out; a level trim returns the jewel to the main inventory if it has to give the socket up.
+- Unique jewels use the same socket and stat path, so an existing unique item with plain unconditional global mods
+  already applies.
+  Item definitions and jewel catalogues exist in world.db; an item source alone does not verify its mechanics or drops.
+- **Pilot done: The Adorned.** `/adorned [0-1000]` creates the corrupted unique Crimson Jewel; its
+  `0-100% increased Effect of Jewel Socket Passive Skills containing Corrupted Magic Jewels` scales corrupted magic
+  jewels in the ordinary passive sockets. Live check: a corrupted magic jewel gave +15% fire resistance, The Adorned at
+  100% made it +30% (225% -> 240% -> 255%). Cluster-socket jewels and the 50-150% pre-3.25 variant are not covered.
 
 ## 尚未完成的部分
 
@@ -30,6 +45,8 @@
 - 深渊珠宝属于物品上的深渊插孔，不在本页范围内。
 - 集群珠宝（扩展插孔、代理天赋与显著天赋）是另一个 PR。
 - No unique item definitions (name, base type, visual identity, mod list, variants) and no `/item`/drop/vendor path.
+- Remaining source/version gaps need per-item evidence.
+  Client name, limit and weight rows are not a playable catalogue.
 - No conditional-stat engine: today every non-local mod is applied unconditionally, so "if you have", "recently",
   "on kill", per-charge and threshold mods would be wrong.
 - No passive-tree radius model, so "in Radius" jewels, threshold jewels and node-modifying jewels are not modelled.
@@ -49,6 +66,16 @@
   正确的词缀列表下发；客户端会用自己的表推导出名字。
 - 测试：目录的每一行都能生成可序列化的物品，基底、外观与词缀数量符合预期；未知名字被拒绝；重载后物品仍在。
 - 完成标准：`/item Might of the Meek` 能生成该物品，后续阶段可以用它。
+### 1. Remaining item sources and historical names
+
+- Existing definitions use world.db's `unique_items`/child tables and `unique_jewels`/`unique_jewel_mods`.
+  The name/art lookup joins the client's `Words`, `UniqueStashLayout` and `ItemVisualIdentity` tables.
+- The [historical-name check](../docs/game/unique-jewels.md#historical-names-and-unconfirmed-sources) separates
+  Army of Bones' rename, the three withdrawn beta designs and six names whose release history remains unconfirmed.
+  None is established here as a separate current item that needs adding.
+- Remaining acceptance is per confirmed item: definition, serialized identity/modifiers, save/load, supported effects
+  and an independently verified acquisition source.
+  Forbidden Flame/Flesh's granted-node model (#791) is a separate task; this check does not complete #358.
 
 ### 2. 全局型传奇珠宝（目录里 42 个）
 
@@ -132,7 +159,8 @@
   stat; special mechanics (corpse destruction).
 - **Wiki gap check (2026-10-29):** of the poewiki names this catalogue lacked, Bound By Destiny, Megalomaniac,
   Sublime Vision, The Balance of Terror and Watcher's Eye now have item generation (their encounter drop rates and
-  conditional-stat consumers are partial); Forbidden Flame and Forbidden Flesh still have no item source.
+  conditional-stat consumers are partial).
+  Forbidden Flame and Forbidden Flesh also have item definitions; their granted-node effect remains separate.
 - **Generated specials:** Impossible Escape (`/impossible_escape`, 48 keystone variants) is implemented with the
   keystone-radius allocation bypass; Rational Doctrine's `/unique_jewel` source and its stationary consecrated /
   critical-strike profane ground mechanics are implemented (see [status](../status/progression.md)).
@@ -207,6 +235,12 @@
 4. 半径行，拆成半径内属性、阈值、节点修改与授予节点。
 5. 永恒行。
 6. 深渊物品插孔与集群珠宝放在各自的改动里。
+1. Confirm remaining source/version gaps against the existing catalogue.
+2. Global rows (highest value, low risk).
+3. Conditional rows (conditions evaluated at use).
+4. Radius rows, split into in-radius stats, thresholds, node modification and granted nodes.
+5. Timeless rows.
+6. Abyss item sockets and cluster jewels in their own changes.
 
 每个阶段都必须保持普通/魔法/稀有珠宝的路径通过：插孔摆放、换位、拾取、存档/读取、退还保护、等级需求，
 以及 `PassiveJewels1` 面板更新。用真实客户端通过 `scripts/dev/live.ps1` 验证并查看 `logs/live-gateway.log`；

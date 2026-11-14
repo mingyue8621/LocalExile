@@ -126,7 +126,7 @@
 - **传送点到达。** 进入藏身处时，出生点与移动原点都使用保存的精确传送点格子，登录与从其他区域返回也一样。
   实机中玩家与传送点记录用的是同一个保存格。
 - Simulacrum: five arenas and a 15-wave controller; opening and the wave-start prompt checked in the client, wave
-  combat and the reward display not yet.
+  combat and the reward display not yet. Starting a wave destroys every item on the ground, as the client warns.
 
 - **Waypoint arrival.** Hideout entry uses the exact saved waypoint cell for spawn and movement origin,
   including login and returns from other areas.
