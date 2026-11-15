@@ -16,6 +16,9 @@ static class PortalsFeature
         var origin = MapReturnOrigin(conn);
         var hideout = HomeHideout(conn);
         if (origin is null && (!MapDevices.Value.IsMapArea(conn.Layout.Hash) || hideout is null)) return;
+        // The player's own portal in this instance stands instead (SpawnTownPortals): one portal per player.
+        if (MapTownPortals.TryGetValue(CharacterName(conn), out var own) && own.Area == conn.Layout.Hash
+            && own.Instance == conn.InstanceNumber) return;
         ushort destination = origin?.Area ?? hideout!.AreaHash16;
         var (x, y) = conn.Layout.Near((conn.Layout.SpawnX, conn.Layout.SpawnY));
         uint id = conn.TakeObjectId();
@@ -50,9 +53,12 @@ static class PortalsFeature
             return;
         }
         await RetireMapPortal(run, at.Index);
-        Console.WriteLine($"[gateway] {remote} map portal at place {at.Index} taken: {left} left, into {(map.Instance == 0 ? "a new instance" : $"instance {map.Instance}")} of {map.Area.Name}");
-        await ChangeArea(remote, stream, ciphers, conn, new PendingTransfer(map.Area.Hash16, map.Instance, map.Instance == 0)
+        var spot = MapEntrySpot(CharacterName(conn), map);
+        Console.WriteLine($"[gateway] {remote} map portal at place {at.Index} taken: {left} left, into {(map.Instance == 0 ? "a new instance" : $"instance {map.Instance}")} of {map.Area.Name}"
+            + (spot is { } own ? $", at the player's own portal ({own.X}, {own.Y})" : ""));
+        await ChangeArea(remote, stream, ciphers, conn, new PendingTransfer(map.Area.Hash16, map.Instance, map.Instance == 0, ArriveAt: spot)
         {
+            Map = MapDevice.Run.Of(character, map),
             Done = r =>
             {
                 if (r.Ok) MapDevice.Entered(map, r.Instance);
@@ -60,6 +66,12 @@ static class PortalsFeature
             },
         }, $"map portal to {map.Area.Name}");
     }
+
+    // Where an entry through the map device's portals arrives in an entered map: at the character's own town portal in
+    // that instance, opened before it left (a Portal Scroll's, or before a death, issue #1002), else at the map's start.
+    internal static (int X, int Y)? MapEntrySpot(string character, MapDevice.OpenMap map) =>
+        map.Instance != 0 && MapTownPortals.TryGetValue(character, out var own)
+        && own.Area == map.Area.Hash16 && own.Instance == map.Instance ? (own.X, own.Y) : null;
 
     // C→S 0x00d8, the map device window's Activate (21-hideouts.md §5): one map (its affixes and the scarabs/fragments)
     // or a MapDeviceRecipes set with no map. Then one item from each slot's stack is consumed, the area opens (the first
@@ -80,7 +92,10 @@ static class PortalsFeature
         if (!device.Value.Campaign && !OwnHideout(conn)) { await Tell("Only the hideout owner can activate this Map Device."); return; }
         MapDevice.Slot[] checkedSlots = [.. slots.Select(i => Items.ByHash(i.Item.TypeHash) is { } t
             ? new MapDevice.Slot(i.Item.TypeHash, t.Class, t.Name, t.Row, i.Item.Mods, i.Item.Quality)
-            { AlternateQualityType = i.Item.AlternateQualityType, Components = t.Components }
+            {
+                AlternateQualityType = i.Item.AlternateQualityType, Components = t.Components,
+                Rarity = i.Item.Rarity, Corrupted = i.Item.Corrupted, BaseId = t.Id,
+            }
             : new MapDevice.Slot(i.Item.TypeHash, "", $"Item 0x{i.Item.TypeHash:x8}", -1, [], 0))];
         var opening = MapDevices.Value.Check(checkedSlots, CharacterName(conn), Items.Mods, out string why, campaign: device.Value.Campaign);
         var request = new MapOpening(conn, checkedSlots, device.Value.Campaign, opening, why) { Target = activate.Target };
@@ -212,6 +227,13 @@ static class PortalsFeature
     // to that cell (SpotArrivals).
     internal static async Task SpawnTownPortals(string remote, NetworkStream stream, ConnectionCiphers ciphers, ClientState conn)
     {
+        // A map's own portal stands again in its instance; it has no portal back beside the hideout's device.
+        if (MapTownPortals.TryGetValue(CharacterName(conn), out var inMap) && inMap.Area == conn.Layout.Hash
+            && inMap.Instance == conn.InstanceNumber)
+        {
+            await OpenTownPortal(remote, stream, ciphers, conn, inMap.X, inMap.Y, "town portal again", replace: false);
+            return;
+        }
         if (!OpenPortals.TryGetValue(CharacterName(conn), out var open)) return;
         if (open.Area == conn.Layout.Hash && open.Instance == conn.InstanceNumber)
         {
@@ -290,9 +312,11 @@ static class PortalsFeature
         conn.ReturnPortalTo = toHideout ? (ushort)0 : town;
         ushort leadsTo = toHideout ? mapOrigin?.Area ?? home!.AreaHash16 : town;
         string owner = CharacterName(conn);
-        // Map return portals never create an extra entrance beside the device: re-entry spends its shared six portals.
-        if (toHideout) OpenPortals.TryRemove(owner, out _);
-        else OpenPortals[owner] = new OpenPortal(here, conn.InstanceNumber, x, y, leadsTo);
+        // Map return portals never create an extra entrance beside the device: re-entry spends its shared six portals, and
+        // arrives at this portal (MapEntrySpot).
+        var portal = new OpenPortal(here, conn.InstanceNumber, x, y, leadsTo);
+        if (toHideout) { OpenPortals.TryRemove(owner, out _); MapTownPortals[owner] = portal; }
+        else { MapTownPortals.TryRemove(owner, out _); OpenPortals[owner] = portal; }
         // 野外又开了一道新门：城镇里那道旧的「回野外」门随之作废，下次进城重新找落点。
         if (replace) BackPortalCells.TryRemove(owner, out _);
         Console.WriteLine($"[gateway] {remote} {why}: town portal at ({x}, {y}) of 0x{here:x4} instance {conn.InstanceNumber} → 0x{leadsTo:x4}");
