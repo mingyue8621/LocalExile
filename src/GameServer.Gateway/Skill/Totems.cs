@@ -34,6 +34,10 @@ public sealed class TotemState
         public Item? SourceItem;
         public bool Ballista;
         public int BonusSlots;
+        /// <summary>An ancestral totem's gift to its owner while it lives, from its own skill's per-level stats: % Attack
+        /// Speed (Ancestral Protector), % Melee Damage (Ancestral Warchief) and % of Physical Damage added as Fire
+        /// (Ancestral Blademaster).</summary>
+        public int OwnerAttackSpeed, OwnerMeleeDamage, OwnerPhysAsFire;
         public double NextCast;
         public ushort Sequence;
         public uint Life = maxLife;

@@ -177,6 +177,10 @@ public static partial class Game
             int ordinaryLimit = (int)Math.Clamp((long)BaseTotemsAllowed + GolemStat(playerStats, "number_of_additional_totems_allowed")
                 + (GolemStat(playerStats, "keystone_ancestral_bond") != 0 ? 1 : 0), 0, int.MaxValue);
             placed.Ballista = ballista;
+            // The ancestral totems' gifts to their owner while they stand (its skill's per-level stats).
+            placed.OwnerAttackSpeed = Get("melee_ancestor_totem_grant_owner_attack_speed_+%_final");
+            placed.OwnerMeleeDamage = Get("slam_ancestor_totem_grant_owner_melee_damage_+%_final");
+            placed.OwnerPhysAsFire = Get("slash_ancestor_totem_grant_owner_physical_damage_added_as_fire_+%");
             placed.BonusSlots = ballista ? Math.Max(0, limit - ordinaryLimit) : 0;
             if (casts) BindTotemSource(conn, placed);
             var replaced = conn.Totems.Place(placed, limit, now, ordinaryLimit);
@@ -252,6 +256,42 @@ public static partial class Game
             if (!active && !conn.Closed && !conn.LeavingArea)
                 await SendWorldRemoval(remote, stream, ciphers, conn, pendingId, "cancelled totem placement");
         }
+    }
+
+    /// <summary>Devouring Totem's corpse: the nearest corpse within the totem's range is eaten and its owner recovers the
+    /// skill's <c>corpse_consumption_life_to_gain</c> and <c>_mana_to_gain</c> (30 and 9 at gem level 1, 299 and 59 at 20).
+    /// A corpse already consumed, shattered or unusable (<see cref="IsCorpse"/>) is left alone.</summary>
+    public static async Task DevourTotemCorpse(string remote, NetworkStream stream, ConnectionCiphers ciphers,
+        ClientState conn, TotemState.Totem totem)
+    {
+        uint id = 0;
+        double now = conn.Clock.Elapsed.TotalSeconds;
+        double range = TotemTargetRange(conn, totem.SkillId);
+        var stats = SupportedStats(conn, totem.SkillId);
+        int life = Math.Max(0, GolemStat(stats, "corpse_consumption_life_to_gain"));
+        int mana = Math.Max(0, GolemStat(stats, "corpse_consumption_mana_to_gain"));
+        lock (conn.Monsters)
+        {
+            if (!CurrentGameWork || conn.Closed || conn.LeavingArea || conn.PlayerLife == 0) return;
+            SpawnedMonster? corpse = null;
+            foreach (var (key, m) in conn.Monsters)
+                if (IsCorpse(m) && Dist(m.Walk.Position(now), totem.At) <= range) { id = key; corpse = m; break; }
+            if (corpse is null) return;
+            corpse.CorpseConsumed = true;
+            conn.Monsters.Remove(id);
+            conn.RecentEvents.Record(StatConditions.ConsumedCorpse, now);
+            var leech = LeechOf(conn);
+            uint beforeLife = conn.PlayerLife;
+            conn.PlayerLife = (uint)Math.Min(conn.PlayerMaxLife, (long)conn.PlayerLife + life);
+            leech.InstantLifeChanged |= beforeLife != conn.PlayerLife;
+            uint beforeMana = conn.PlayerMana;
+            conn.PlayerMana = (uint)Math.Min((uint)UnreservedMana(conn), (long)conn.PlayerMana + mana);
+            leech.InstantManaChanged |= beforeMana != conn.PlayerMana;
+        }
+        await SendWorldRemoval(remote, stream, ciphers, conn, id,
+            $"0x02bd corpse 0x{id:x} devoured by Devouring Totem 0x{totem.Id:x}");
+        Console.WriteLine($"[gateway] {CharacterName(conn)}'s Devouring Totem 0x{totem.Id:x} ate corpse 0x{id:x}: "
+            + $"+{life} life, +{mana} mana");
     }
 
     /// <summary>

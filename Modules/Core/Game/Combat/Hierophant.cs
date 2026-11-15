@@ -37,6 +37,9 @@ public static class Hierophant
     {
         // What the stat sum adds now (PlayerStats); only the tick changes them, so pools and client switch together.
         public int Totems, ManaArea;
+        /// <summary>The ancestral totems' gifts, summed over the ones standing: % Attack Speed, % Melee Damage and % of
+        /// Physical Damage added as Fire (Ancestral Protector / Warchief / Blademaster's own per-level stats).</summary>
+        public int AncestorAttackSpeed, AncestorMeleeDamage, AncestorPhysAsFire;
         public long Revision;
         public double LastTick = double.NaN;
     }
@@ -67,6 +70,10 @@ public static class Hierophant
         Add("damage_+%", DamageFromMana(Get));
         if (!States.TryGetValue(conn, out var state)) return stats;
         Add(ActiveTotems, state.Totems);
+        // An ancestral totem standing: your attack speed, your melee damage, or your physical damage as extra fire.
+        Add("attack_speed_+%", state.AncestorAttackSpeed);
+        Add("melee_damage_+%", state.AncestorMeleeDamage);
+        Add("physical_damage_%_to_add_as_fire", state.AncestorPhysAsFire);
         Add("life_regeneration_rate_per_minute_%", (long)Get(LifeRegenPerTotem) * state.Totems);
         Add("mana_regeneration_rate_per_minute_%", (long)Get(ManaRegenPerTotem) * state.Totems);
         // Joins the base form, which the panel's total and every skill read (as Impact's and Rampage's do).
@@ -106,8 +113,17 @@ public static class Hierophant
                 }
             int perStep = Raw(conn, AreaPerUnreservedMana);
             int area = alive && perStep != 0 ? AreaFromMana(perStep, UnreservedMana(conn)) : 0;
-            changed = (totems, area) != (state.Totems, state.ManaArea);
+            // The ancestral totems' gifts: their skill's own per-level value while they stand.
+            int speed = 0, melee = 0, fire = 0;
+            if (alive)
+                foreach (var totem in conn.Totems.Living(now))
+                {
+                    speed += totem.OwnerAttackSpeed; melee += totem.OwnerMeleeDamage; fire += totem.OwnerPhysAsFire;
+                }
+            changed = (totems, area, speed, melee, fire) != (state.Totems, state.ManaArea,
+                state.AncestorAttackSpeed, state.AncestorMeleeDamage, state.AncestorPhysAsFire);
             (state.Totems, state.ManaArea) = (totems, area);
+            (state.AncestorAttackSpeed, state.AncestorMeleeDamage, state.AncestorPhysAsFire) = (speed, melee, fire);
             if (changed)
             {
                 state.Revision++;

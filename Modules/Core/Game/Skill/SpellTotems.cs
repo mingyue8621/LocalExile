@@ -110,6 +110,22 @@ public static partial class Game
             // A lockstep client's totem exists from the end of the frame its create is written in: no order before that.
             if (conn.LockstepClient && !conn.WorldOutput.PublishedObject(totem.Id).IsReady) continue;
             double range = TotemTargetRange(conn, totem.SkillId);
+            // Devouring Totem eats a corpse near it and its owner recovers life and mana (corpse_consumption_life_to_gain
+            // / _mana_to_gain: 30 and 9 at gem level 1, 299 and 59 at 20). It wants no enemy, so it runs before the
+            // target lookup below and keeps its own one-second cadence.
+            if (SkillsFor(conn).EffectId(totem.Effect) is "DevouringTotem")
+            {
+                var devourSession = ProjectilesFor(remote, stream, ciphers, conn);
+                var devourLifetime = CombatLifetime;
+                totem.NextCast = now + 1;
+                devourSession.Runtime.Schedule(Math.Max(devourSession.Runtime.Now, ProjectileRuntime.Time(totem.NextCast)), () =>
+                {
+                    if (!devourSession.Active || !ReferenceEquals(devourLifetime, CombatLifetime)
+                        || !SpellTotemCurrent(conn, totem)) return;
+                    _ = DevourTotemCorpse(remote, stream, ciphers, conn, totem);
+                });
+                continue;
+            }
             var target = conn.Monsters.Where(p => p.Value is { Hostile: true, Dead: false, Life: > 0 }
                 && Dist(p.Value.Walk.Position(now), totem.At) <= range)
                 .OrderBy(p => Dist(p.Value.Walk.Position(now), totem.At)).FirstOrDefault();

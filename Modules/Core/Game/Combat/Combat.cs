@@ -2010,6 +2010,9 @@ public static partial class Game
                     if (applied.Value.Life == 0) DevourOnKill(conn, m, skillStats);
                     AilmentsOnHitLocked(conn, m, mitigated, spell, critical, multiplier, player, skillStats, at, Random.Shared,
                         reflected, poison, sourceSkill: skillId);
+                    // "X% chance to Knock Enemies Back on Hit": Shockwave Totem's own 25%, Knockback Support and the
+                    // sources that carry the stat. The shove is the AI's Teleport, so only a monster left alive takes it.
+                    if (m.Life > 0) KnockbackOnHitLocked(conn, m, player, skillStats, at, Random.Shared);
                     // As a projectile's hit: a hit with fire that leaves the monster alive may ignite it, an attack with
                     // physical damage bleed it.
                     if (m.Life > 0 && ignite.CanIgnite(rolled)
