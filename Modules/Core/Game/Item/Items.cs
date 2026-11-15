@@ -64,10 +64,18 @@ public static partial class Game
             return;
         }
         string why = "unknown inventory";
-        var done = PlayerInventories.Row(s.InventoryId) is byte row ? items.Socket(row, s.ItemId, (int)s.Socket, ShapeOf, items.NewItemId, out why) : null;
+        var done = PlayerInventories.Row(s.InventoryId) is byte row
+            ? items.Socket(row, s.ItemId, (int)s.Socket, ShapeOf, items.NewItemId, out why, GemSocketColour(conn)) : null;
         if (done is not var (item, before, now) || PlayerInventories.Row(s.InventoryId) is not byte r)
         {
             Console.WriteLine($"[gateway] {remote} <= 0x0030 socket {s}: refused ({why})");
+            // The client draws the gem in the socket without asking: send the item as it stands (no gem in it) so its
+            // sockets are read again, and the gem goes back where the client had it.
+            if (PlayerInventories.Row(s.InventoryId) is byte refused
+                && items.Items(refused).FirstOrDefault(i => i.Id == s.ItemId) is { } unchanged)
+                await Send(remote, stream, ciphers, InstanceItems.InventoryChange(s.InventoryId,
+                    items.NextRevision(refused), [unchanged.Id], [unchanged]),
+                    $"0x00bf inventory {s.InventoryId}: item {unchanged.Id} as it stands ({why})");
             return;
         }
         if (now is not null && PlayerInventories.ShowsOnModel(r))
@@ -79,6 +87,12 @@ public static partial class Game
             $"0x00bf inventory {s.InventoryId}: item {item.Id} with a gem in socket {s.Socket}");
         if (ItemModStats.EquipmentRows.Contains(r)) await SendEquipment(remote, stream, ciphers, conn, items);
     }
+
+    // A gem's socket colour: SkillGems GemColour (1 red, 2 green, 3 blue, 4 white, which any socket takes); null for an
+    // item whose colour the tables do not name, where no check applies.
+    static Func<Item, SocketColour?> GemSocketColour(ClientState conn) => gem =>
+        ItemsFor(conn).ByHash(gem.TypeHash) is { } baseType && ItemsFor(conn).Gem(baseType) is { } type
+            && type.Colour is >= 1 and <= 4 ? (SocketColour)type.Colour : null;
 
     // The gem one level up, or null with the reason it cannot level: the "+" (0x31) answers with the reason and Level Up All
     // (0x32) skips that gem without affecting the others. A locked gem, one at its highest level, and one whose next level's

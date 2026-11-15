@@ -294,19 +294,21 @@ public sealed class PlayerInventories
 
     /// <summary>
     /// Puts the held gem into socket <paramref name="socket"/> of item <paramref name="itemId"/> in <paramref name="row"/>.
-    /// A gem already in the socket goes to the cursor. Returns the item as it is now and the gem now held (or null), or
-    /// null with the reason.
+    /// A gem already in the socket goes to the cursor. <paramref name="gemColour"/> answers a gem's colour (red, green or
+    /// blue; white for the few that take any socket) and null for an item it knows no colour of; a coloured socket only
+    /// takes its own colour or a white gem, and a white socket takes any. Returns the item as it is now and the gem now
+    /// held (or null), or null with the reason.
     /// </summary>
     public (InventoryItem Item, InventoryItem HeldBefore, InventoryItem? HeldNow)? Socket(byte row, uint itemId, int socket,
-        Func<Item, Shape?> shapeOf, Func<uint> newId, out string why)
+        Func<Item, Shape?> shapeOf, Func<uint> newId, out string why, Func<Item, SocketColour?>? gemColour = null)
     {
-        var result = SocketCore(row, itemId, socket, shapeOf, newId, out why);
+        var result = SocketCore(row, itemId, socket, shapeOf, newId, out why, gemColour);
         if (result is not null) Persist();
         return result;
     }
 
     (InventoryItem Item, InventoryItem HeldBefore, InventoryItem? HeldNow)? SocketCore(byte row, uint itemId, int socket,
-        Func<Item, Shape?> shapeOf, Func<uint> newId, out string why)
+        Func<Item, Shape?> shapeOf, Func<uint> newId, out string why, Func<Item, SocketColour?>? gemColour = null)
     {
         lock (_lock)
         {
@@ -325,6 +327,16 @@ public sealed class PlayerInventories
                 : heldClass is not ("Active Skill Gem" or "Support Skill Gem"))
             {
                 why = sockets[socket].Colour == SocketColour.Abyss ? "an Abyss socket requires an Abyss jewel" : "the held item is not a gem";
+                return null;
+            }
+            // The socket's colour is the gem's: a red gem in a red socket, and so on; a white socket takes any colour and
+            // so does a white gem (3.x). Until 2026-11-15 any gem went into any coloured socket.
+            var socketColour = sockets[socket].Colour;
+            if (socketColour is SocketColour.Red or SocketColour.Green or SocketColour.Blue
+                && gemColour?.Invoke(held.Item) is SocketColour gem
+                && gem is SocketColour.Red or SocketColour.Green or SocketColour.Blue && gem != socketColour)
+            {
+                why = $"a {gem} gem does not go into a {socketColour} socket";
                 return null;
             }
             var old = sockets[socket].Gem;
