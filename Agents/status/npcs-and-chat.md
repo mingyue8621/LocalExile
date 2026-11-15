@@ -240,6 +240,8 @@
   out of the corridor the leader is walking down (26 cells ahead, 5 to either side); one that ends up ahead of a moving
   leader steps 7 cells off the road and waits there, since a player's body is a blocker the leader's pathfinder walks round.
   Moving followers take reachable attacks and hold their ground while they have a target, without cancelling their own swing/cast.
+  Followers stay within 60 cells with rare idle adjustments, retry rejected steps, and enter ahead on clear cells.
+  Moving followers aim ahead along the leader's ordered route and take reachable attacks without chasing off it or cancelling their own swing/cast.
   Gaps over 60 cells get a short catch-up grace before relocation; large jumps return followers immediately.
   Shared deaths hide corpse health bars on each observer, including kills made by controlled party members.
   Optional [MCP control](../../Modules/Custom/PlayerBots/MCP.md) exposes per-bot leases, observations and native tactical orders with ordinary following/fallback.
