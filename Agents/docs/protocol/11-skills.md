@@ -1817,7 +1817,10 @@ blast). The gem resolves to GrantedEffects `GroundSlam`; the +40% final radius a
 `ExileGroundSlam` row, which no GemEffects row grants. No player stat set or 3.29 Mod holds the four `ground_slam_*`
 shape stats, so the wave uses estimates to calibrate live: 60 cells long at the generic 12-cell radius, shifted by the
 skill's own radius; half angle 30 deg (half `ground_slam_cone_angle_override`'s cone), grown by `ground_slam_angle_+%`;
-60 cells a second. Only the Vaal executor applies `groundslam_damage_to_close_targets_+%_final`.
+60 cells a second. Both the wave and the Vaal blast apply `groundslam_damage_to_close_targets_+%_final`
+(40 at gem level 1, 49 at 20, 56 at 39: full at the slam, nothing at the reach), and a wave also hits everything
+inside the skill's own area radius around the player whichever way it faces — the 30° half angle is barely half a
+cell wide at one cell out, so monsters standing on the player were missed (live 2026-11-15).
 The client queues a Move clicked during a swing instead of cancelling the swing (live 2026-11-07), so a gem melee swing
 (`holdsItsSwing`: Melee, not channelled) keeps its hit over a moved action counter; only death, area change, pause,
 freeze or hit recovery ends it. Its contact comes from its own rig clip (`GemAttackContactDelay`: groundslam_maul at

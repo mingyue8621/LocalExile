@@ -1793,7 +1793,10 @@ public static partial class Game
                     && (singleStrikeTarget is null || e.Key == singleStrikeTarget)
                     && e.Distance <= (wave ? waveLength : radius)
                     && (strikeIndex > 0 ? !SkillMultiStrike.WasHitBeforeUse(alreadyHit, e.Key) : once?.Contains(e.Key) != true)
-                    && (!wave || GroundSlamWave.Covers(waveDir, from, e.At, waveHalfAngle, waveLength)))
+                    // The slam's own impact, then the wave: everything inside the skill's area radius is hit whichever way
+                    // it faces. A wave's 30° half angle is barely half a cell wide at one cell out, so a monster standing
+                    // on the player fell outside it and took nothing (live 2026-11-15, "nearby monsters are hard to hit").
+                    && (!wave || e.Distance <= radius || GroundSlamWave.Covers(waveDir, from, e.At, waveHalfAngle, waveLength)))
                 .ToList();
             // Hits that may reach each monster only once across several sweeps record it here.
             if (once is not null) foreach (var f in found) once.Add(f.Key);
@@ -1922,11 +1925,16 @@ public static partial class Game
                     }
                 }
                 var contactHit = sweepHit;
-                if (SkillsFor(conn).EffectId(gem.Effect) == "VaalGroundSlam")
+                // "The wave deals more damage to closer enemies": Ground Slam's groundslam_damage_to_close_targets_+%_final
+                // (40 at gem level 1, 49 at 20, 56 at 39 — the tooltip's "up to 51% more to closer targets"), full at the
+                // slam and nothing at the skill's reach. Vaal Ground Slam carries the same stat on its radial blast, whose
+                // reach is the skill's radius.
+                if (wave || SkillsFor(conn).EffectId(gem.Effect) == "VaalGroundSlam")
                 {
                     double distance = Dist(conn.Walk.Position(ProjectileWorldTime(conn)), m.Walk.Position(ProjectileWorldTime(conn)));
+                    double closeReach = Math.Max(1, wave ? waveLength : radius);
                     contactHit = contactHit.Scale(1 + Stat("groundslam_damage_to_close_targets_+%_final")
-                        / 100.0 * Math.Max(0, 1 - distance / Math.Max(1, radius)));
+                        / 100.0 * Math.Max(0, 1 - distance / closeReach));
                 }
                 if (!spell && SkillsFor(conn).IsMelee(gem.Effect))
                     contactHit = WithMeleeProximityLocked(conn, player, skillStats, m, contactHit, ProjectileWorldTime(conn));
