@@ -43,10 +43,9 @@ public sealed class PortalsModule : IModule
                     await Step("回城门", () => SpawnTownPortals(remote, stream, ciphers, conn));
                     await Step("藏身处摆设", () => SpawnHideoutDoodads(remote, stream, ciphers, conn));
                     await Step("地图返回门", () => SpawnMapReturnPortal(remote, stream, ciphers, conn));
-                    // The portals of the character's open map stand at the device again.
-                    string? who = CharacterName(conn);
-                    if (who is { Length: > 0 } && MapDeviceHere(conn) is { } device && MapDevice.OpenOf(who) is { PortalsLeft: > 0 } open
-                        && (open.ReturnTo is null ? !device.Campaign : open.ReturnTo.Area == conn.Layout.Hash && open.ReturnTo.Instance == conn.InstanceNumber))
+                    // Everyone in this exact device instance sees and spends the same run's portals (upstream's shared
+                    // map-device portals, by area and instance rather than by the character's own open map).
+                    if (MapDevice.AtEntrance(conn.Layout.Hash, conn.InstanceNumber) is { PortalsLeft: > 0 } open)
                         await Step("地图装置的门", () => SpawnMapPortals(remote, stream, ciphers, conn, open, firstAfterMs: MapPortalEntryMs));
                 }
                 catch (Exception e)
@@ -135,5 +134,20 @@ public sealed class PortalsModule : IModule
             await MoveToMapDevice(remote, stream, ciphers, conn, InstanceMapDevice.ReadMove(bytes));
             return true;
         });
+        // Ctrl + click with the map device open, for the items that are not Atlas Idols: a map moves with one of these, and
+        // without them the click reached no one and the map had to be dragged in.
+        foreach (ushort clicked in new[] { InstanceMapDevice.MoveIntoDeviceId, InstanceMapDevice.MoveOutOfDeviceId })
+            GameEvents.Packet(clicked).Add(module.Manifest.Id, async (conn, bytes) =>
+            {
+                var (remote, stream, ciphers) = conn.Wire;
+                var click = InstanceMapDevice.ReadItemClick(bytes);
+                // Which way it goes is where the item is, so the message's own direction flag is not needed here
+                // (ItemMoves.MoveToMapDevice says so): a click in the inventory takes it in, one in the slots takes it out.
+                Console.WriteLine($"[gateway] {remote} <= 0x{clicked:x4} Ctrl + click item {click.ItemId} on the map device " +
+                    $"({(click.IntoDevice ? "into" : "out")}, device 0x{click.Device:x})");
+                await MoveToMapDevice(remote, stream, ciphers, conn,
+                    new InstanceMapDevice.Move(click.ItemId, click.Flags, click.IntoDevice, 0, 0));
+                return true;
+            });
     }
 }

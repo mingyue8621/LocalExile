@@ -93,7 +93,7 @@ public static partial class Game
         var drops = new List<ItemDrops.Drop>();
         if (modded is not { Cancel: true })
         {
-            int mapTier = MapDevice.OpenOf(CharacterName(conn)) is { } openMap && openMap.Area.Hash16 == conn.Layout.Hash ? openMap.Area.Tier : 0;
+            int mapTier = MapDevice.ForInstance(conn) is { } openMap ? openMap.Area.Tier : 0;
             drops.AddRange(DropsFor(conn).Roll(monster.Level, monster.Rarity, Random.Shared, IncreasedItemRarity(conn, monster),
                 balance.ItemDropMultiplier * (modded?.Quantity ?? 1) * ItemQuantityFactor(conn, monster),
                 balance.EquipmentRarityMultiplier * (modded?.Rarity ?? 1), mapTier,
@@ -181,6 +181,9 @@ public static partial class Game
                     notification = GameEvents.RunMonsterKilled(new(conn, output.Kill!));
                 }
                 await notification;
+                // A minion's kill is committed here, not through Game.MonsterKilled: the overlay's count (S→C 0x1a0) is one
+                // monster smaller too.
+                await SendRemainingMonsters(remote, stream, ciphers, conn);
                 continue;
             }
             if (output.Kind == PlayerMinions.OutputKind.GroundItem)

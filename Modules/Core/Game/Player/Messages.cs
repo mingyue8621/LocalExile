@@ -177,6 +177,7 @@ public static partial class Game
                             () =>
                             {
                                 at = Math.Max(at, ProjectileWorldTime(conn));
+                                CancelMeleeRepeats(conn, at);
                                 walkAction = Interlocked.Increment(ref conn.ActionCount);
                                 if (conn.LockstepClient) conn.Walk.Order(use.X, use.Y, at);
                                 else arrive = conn.Walk.Approach(use.X, use.Y, WalkUpRange(WeaponFor(conn)), at).At;
@@ -225,6 +226,7 @@ public static partial class Game
                 void StartAction()
                 {
                     at = Math.Max(at, conn.ProjectileRuntime?.Runtime.Now / 120000d ?? 0);
+                    CancelMeleeRepeats(conn, at);
                     action = Interlocked.Increment(ref conn.ActionCount);
                     (px, py) = inPlace ? conn.Walk.Position(at) : conn.Walk.Order(use.X, use.Y, at);
                     if (inPlace) conn.Walk.Order(px, py, at);
@@ -741,6 +743,10 @@ public static partial class Game
                     // two-handed weapon is held, the update does (live 2026-10-22: it was held one-handed after every load).
                     await SendModel(remote, stream, ciphers, conn, Looks(conn, ItemsOf(conn)), "entering");
                     await PopulateArea(remote, stream, ciphers, conn);
+                    // The map overlay's "X monsters remain" (S→C 0x1a0), once the whole area is placed and long after S→C
+                    // 0x21 activated it (SendPlayer, above): a new instance's byte is 0xff, so without this the line
+                    // reads "More than 50 monsters remain" everywhere (InstanceProtocol.MonstersRemaining).
+                    await SendRemainingMonsters(remote, stream, ciphers, conn, force: true);
                     await SendGroundItems(remote, stream, ciphers, conn);
                     await PlaceStartWeapon(remote, stream, ciphers, conn);
                     await SpawnTownNpcs(remote, stream, ciphers, conn);

@@ -2824,6 +2824,8 @@
   [Behemoth](../docs/game/behemoth.md).
 - Ground Slam's forward wave, and gem melee swings that keep their hit over a queued Move.
   Docs: [11](../docs/protocol/11-skills.md) §9a.
+- Heavy Strike and Trarthus confirmed-hit particles/audio, with typed and critical melee feedback.
+  Docs: [11](../docs/protocol/11-skills.md), "Hit effects".
 - Warcry release and cooldowns. Docs: [11](../docs/protocol/11-skills.md) §10i.
 - Strike targeting: spirit strikes and the previous location. Docs: [11](../docs/protocol/11-skills.md) §10d.
 - Passive enemy auras. Docs: [11](../docs/protocol/11-skills.md) §10e.

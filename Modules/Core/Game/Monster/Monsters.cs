@@ -430,6 +430,8 @@ public static partial class Game
         if (damagedLife < life)
             await SendWorldRecord(remote, stream, ciphers, conn, id, InstanceProtocol.LifeUpdate(id, damagedLife.Value), !log ? null : $"0x01b1 monster 0x{id:x} life {damagedLife}/{life}");
         if (!friendly && KingInMists.IsBoss(variety)) KingInMists.Begin(remote, stream, ciphers, conn, id);
+        // A monster the area did not have until now (a summon, a quest's, a kept instance's): the overlay's count changes.
+        await SendRemainingMonsters(remote, stream, ciphers, conn);
         return id;
     }
 
@@ -440,6 +442,9 @@ public static partial class Game
     {
         // Another player already runs this instance's monsters: this client shows theirs (SharedMonsters.cs).
         if (!ClaimMonsterHost(remote, conn)) return;
+        // The packs go in one monster at a time, and the overlay's count waits for the last of them (the entry's 0x1a0,
+        // Messages.cs): a recount per spawn would be a count of the area per monster.
+        using var recount = HoldMonstersRemaining(conn);
         var layout = conn.Layout;
         if (Environment.GetEnvironmentVariable("Game_MONSTERS") == "0") return;
         // The Crux of Nothingness fight places its three Mystic Fetishes at fixed offsets from the room's mapboss point
@@ -526,7 +531,7 @@ public static partial class Game
             if (MapBossFights.Current.PhaseOf(layout.Id) is { } phase && !conn.LaterFormPoints.ContainsKey(phase.Last))
                 conn.LaterFormPoints[phase.Last] = (layout.SpawnX + 8, layout.SpawnY);
         }
-        var mapMods = MapDevice.Current(CharacterName(conn), layout.Hash)?.Mods;
+        var mapMods = MapDevice.ForInstance(conn)?.Mods;
         var scale = mapMods?.Packs ?? default;
         var spawns = WithTwinBosses(AreaPopulation.Plan(area, layout.GridW, layout.GridH, walkable, (layout.SpawnX, layout.SpawnY),
             [.. layout.AreaTransitions.Select(t => (t.Transition.GridX, t.Transition.GridY))], points,
@@ -551,7 +556,7 @@ public static partial class Game
             }
         foreach (var n in notes) Console.WriteLine($"[gateway] {remote} area {layout.Id} monsters: {n}");
         int areaLevel = area.AreaLevel;
-        if (MapDevice.OpenOf(CharacterName(conn)) is { } openMap && openMap.Area.Hash16 == layout.Hash && openMap.Area.Level > 0)
+        if (MapDevice.ForInstance(conn) is { } openMap && openMap.Area.Level > 0)
             areaLevel = openMap.Area.Level;
         byte level = (byte)Math.Clamp(areaLevel, 1, 100);
         foreach (var s in spawns)
@@ -561,7 +566,7 @@ public static partial class Game
             await SpawnMonster(remote, stream, ciphers, conn, variety, level, s.Rarity, s.X, s.Y, log: notable, alone: false);
         }
         int extra = 0;
-        if (MapDevice.Current(CharacterName(conn), layout.Hash) is { ItemRow: > 0 } opening)
+        if (MapDevice.ForInstance(conn) is { ItemRow: > 0 } opening)
         {
             var seen = new HashSet<string>(StringComparer.Ordinal);
             lock (conn.Monsters)
