@@ -2696,6 +2696,16 @@ carries one (Holy Flame Totem) or as the skill's own area hit from the totem's c
 melee, Shockwave Totem's nova). Decoy, Devouring and Searing Bond stand with their model and Life; their taunt, corpse
 and beam payloads are not implemented.
 
+**Ancestral totems' gifts** (2026-11-15): while one stands its owner reads the totem's own per-level value —
+`melee_ancestor_totem_grant_owner_attack_speed_+%_final` (Protector, 10 → 20) as `attack_speed_+%`,
+`slam_ancestor_totem_grant_owner_melee_damage_+%_final` (Warchief, 8 → 18) as `melee_damage_+%`, and
+`slash_ancestor_totem_grant_owner_physical_damage_added_as_fire_+%` (Blademaster, 12 → 22) as
+`physical_damage_%_to_add_as_fire`. `Hierophant` sums them over the living totems each tick and resends the character's
+stats when the sum changes. **Devouring Totem** eats the nearest usable corpse within `base_totem_range` once a second
+and its owner recovers `corpse_consumption_life_to_gain` / `_mana_to_gain` (30/9 at gem level 1, 299/59 at 20).
+`KnockbackOnHitLocked` had no caller at all until then; the area hit now runs it after the damage, so Shockwave Totem's
+own 25% `base_global_chance_to_knockback_%` (and Knockback Support, and every other source of the stat) shoves.
+
 ## 10h. Player minions that fight
 
 A player minion is a monster on the player's team kept in `ClientState.Monsters` and listed in `ClientState.Minions`
