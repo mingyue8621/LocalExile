@@ -2,6 +2,8 @@
   "id": "Chat",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "聊天",
+  "description": "全局、队伍与私聊频道，以及聊天里的物品链接。",
   "depends": [
     "Game"
   ],

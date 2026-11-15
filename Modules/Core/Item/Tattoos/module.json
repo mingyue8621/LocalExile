@@ -2,6 +2,8 @@
   "id": "Tattoos",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "纹身",
+  "description": "3.29 的纹身植入：把纹身打进天赋点，换取额外属性。",
   "depends": [
     "Game"
   ],

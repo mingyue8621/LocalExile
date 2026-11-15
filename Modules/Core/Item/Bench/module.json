@@ -2,6 +2,8 @@
   "id": "Bench",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "工艺台",
+  "description": "藏身处的工艺台，用通货给装备加词缀。",
   "depends": [
     "Game"
   ],

@@ -2,6 +2,8 @@
   "id": "Portals",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "传送门",
+  "description": "传送卷轴开出的门、回城，以及地图装置的那几道门。",
   "depends": [
     "Game"
   ],

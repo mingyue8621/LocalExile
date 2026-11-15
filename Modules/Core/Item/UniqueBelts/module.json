@@ -2,6 +2,8 @@
   "id": "UniqueBelts",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "传奇腰带",
+  "description": "传奇腰带的特殊效果按正式服规则维持，例如法师之血的药剂增益常驻。",
   "depends": [
     "Game"
   ],

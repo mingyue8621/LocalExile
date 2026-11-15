@@ -2,6 +2,8 @@
   "id": "PlayerBots",
   "version": "0.1.0",
   "kind": "feature",
+  "name": "玩家机器人",
+  "description": "用机器人玩家陪玩或压测。",
   "depends": [
     "Game",
     "Social"

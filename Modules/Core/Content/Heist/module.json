@@ -2,6 +2,8 @@
   "id": "Heist",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "黄金港夺宝",
+  "description": "在黄金港招募盗贼、安排抢劫，带着战利品从守卫眼皮底下跑出来。",
   "depends": [
     "Game"
   ],

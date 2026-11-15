@@ -2,6 +2,8 @@
   "id": "Cosmetics",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "外观",
+  "description": "时装、宠物、足迹、传送门与技能特效这些外观物品。",
   "depends": [
     "Game"
   ],

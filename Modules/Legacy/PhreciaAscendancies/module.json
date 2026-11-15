@@ -2,6 +2,8 @@
   "id": "PhreciaAscendancies",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "弗雷西亚升华",
+  "description": "活动赛季的额外升华职业。",
   "depends": [
     "Game"
   ],

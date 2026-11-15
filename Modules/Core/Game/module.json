@@ -2,6 +2,8 @@
   "id": "Game",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "核心玩法",
+  "description": "角色、战斗、物品、经验与掉落这些基础规则，其余模块都建立在它之上。",
   "depends": [],
   "assembly": "bin/game.dll"
 }

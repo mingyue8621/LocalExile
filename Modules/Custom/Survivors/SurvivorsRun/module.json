@@ -2,6 +2,8 @@
   "id": "SurvivorsRun",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "生存模式·流程",
+  "description": "幸存者玩法的一局流程：地图、波次与结束结算。",
   "depends": ["Game", "SurvivorsSkills", "SurvivorsRewards"],
   "assembly": "bin/survivorsrun.dll"
 }

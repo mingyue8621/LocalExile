@@ -2,6 +2,8 @@
   "id": "Harvest",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "圣战花园",
+  "description": "打怪收集种子，在花园里种植并制作装备词缀。",
   "depends": [
     "Game"
   ],

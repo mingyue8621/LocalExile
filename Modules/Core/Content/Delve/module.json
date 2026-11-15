@@ -2,6 +2,8 @@
   "id": "Delve",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "蓝晶矿坑",
+  "description": "跟尼柯下矿坑，坐矿车在黑暗里推进，一路收集蓝晶、化石与矿点宝箱。",
   "depends": [
     "Game"
   ],

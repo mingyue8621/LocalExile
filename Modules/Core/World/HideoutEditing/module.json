@@ -2,6 +2,8 @@
   "id": "HideoutEditing",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "藏身处编辑",
+  "description": "在藏身处摆放、旋转与删除装饰物。",
   "depends": [
     "Game"
   ],

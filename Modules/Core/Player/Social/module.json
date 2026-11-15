@@ -2,6 +2,8 @@
   "id": "Social",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "社交",
+  "description": "好友、队伍与组队相关功能。",
   "depends": [
     "Game"
   ],

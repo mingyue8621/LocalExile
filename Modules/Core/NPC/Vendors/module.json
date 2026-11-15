@@ -2,6 +2,8 @@
   "id": "Vendors",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "商人",
+  "description": "NPC 商店的买卖、鉴定与装备刷新。",
   "depends": [
     "Game"
   ],

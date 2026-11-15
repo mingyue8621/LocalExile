@@ -2,6 +2,8 @@
   "id": "NessaDevelopmentTabs",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "奈莎开发页",
+  "description": "给奈莎加上觉醒宝石、卓越宝石、地图、起源地图与传奇地图这些开发用商店页。",
   "depends": [
     "Game"
   ],

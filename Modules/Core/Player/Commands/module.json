@@ -2,6 +2,8 @@
   "id": "Commands",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "游戏命令",
+  "description": "游戏内的 / 命令，以及服务器管理用的指令。",
   "depends": [
     "Game"
   ],

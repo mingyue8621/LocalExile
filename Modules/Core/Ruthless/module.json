@@ -2,6 +2,8 @@
   "id": "Ruthless",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "无情模式",
+  "description": "无情（Ruthless）规则：掉落与制作都大幅收紧，也不能用万神殿。",
   "depends": [
     "Game"
   ],

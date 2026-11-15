@@ -2,6 +2,8 @@
   "id": "Atlas",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "异界图鉴",
+  "description": "地图装置、图鉴节点推进与守望石。",
   "depends": [
     "Game"
   ],

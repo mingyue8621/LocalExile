@@ -2,6 +2,8 @@
   "id": "SurvivorsSkills",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "生存模式·技能",
+  "description": "幸存者玩法专用的技能与升级。",
   "depends": ["Game"],
   "assembly": "bin/survivorsskills.dll"
 }

@@ -2,6 +2,8 @@
   "id": "Pantheon",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "万神殿",
+  "description": "击败灵魂首领后取得的神之力量。",
   "depends": [
     "Game"
   ],

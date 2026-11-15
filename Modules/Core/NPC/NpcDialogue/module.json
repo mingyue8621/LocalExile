@@ -2,6 +2,8 @@
   "id": "NpcDialogue",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "NPC 对话",
+  "description": "城镇 NPC 与剧情 NPC 的对话、任务文本与选项。",
   "depends": [
     "Game"
   ],

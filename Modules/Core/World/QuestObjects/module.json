@@ -2,6 +2,8 @@
   "id": "QuestObjects",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "任务物件",
+  "description": "任务用到的场景物件与可交互道具。",
   "depends": [
     "Game"
   ],

@@ -2,6 +2,8 @@
   "id": "Delirium",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "谵妄迷雾",
+  "description": "地图与野外会起雾，雾里不断刷出幻象怪，越往深处打奖励越好。",
   "depends": ["Game"],
   "assembly": "bin/delirium.dll"
 }

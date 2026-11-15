@@ -2,6 +2,8 @@
   "id": "CurrencyExchange",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "通货兑换",
+  "description": "浮士德处的通货兑换，价格跟着实时行情走，不是写死的。",
   "depends": [
     "Game"
   ],

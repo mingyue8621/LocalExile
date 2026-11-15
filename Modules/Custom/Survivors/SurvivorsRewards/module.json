@@ -2,6 +2,8 @@
   "id": "SurvivorsRewards",
   "version": "1.0.0",
   "kind": "feature",
+  "name": "生存模式·奖励",
+  "description": "幸存者玩法结束后的奖励与奖励窗口。",
   "depends": ["Game", "SurvivorsSkills"],
   "assembly": "bin/survivorsrewards.dll"
 }
