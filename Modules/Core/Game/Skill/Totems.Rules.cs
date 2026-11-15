@@ -60,10 +60,13 @@ public static partial class Game
         if (SkillsFor(conn).EffectId(effect) is { } id && TotemAuras.ContainsKey(id)
             && TotemVarieties.Value.Effects.TryGetValue(effect, out int native))
             return Monsters.Find(native.ToString()) is { Supported: true } aura ? aura : null;
-        if (!SpellTotemEffect(conn, effect) && !BallistaEffect(conn, effect)) return null;
-        // Prefer a dedicated native skin; generic spell/ballista proxies use intelligence/dexterity skins 3/2.
+        // A native totem gem (Holy Flame Totem, Shockwave Totem, Ancestral Protector …) is a totem of its own: its
+        // ActiveSkills row names the skin, and no support totemifies it. Asking SpellTotemEffect first hid every one of
+        // them — the skill fell through to a self-cast and no totem was ever created (live 2026-11-15: "no totem model").
         if (TotemVarieties.Value.Effects.TryGetValue(effect, out int specific)
-            && Monsters.Find(specific.ToString()) is { Supported: true } nativeSpell) return nativeSpell;
+            && Monsters.Find(specific.ToString()) is { Supported: true } own) return own;
+        if (!SpellTotemEffect(conn, effect) && !BallistaEffect(conn, effect)) return null;
+        // Generic spell/ballista proxies use the intelligence/dexterity skins 3/2.
         return TotemVarieties.Value.Skins.TryGetValue(BallistaEffect(conn, effect) ? 2 : 3, out int generic)
             && Monsters.Find(generic.ToString()) is { Supported: true } spell ? spell : null;
     }
@@ -151,9 +154,12 @@ public static partial class Game
         var playerStats = CharacterPlayerStats(conn);
         bool ballista = BallistaEffect(conn, effect) && GolemStat(own, "is_ranged_attack_totem") != 0;
         bool spellTotem = (SpellTotemEffect(conn, effect) || ballista) && IsTotemSkill(conn, skillId);
+        // A native totem gem (Holy Flame Totem, Shockwave Totem, Ancestral Protector …) casts its own skill: the proxy is
+        // the same effect with its is_totem cleared, as a Spell Totem's proxy is.
+        bool casts = spellTotem || IsTotemSkill(conn, skillId);
         var sourceGem = GemSkillEffects(conn).FirstOrDefault(g => g.Id == skillId).Gem;
-        var proxy = spellTotem ? TotemProxy(conn, skillId) : null;
-        if (spellTotem && proxy is null) return null;
+        var proxy = casts ? TotemProxy(conn, skillId) : null;
+        if (casts && proxy is null) return null;
         bool Valid() => CurrentGameWork && !conn.Closed && !conn.LeavingArea && conn.PlayerLife > 0 && current?.Invoke() != false;
         (int X, int Y) ClearPosition(uint objectId)
         {
@@ -166,13 +172,13 @@ public static partial class Game
         {
             double now = conn.Clock.Elapsed.TotalSeconds;
             var placed = new TotemState.Totem(objectId, skillId, place, life, now + seconds, aura)
-            { Effect = spellTotem ? effect : -1, SourceGem = sourceGem,
+            { Effect = casts ? effect : -1, SourceGem = sourceGem,
                 SourceHost = SupportedSkill(conn, skillId).Host, SourceItem = SupportedSkill(conn, skillId).SourceGem };
             int ordinaryLimit = (int)Math.Clamp((long)BaseTotemsAllowed + GolemStat(playerStats, "number_of_additional_totems_allowed")
                 + (GolemStat(playerStats, "keystone_ancestral_bond") != 0 ? 1 : 0), 0, int.MaxValue);
             placed.Ballista = ballista;
             placed.BonusSlots = ballista ? Math.Max(0, limit - ordinaryLimit) : 0;
-            if (spellTotem) BindTotemSource(conn, placed);
+            if (casts) BindTotemSource(conn, placed);
             var replaced = conn.Totems.Place(placed, limit, now, ordinaryLimit);
             if (replaced.Count > 0) TotemsDiedLocked(conn, now, playerStats);
             // A totem blocks paths on the client as any body does.

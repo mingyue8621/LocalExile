@@ -133,6 +133,19 @@ public static partial class Game
                 });
                 continue;
             }
+            // A melee or area totem (Ancestral Protector, Shockwave Totem …) lands its own skill from where it stands: the
+            // skill's reach, angle and damage, hit exactly as the player's own use of it would be.
+            if (!UsesProjectileRuntime(gem.Effect))
+            {
+                session.Runtime.Schedule(Math.Max(session.Runtime.Now, ProjectileRuntime.Time(totem.NextCast)), () =>
+                {
+                    if (!session.Active || !ReferenceEquals(lifetime, CombatLifetime) || !SpellTotemCurrent(conn, totem)
+                        || conn.Monsters.GetValueOrDefault(target.Key) != target.Value) return;
+                    _ = AreaSkillHit(remote, stream, ciphers, conn, totem.SkillId, gem, totem.At, aim,
+                        immediate: true, sequence: sequence);
+                });
+                continue;
+            }
             session.Schedule(ProjectileRuntime.Time(totem.NextCast),
                 () => ReferenceEquals(lifetime, CombatLifetime) && SpellTotemCurrent(conn, totem),
                 () =>

@@ -2686,6 +2686,16 @@ Ranged placement is 0.5 s since 3.28, despite older Totem references listing 0.3
 Unimplemented payloads, including Artillery's mortar sequence and Focused Ballista's owner-attack gate, are refused
 before action/cost admission. Enemy targeting of totems, placement range and the aura buff's totem source remain open.
 
+**Native totem gems** (Holy Flame Totem, Shockwave Totem, Decoy Totem, Devouring Totem, Searing Bond, Ancestral
+Protector, Ancestral Blademaster, Ancestral Warchief) place their own totem, resolved the same way: their
+`ActiveSkills.SkillTotemId` → `SkillTotemVariations` skin 0 → variety 2329/2277/2297/2307/2341/4925/4927. Before
+2026-11-15 `TotemVariety` asked `SpellTotemEffect` first, which excludes any skill of totem type 47, so none of them
+resolved: the cast fell through to a self-cast and no totem object was ever created ("no totem model"). The proxy of a
+native totem is its own effect with `is_totem` cleared, and the tick releases it as a projectile skill where the runtime
+carries one (Holy Flame Totem) or as the skill's own area hit from the totem's cell otherwise (the Ancestral totems'
+melee, Shockwave Totem's nova). Decoy, Devouring and Searing Bond stand with their model and Life; their taunt, corpse
+and beam payloads are not implemented.
+
 ## 10h. Player minions that fight
 
 A player minion is a monster on the player's team kept in `ClientState.Monsters` and listed in `ClientState.Minions`
