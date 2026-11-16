@@ -313,6 +313,9 @@ public sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange
     // hits read.
     public double TauntedUntil = double.NegativeInfinity, TauntShownUntil;
     public ushort TauntBuff;
+    /// <summary>A Decoy Totem's taunt: the totem object whose hits this monster now takes, and when that taunt ends.</summary>
+    public uint TauntTotemId;
+    public double TauntTotemUntil = double.NegativeInfinity;
     // Intimidated and unnerved by his hits (Game.HitDebuffsOnHitLocked) until when, shown the same way as the taunt.
     public double IntimidatedUntil = double.NegativeInfinity, IntimidateShownUntil, UnnervedUntil = double.NegativeInfinity,
         UnnerveShownUntil;

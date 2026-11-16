@@ -1888,6 +1888,8 @@ public static partial class Game
     {
         // A retired producer is refused before recording an accepted hit or touching any current resource state.
         if (!CurrentGameWork) return null;
+        // A Decoy Totem's taunt sends this hit to the totem's own life instead of the player's pools.
+        if (TauntedTotemHitLocked(conn, m, a, now, CharacterPlayerStats(conn))) return null;
         int priorContacts = conn.RecentEnemyHits.Count(now);
         using var defenceTime = FortificationOf(conn).Capture(now);
         // Resolve lazy final defences here, never at AI collection or before a queued echo/pause wait.

@@ -110,6 +110,10 @@ public static partial class Game
         foreach (var totem in conn.Totems.Living(now).Where(t => t.Effect >= 0).ToArray())
         {
             if (!SpellTotemCurrent(conn, totem)) { totem.DiedAt = now; continue; }
+            // Decoy's taunt is refreshed every tick (not only when its cast timer comes around) so a monster that
+            // walks into the radius is taunted at once and the buff never lapses while the totem stands.
+            if (SkillsFor(conn).EffectId(totem.Effect) is "DecoyTotem")
+                DecoyTauntLocked(conn, totem, now, SkillsFor(conn).CooldownMs(totem.Effect, 1) / 1000.0);
             if (conn.Paused || now < totem.NextCast) continue;
             // A lockstep client's totem exists from the end of the frame its create is written in: no order before that.
             if (conn.LockstepClient && !conn.WorldOutput.PublishedObject(totem.Id).IsReady) continue;

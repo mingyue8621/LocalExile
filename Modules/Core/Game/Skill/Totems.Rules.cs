@@ -319,6 +319,46 @@ public static partial class Game
         return (keptNonChaos, keptChaos);
     }
 
+    /// <summary>Decoy Totem taunts the hostile living monsters inside its range (Decoy's own <c>base_totem_range</c>),
+    /// refreshed every totem tick for as long as it lives. They then hit the totem instead of the player (wiki: Decoy
+    /// Totem "taunts nearby monsters to attack it"). The player's taunted buff is shown too, so the client draws it.</summary>
+    public static void DecoyTauntLocked(ClientState conn, TotemState.Totem totem, double now, double seconds)
+    {
+        if (seconds <= 0 || SkillsFor(conn).EffectId(totem.Effect) != "DecoyTotem") return;
+        double range = TotemTargetRange(conn, totem.SkillId);
+        foreach (var m in conn.Monsters.Values)
+        {
+            if (m.Dead || m.Life == 0 || !m.Hostile || Dist(m.Walk.Position(now), totem.At) > range) continue;
+            m.TauntTotemId = totem.Id;
+            m.TauntTotemUntil = now + seconds;
+            m.TauntedUntil = Math.Max(m.TauntedUntil, now + seconds / m.RecipientDebuffRate);
+        }
+    }
+
+    /// <summary>A taunted monster's hit lands on the Decoy Totem instead of the player: the totem's own life pays the
+    /// rolled attack, and a totem that reaches zero dies here (its presentation step sends the life update and death).
+    /// True when the hit was taken by the totem, so the player's damage pipeline runs no further.</summary>
+    public static bool TauntedTotemHitLocked(ClientState conn, SpawnedMonster m, MonsterAttack attack, double now,
+        IReadOnlyDictionary<uint, int> stats)
+    {
+        if (m.TauntTotemId == 0 || now >= m.TauntTotemUntil) return false;
+        if (conn.Totems.All.FirstOrDefault(t => t.Id == m.TauntTotemId && t.Alive(now)) is not { } totem)
+        {
+            m.TauntTotemId = 0;
+            return false;
+        }
+        int damage = Math.Max(1, (int)Math.Round(attack.Damage.AverageTotal));
+        totem.Life = (uint)Math.Max(0L, (long)totem.Life - damage);
+        if (totem.Life == 0)
+        {
+            totem.DiedAt = now;
+            TotemsDiedLocked(conn, now, stats);
+        }
+        Console.WriteLine($"[gateway] {CharacterName(conn)}'s Decoy Totem 0x{totem.Id:x} takes {damage} from {m.Label}"
+            + (totem.Life == 0 ? " and dies" : $" ({totem.Life} life left)"));
+        return true;
+    }
+
     // Totems died: with a living Unique enemy within the player's presence, Spirit of Kaom triggers (its node's
     // has_trigger_on_totem_death_in_presence_of_unique; the shared Spirit cooldown decides).
     static void TotemsDiedLocked(ClientState conn, double now, IReadOnlyDictionary<uint, int> stats)
