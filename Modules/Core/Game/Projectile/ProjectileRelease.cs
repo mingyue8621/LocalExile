@@ -197,6 +197,19 @@ public static partial class Game
         int Own(string key) => Stats.Key(key) is uint k ? own.GetValueOrDefault(k) : 0;
         int Get(string key) => Player(key) + Own(key);
         use = use with { Profile = ClientDrawnProfile(conn, use.Profile, Get, sequence, use.Aim - use.Origin, repeatsLeft, use.Emitter.Id) };
+        // A totem's proxy action does not draw its projectile on the client either (the Spark trace: the client's
+        // own action had no shot for the proxy). Give every server-simulated totem shot the projectile's native flight
+        // art and an object, or the totem stands there dealing damage with nothing visibly leaving it.
+        if (use.Emitter.Id != PlayerId && use.Payload is ProjectileOffense proxyShot
+            && SkillsFor(conn).Clips(use.Profile.Id) is { Flight: not null } proxyClips)
+        {
+            double flightSeconds = use.Profile.Range / Math.Max(1, use.Profile.Speed);
+            use = use with { Payload = proxyShot with
+            {
+                ClientPredicted = false,
+                Presentation = MonsterProjectilePresentation(proxyClips, flightSeconds)
+            } };
+        }
         if (SkillsFor(conn).EffectId(gem.Effect) == "SpectralThrow")
         {
             double thrown = use.Profile.Speed;

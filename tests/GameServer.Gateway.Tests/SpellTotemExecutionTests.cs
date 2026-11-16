@@ -550,6 +550,13 @@ public sealed class SpellTotemExecutionTests
         var profile = definition.Parameters.Resolve(Get, 900, false);
         Assert.Equal(3, profile.Count);
         Assert.Equal(-1, profile.Pierce);
+        var session = Game.ProjectilesFor("test", wire.Stream, wire.Ciphers, conn);
+        session.AdvanceTo(GameServer.Core.Projectiles.ProjectileRuntime.Time(totem.NextCast));
+        var emitted = session.Runtime.Projectiles.Where(p => p.Use.Emitter.Id == totem.Id).ToArray();
+        Assert.NotEmpty(emitted);
+        var shot = Assert.IsType<ProjectileOffense>(emitted[0].Use.Payload);
+        Assert.False(shot.ClientPredicted);
+        Assert.NotNull(shot.Presentation?.FlightClip);
         Program.SetGameLogic(previous!); Game.CombatLifetime = previousLifetime; lifetime.Stop(_ => { });
         PlayerInventories.Forget("HolyFlameTick"); TestEnvironment.ReleaseSaves(path);
         Assert.True(totem.NextCast > now);
