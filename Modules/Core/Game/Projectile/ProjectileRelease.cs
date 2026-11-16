@@ -52,7 +52,11 @@ public static partial class Game
     // Release still resolves again: equipment/stats may change during the ordinary cancellable windup.
     public static bool ProjectilePathAvailable(string remote, ClientState conn, ushort skillId, int effect)
     {
-        if (!TotemPathAvailable(conn, skillId, effect)) return false;
+        if (!TotemPathAvailable(conn, skillId, effect))
+        {
+            Console.WriteLine($"[gateway] {remote} {SkillsFor(conn).EffectId(effect)} unavailable: no placeable totem for this skill");
+            return false;
+        }
         if (!UsesProjectileRuntime(effect)) return true;
         try
         {

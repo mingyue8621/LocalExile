@@ -113,8 +113,17 @@ public sealed class SpellTotemExecutionTests
             skill = Equip(conn, "SkillGemArc", "SupportGemSpellTotem");
             gem = Game.SupportedSkill(conn, skill);
             Assert.True(Game.ProjectilePathAvailable("test", conn, skill, gem.Effect));
+            // A totem gem is a totem of its own and a Spell Totem support adds nothing to it: it still places its own
+            // totem skin. The old expectation (false) came from TotemPathAvailable gating on the aura table, which
+            // dropped every native totem gem — Decoy Totem was reported uncastable live 2026-11-16 because of it.
             skill = Equip(conn, "SkillGemShockwaveTotem", "SupportGemSpellTotem");
-            Assert.False(Game.ProjectilePathAvailable("test", conn, skill, Game.SupportedSkill(conn, skill).Effect));
+            Assert.True(Game.ProjectilePathAvailable("test", conn, skill, Game.SupportedSkill(conn, skill).Effect));
+            // Decoy Totem has no aura at all (its one job is to be hit) and still has to be placeable.
+            skill = Equip(conn, "SkillGemDecoyTotem", "SupportGemAddedFireDamage");
+            var decoy = Game.SupportedSkill(conn, skill);
+            Assert.True(Game.IsTotemSkill(conn, skill));
+            Assert.NotNull(Game.TotemVariety(conn, decoy.Effect));
+            Assert.True(Game.ProjectilePathAvailable("test", conn, skill, decoy.Effect));
             skill = Equip(conn, "SkillGemRejuvenationTotem", "SupportGemSpellTotem");
             Assert.NotNull(Game.TotemVariety(conn, Game.SupportedSkill(conn, skill).Effect));
             Assert.True(Game.ProjectilePathAvailable("test", conn, skill, Game.SupportedSkill(conn, skill).Effect));

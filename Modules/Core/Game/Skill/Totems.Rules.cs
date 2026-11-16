@@ -71,12 +71,14 @@ public static partial class Game
             && Monsters.Find(generic.ToString()) is { Supported: true } spell ? spell : null;
     }
 
+    // Whether a cast of this skill may place a totem at all. TotemVariety is the real gate: a native totem gem resolves
+    // its own skin from ActiveSkills.SkillTotemId, and a Spell Totem / Ballista-supported spell resolves the generic one.
+    // The aura table only describes Rejuvenation Totem's buff and used to sit in this condition, which silently dropped
+    // every native totem gem that has no aura — Decoy Totem among them (live 2026-11-16: "按了没反应", the cast was
+    // discarded at the 0x018e handler's ProjectilePathAvailable before any log).
     public static bool TotemPathAvailable(ClientState conn, ushort skill, int effect) => !IsTotemSkill(conn, skill)
         || PlacedKind(SupportedSkill(conn, skill)) is (false, false)
-            && TotemVariety(conn, effect) is not null && TotemLimit(conn, skill) > 0
-            && (TotemAuras.ContainsKey(SkillsFor(conn).EffectId(effect) ?? "")
-                || SpellTotemEffect(conn, effect) && TotemCastSeconds(conn, skill) is not null
-                || BallistaPathAvailable(conn, skill));
+            && TotemVariety(conn, effect) is not null && TotemLimit(conn, skill) > 0;
 
     // After placement pays its cost, the totem rises at the aimed point. Placement speed and owner action speed
     // scale this delay; the proxy's spell/weapon speed only controls its subsequent attacks.
