@@ -58,7 +58,16 @@ public static partial class Game
         {
             lock (conn.Monsters)
             {
-                if (!current() || conn.Closed || conn.LeavingArea || conn.PlayerLife == 0 || !conn.Layout.WalkableFor(aim.X, aim.Y, 0)) return null;
+                if (!current() || conn.Closed || conn.LeavingArea || conn.PlayerLife == 0)
+                {
+                    Console.WriteLine($"[gateway] {CharacterName(conn)}: {(kind.Mine ? "mine" : "trap")} placement cancelled (current/closed/dead)");
+                    return null;
+                }
+                if (!conn.Layout.WalkableFor(aim.X, aim.Y, 0))
+                {
+                    Console.WriteLine($"[gateway] {CharacterName(conn)}: {(kind.Mine ? "mine" : "trap")} 0x{skill:x4} aim ({aim.X}, {aim.Y}) is not walkable");
+                    return null;
+                }
                 var context = ReservationContext(conn, skill);
                 var reserve = kind.Mine ? SupportedReservation(conn, skill) : null;
                 uint id = conn.TakeObjectId();
@@ -71,10 +80,18 @@ public static partial class Game
                     SupportedHitFor(conn, skill, suppress: false), new Dictionary<uint, int>(gem.Stats),
                     reserve?.Flat ?? 0, reserve?.Percent ?? 0, context.Life, context.Efficiency) { LandAt = land, Landed = false };
                 conn.Placed.All.Add(id, placed);
-                if (!ReservationBudgetFits(conn)) { conn.Placed.All.Remove(id); return null; }
+                if (!ReservationBudgetFits(conn))
+                {
+                    Console.WriteLine($"[gateway] {CharacterName(conn)}: {(kind.Mine ? "mine" : "trap")} 0x{skill:x4} refused: reservation budget");
+                    conn.Placed.All.Remove(id); return null;
+                }
                 var bytes = new WorldRecordBuilder(conn, admission);
                 int limit = PlacedSkillLimit(conn, gem, kind.Mine);
-                if (limit == 0) { conn.Placed.All.Remove(id); return null; }
+                if (limit == 0)
+                {
+                    Console.WriteLine($"[gateway] {CharacterName(conn)}: {(kind.Mine ? "mine" : "trap")} 0x{skill:x4} refused: limit 0");
+                    conn.Placed.All.Remove(id); return null;
+                }
                 while (conn.Placed.All.Values.Count(p => p.Mine == kind.Mine) > limit)
                     RemovePlacedLocked(conn, conn.Placed.All.Values.Where(p => p.Mine == kind.Mine).MinBy(p => p.Armed)!, bytes);
                 string path = kind.Mine ? "Metadata/MiscellaneousObjects/RemoteMine" : TrapVisuals.Value.GetValueOrDefault(Get("trap_variation"), "Metadata/MiscellaneousObjects/LightningTrap");
@@ -86,7 +103,11 @@ public static partial class Game
                 if (Stats.Key("active_skill_base_area_of_effect_radius") is uint baseRadius)
                     payload[baseRadius] = SkillArea.BaseRadius(SkillsFor(conn).EffectId(gem.Effect), Get);
                 var proxy = SkillsFor(conn).FindByRow(0x4000, gem.Effect, gem.Level, [.. payload.Select(p => (p.Key, p.Value))]);
-                if (proxy is null) { conn.Placed.All.Remove(id); return null; }
+                if (proxy is null)
+                {
+                    Console.WriteLine($"[gateway] {CharacterName(conn)}: {(kind.Mine ? "mine" : "trap")} 0x{skill:x4} refused: no proxy for effect {gem.Effect}");
+                    conn.Placed.All.Remove(id); return null;
+                }
                 proxy = proxy with { Parent = (PlayerId, skill) };
                 var stats = new List<(uint, int)>();
                 foreach (var (name, value) in new[] { ("maximum_life", 1), ("uses_no_mana", 1),
@@ -101,6 +122,8 @@ public static partial class Game
                         bytes.Presentation(id, InstanceProtocol.ActionStarted(id, from.X, from.Y, aim.X, aim.Y, thrown, 0xffff, 0x0408));
                     bytes.Presentation(id, InstanceProtocol.MoveTo(id, aim.X, aim.Y, (float)flight, InstanceProtocol.FollowTerrain));
                 }
+                Console.WriteLine($"[gateway] {CharacterName(conn)}: {(kind.Mine ? "mine" : "trap")} 0x{id:x} created at ({aim.X}, {aim.Y}) "
+                    + $"as {path}, proxy {proxy}, lands in {flight:0.##} s, life {context.Life}");
                 born = id; landsAt = land;
                 conn.Placed.Dirty = true;
                 conn.Minions.StatRevision++;

@@ -495,7 +495,7 @@ public static partial class Game
     public sealed record SupportedHitInputs(GameServer.Core.World.DamagePacket Raw, Func<string, int> Get,
         GameServer.Core.World.DamageConversion Conversion, bool Attack, bool Melee, bool Area, bool Projectile,
         List<(string Name, int Value)> Modifiers, HashSet<int> Types, SkillHitPlan Plan, Dictionary<uint, int> Caster,
-        bool WieldingWand = false, bool WieldingBow = false);
+        bool WieldingWand = false, bool WieldingBow = false, bool Secondary = false);
 
     // charges: the removable charge counts a charge-spending use counted (Discharge), instead of the ones held now.
     // projectile: separates the projectile stage of hybrid melee-projectile attacks (such as Molten Strike) from the melee hit.
@@ -531,7 +531,10 @@ public static partial class Game
         if (!plan.CanHit) return null;
         var attackWeapon = attack ? weapon ?? WeaponFor(conn) : null;
         var coefficients = SkillsFor(conn).DamageCoefficients(gem.Effect, gem.Level);
-        var raw = attackWeapon is not null
+        // A secondary-damage skill carries its own range in the client's secondary_* stats: no added spell damage
+        // and no spell damage modifiers (the Bear Trap tooltip says exactly that).
+        var raw = plan.Kind == SkillHitKind.Secondary ? plan.SpellBaseWith(Get)
+            : attackWeapon is not null
             ? SupportedAttackDamage.Raw(attackWeapon, Get, coefficients.Base, coefficients.Added)
             : DamageStats.RawAdded(plan.SpellBaseWith(Get), Get, spell: true, AddedEffectiveness(conn, gem.Effect, gem.Level));
         if (!attack && addedChaos > 0)
@@ -559,7 +562,7 @@ public static partial class Game
             Melee: attack && types.Contains(19), Area: attack ? types.Contains(7) : Get("is_area_damage") != 0,
             Projectile: attack ? types.Contains(2) : Get("base_is_projectile") != 0, modifiers, types, plan, caster,
             WieldingWand: attackWeapon?.WieldingWand == true,
-            WieldingBow: attackWeapon?.Bow == true);
+            WieldingBow: attackWeapon?.Bow == true, Secondary: plan.Kind == SkillHitKind.Secondary);
     }
 
     public static GameServer.Core.World.DamagePacket SupportedHitFor(ClientState conn, ushort skillId, bool suppress, bool? area = null,
@@ -570,7 +573,7 @@ public static partial class Game
     // The supported hit from inputs already worked out (GemSkills reads one gem's inputs once for its hit and ailment rows).
     public static GameServer.Core.World.DamagePacket SupportedHitFrom(SupportedHitInputs inputs, bool suppress)
     {
-        var hit = PlayerHitDamage.Resolve(inputs.Raw, inputs.Get, inputs.Conversion, spell: !inputs.Attack,
+        var hit = PlayerHitDamage.Resolve(inputs.Raw, inputs.Get, inputs.Conversion, spell: !inputs.Attack && !inputs.Secondary,
             melee: inputs.Melee, area: inputs.Area, projectile: inputs.Projectile,
             supportModifiers: inputs.Modifiers, skillTypes: inputs.Types,
             wieldingBow: inputs.WieldingBow, wieldingWand: inputs.WieldingWand, retaliation: inputs.Attack && inputs.Types.Contains(120));
