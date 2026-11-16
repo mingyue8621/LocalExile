@@ -268,6 +268,8 @@ public static partial class Game
                         false, StartAction, out cooldownUse, requestedAt: at, admit: flicker ? FlickerAdmit : null))
                     {
                         if (noFlickerTarget) await FlickerRefused(remote, stream, ciphers, conn, gem.Name);
+                        else Console.WriteLine($"[gateway] {remote} skill 0x{use.SkillId:x4} {gem.Name}: refused before payment "
+                            + $"(cooldown reservation at t={at:0.000}; action {conn.ActionCount}, life {conn.PlayerLife}, mana {conn.PlayerMana})");
                         continue;
                     }
                 }

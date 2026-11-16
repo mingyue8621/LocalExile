@@ -841,7 +841,11 @@ public static partial class Game
         // Eligible uses arrive with their one original preflight reservation. Never reserve again after an await.
         if (cooldownUse is not null)
         {
-            if (!cooldownUse.TryExecute(conn, gem.Effect)) return false;
+            if (!cooldownUse.TryExecute(conn, gem.Effect))
+            {
+                Console.WriteLine($"[gateway] {remote} skill 0x{skillId:x4} {gem.Name}: cooldown use refused at execution");
+                return false;
+            }
             if (!cooldownUse.Instant)
             {
                 if (UsesProjectileRuntime(gem.Effect) || leap is not null) ProjectilesFor(remote, stream, ciphers, conn)
@@ -851,7 +855,10 @@ public static partial class Game
             if (!Current()) return false;
         }
         else if (gem.Name is not null && CooldownForSkill(conn, skillId) is not null)
+        {
+            Console.WriteLine($"[gateway] {remote} skill 0x{skillId:x4} {gem.Name}: cast arrived without its cooldown reservation");
             return false;
+        }
         // Multi-use and unsupported cooldown mechanics retain their existing raw-deadline behavior.
         else if (gem.Name is not null && SkillsFor(conn).CooldownMs(gem.Effect, gem.Level) is int cooldown and > 0)
         {
