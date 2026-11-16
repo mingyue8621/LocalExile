@@ -40,8 +40,13 @@ public static partial class Game
         };
     }
 
-    public static bool UsesProjectileRuntime(int effect) => Skills.IsProjectile(effect)
-        || ProjectileDefinition(Skills.EffectId(effect) ?? "") is not null;
+    // Only a skill with an executable recipe may enter the projectile simulator. A newer attack such as Volcanic
+    // Fissure is flagged is_projectile in the client but has no recipe: its player-side cast kept being refused by
+    // ProjectilePathAvailable ("no available projectile recipe/metadata"). Without a recipe there is nothing to
+    // simulate, so it falls back to its own attack hit, like any other melee/area skill with supported damage.
+    public static bool UsesProjectileRuntime(int effect) => (Skills.IsProjectile(effect)
+        || ProjectileDefinition(Skills.EffectId(effect) ?? "") is not null)
+        && ResolveProjectileDefinition(effect) is not null;
 
     // Presentation only: Burning Arrow's real local input emits its own primary. Keep its existing simulation
     // geometry separate from ClientPredicted, which also selects native range/contact/volley specialization.
