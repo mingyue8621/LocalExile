@@ -173,8 +173,15 @@ public static partial class Game
             }
             // A melee or area totem (Ancestral Protector, Shockwave Totem …) lands its own skill from where it stands: the
             // skill's reach, angle and damage, hit exactly as the player's own use of it would be.
-            if (!UsesProjectileRuntime(gem.Effect))
+            // Holy Flame Totem is flagged is_projectile but has no player-side projectile recipe (the client never
+            // gives one to a totem cast). Its release would throw "No projectile definition at release" in the
+            // projectile runtime and vanish, leaving a totem that stands without ever using its skill.
+            // Fall back to the totem's own area hit with the same skill stats, as melee/area totems do.
+            bool projectilePath = UsesProjectileRuntime(gem.Effect) && ResolveProjectileDefinition(gem.Effect) is not null;
+            if (!projectilePath)
             {
+                Console.WriteLine($"[gateway] totem 0x{totem.Id:x} {SkillsFor(conn).EffectId(gem.Effect)} uses its area hit "
+                    + "(no executable projectile recipe)");
                 session.Runtime.Schedule(Math.Max(session.Runtime.Now, ProjectileRuntime.Time(totem.NextCast)), () =>
                 {
                     if (!session.Active || !ReferenceEquals(lifetime, CombatLifetime) || !SpellTotemCurrent(conn, totem)

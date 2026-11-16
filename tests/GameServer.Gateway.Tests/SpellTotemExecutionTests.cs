@@ -511,6 +511,40 @@ public sealed class SpellTotemExecutionTests
         }
         public void Dispose() { reader.Dispose(); writer.Dispose(); listener.Stop(); drain.GetAwaiter().GetResult(); }
     }
+
+    [Fact]
+    public void Holy_flame_totem_fires_when_a_monster_is_in_range()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"holyflame-{Guid.NewGuid():N}.db");
+        var previous = Program.GameLogicOrNull;
+        var previousLifetime = Game.CombatLifetime;
+        var lifetime = new ModuleLifetime("Game");
+        Saves.Open(path); Game.CombatLifetime = lifetime;
+        Program.SetGameLogic(new GameServer.Modules.Game.GameLogic());
+        var conn = Connection("HolyFlameTick");
+        var items = Game.ItemsOf(conn);
+        foreach (var old in items.EquipmentSnapshot().Where(e => e.Row == PlayerInventories.Weapon1))
+            items.Remove(PlayerInventories.Weapon1, old.Item.Id);
+        var sword = ItemCatalog.Create(Program.Items.Find("Metadata/Items/Weapons/OneHandWeapons/OneHandSwords/OneHandSword1")!);
+        items.Add(PlayerInventories.Weapon1, 0, 0, sword with
+        { Sockets = [new(SocketColour.White, Gem("SkillGemFlameTotem"))], Links = [1] });
+        ushort skill = Game.GemSkillEffects(conn).Single().Id;
+        var source = Game.SupportedSkill(conn, skill);
+        var gem = Game.GemSkillEffects(conn).Single();
+        double now = conn.Clock.Elapsed.TotalSeconds;
+        var totem = new TotemState.Totem(777, skill, (100, 100), 100, now + 60, null)
+        { Effect = gem.Effect, SourceGem = gem.Gem, SourceHost = source.Host, SourceItem = source.SourceGem };
+        conn.Totems.Place(totem, 1, now);
+        conn.Monsters[901] = new("target", new(110, 100, 0), 60, 5, 10000) { Hostile = true };
+        using var wire = new Wire();
+        var bytes = new List<byte>();
+        Game.TickSpellTotemsLocked("test", wire.Stream, wire.Ciphers, conn, bytes);
+        Assert.True(Game.SpellTotemCurrent(conn, totem));
+        Program.SetGameLogic(previous!); Game.CombatLifetime = previousLifetime; lifetime.Stop(_ => { });
+        PlayerInventories.Forget("HolyFlameTick"); TestEnvironment.ReleaseSaves(path);
+        Assert.True(totem.NextCast > now);
+        Assert.NotEmpty(bytes);
+    }
 }
 
 
