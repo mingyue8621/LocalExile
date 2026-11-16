@@ -904,7 +904,14 @@ public static partial class Game
         // dropped piles at the edge of the radius, which is what made auto-loot work only sometimes (live 2026-11-13).
         var at = conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
         double radius = SystemSettings.Default.GoldAutoLootRadius;
-        foreach (var (id, gold) in conn.Instance.Ground.Within(at.X, at.Y, radius, IsGold))
+        var piles = conn.Instance.Ground.Within(at.X, at.Y, radius, IsGold).ToArray();
+        if (piles.Length > 0)
+            Console.WriteLine($"[gateway] {remote} auto-loot probe: {piles.Length} gold pile(s) within {radius:0.#} "
+                + $"of ({at.X}, {at.Y})");
+        else if (conn.Instance.Ground.Within(at.X, at.Y, radius * 4, IsGold).Count is int wide and > 0)
+            Console.WriteLine($"[gateway] {remote} auto-loot probe: {wide} gold pile(s) within {radius * 4:0.#} "
+                + $"but none within {radius:0.#} of ({at.X}, {at.Y})");
+        foreach (var (id, gold) in piles)
         {
             if (!await PickUpGold(remote, stream, ciphers, conn, id, gold, "auto-looted", at))
                 Console.WriteLine($"[gateway] {remote} gold 0x{id:x} at ({gold.GridX}, {gold.GridY}) stayed on the ground: "
