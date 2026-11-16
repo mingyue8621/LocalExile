@@ -14,7 +14,8 @@ public static class GatewayProjectileSkillProfiles
     public static IReadOnlyList<string> Effects { get; } = Array.AsReadOnly(new[]
         { "Fireball", "KineticBlast", "KineticBlastAltX", "KineticBlastAltY",
             "KineticBolt", "KineticBoltAltX", "KineticBoltAltY",
-            "MoltenStrike", "MoltenStrikeAltX", "MoltenStrikeAltY", "VaalMoltenStrike" });
+            "MoltenStrike", "MoltenStrikeAltX", "MoltenStrikeAltY", "VaalMoltenStrike",
+            "VolcanicFissure" });
 
     static readonly HashSet<string> CannotReturn = new(StringComparer.Ordinal)
     {
@@ -96,6 +97,24 @@ public static class GatewayProjectileSkillProfiles
                 CannotChain = get("molten_strike_projectiles_chain_when_impacting_ground") == 0,
                 EndArea = new("molten-strike", 0),
                 EndAreaReasons = new HashSet<ProjectileEndReason> { ProjectileEndReason.Landing, ProjectileEndReason.Terrain }
+            };
+        // Volcanic Fissure: the slam sends a crack to the aim and the molten bursts erupt along it. The client's
+        // Projectiles row (VolcanicSlamMortar) is not named after the effect, so the catalog lookup finds nothing;
+        // the explicit recipe in ProjectileSkills supplies it. Six lava mortars (one base plus the gem's additional
+        // projectiles) lob out along the aim and leave burning areas where they land. The -50% hit/ailment damage
+        // with projectiles comes from the skill's own active_skill_hit_ailment_damage_with_projectile_+%_final.
+        else if (effect == "VolcanicFissure")
+            p = p with
+            {
+                // The client shows six: base_number_of_projectiles (5) plus the implicit one; the gem's own
+                // volcanic_fissure_number_of_additional_projectiles is added on top when present.
+                Count = Math.Max(1, get("base_number_of_projectiles") + 1
+                    + Math.Max(0, get("volcanic_fissure_number_of_additional_projectiles"))),
+                Lobbed = true, DirectDamage = false,
+                CannotPierce = true, CannotFork = true, CannotSplit = true, CannotReturn = true,
+                EndArea = new("volcanic-fissure", 0),
+                EndAreaReasons = new HashSet<ProjectileEndReason> { ProjectileEndReason.Landing, ProjectileEndReason.Terrain },
+                NativeVolley = new() { FixedDegrees = 18 }
             };
 
         // Arrow Nova's payload and circular volley. The child count keeps this stage's base count; the shared modifier

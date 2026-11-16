@@ -9,6 +9,11 @@ public static partial class Game
             if (Skills.ProjectileFor(Skills.EffectRow(effect)) is { } projectile)
                 definitions.Add(effect, SkillProjectileDefinition(effect, projectile.Id,
                     SkillProjectileParameters(effect, projectile.Id)));
+        // Volcanic Fissure's lava erupts from VolcanicSlamMortar, a Projectiles row named after Volcanic Slam rather
+        // than the gem. Register it explicitly or the catalog lookup leaves the skill without a recipe.
+        const string fissureProjectile = "Metadata/Projectiles/VolcanicSlamMortar";
+        definitions["VolcanicFissure"] = SkillProjectileDefinition("VolcanicFissure", fissureProjectile,
+            SkillProjectileParameters("VolcanicFissure", fissureProjectile));
     }
 
     static partial void ConfigureCatalogProjectileDefinition(int effect, ref ProjectileSkillDefinition? definition)
