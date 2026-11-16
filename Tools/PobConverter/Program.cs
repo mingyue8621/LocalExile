@@ -62,13 +62,17 @@ var nodes = (spec.Attribute("nodes")?.Value ?? "")
     .ToList();
 
 // Which of them are ordinary nodes: PassiveSkills' AscendancyKey is null for them and set on ascendancy nodes.
-var (ordinary, ascendancyNodes, unknown) = Classify(nodes, dataFolder);
+var (ordinary, ascendancyNodes, masteryNodes, expansionNodes, unknown) = Classify(nodes, dataFolder);
 if (unknown.Count > 0)
     warnings.Add($"{unknown.Count} node(s) are not in this server's passive table (a build for another game version?): "
         + string.Join(", ", unknown.Take(12)) + (unknown.Count > 12 ? " …" : ""));
 if (ascendancyNodes.Count > 0)
     warnings.Add($"{ascendancyNodes.Count} ascendancy node(s) are not imported"
         + (ascendancy.Length > 0 ? $" ({ascendancy}: the points come from the Labyrinth's awards)." : "."));
+if (masteryNodes.Count > 0)
+    warnings.Add($"{masteryNodes.Count} 精通（Mastery）点未导入：精通所选的词缀在 PoB 里另存，还没跟着搬过来。");
+if (expansionNodes.Count > 0)
+    warnings.Add($"{expansionNodes.Count} 个星团珠宝（集群）节点未导入：它们要靠珠宝本身，装备目前不导入。");
 warnings.Add("Equipment, gems, flasks and jewels are not imported: the build's items stay as they are.");
 
 var save = new JsonObject
@@ -85,6 +89,8 @@ var result = new JsonObject
     ["Save"] = save,
     ["Summary"] = $"{className}{Localised(className)} 等级 {level}: {ordinary.Count} 个天赋点已导入"
         + (ascendancyNodes.Count > 0 ? $"，另有 {ascendancyNodes.Count} 个升华点未导入" : "")
+        + (masteryNodes.Count > 0 ? $"，{masteryNodes.Count} 个精通点未导入" : "")
+        + (expansionNodes.Count > 0 ? $"，{expansionNodes.Count} 个星团节点未导入" : "")
         + "；装备与宝石保持原样。",
     ["Warnings"] = new JsonArray(warnings.Select(text => (JsonNode)text).ToArray()),
 };
@@ -114,13 +120,21 @@ static string Decode(string code)
     return fallback.ReadToEnd();
 }
 
-// The ordinary nodes, the ascendancy ones and the ids the server's passive table does not know.
-static (List<ushort> Ordinary, List<ushort> Ascendancy, List<ushort> Unknown) Classify(List<ushort> nodes, string dataFolder)
+// The ordinary nodes, and the ones left out with the reason: ascendancy (its points come from the Labyrinth), a mastery
+// icon (the chosen effect lives in the spec's masteryEffects, not yet imported), an expansion/cluster socket (it needs the
+// cluster jewel the build's items would carry), and ids the server's passive table does not know.
+static (List<ushort> Ordinary, List<ushort> Ascendancy, List<ushort> Mastery, List<ushort> Expansion, List<ushort> Unknown)
+    Classify(List<ushort> nodes, string dataFolder)
 {
     var ordinary = new List<ushort>();
     var ascendancy = new List<ushort>();
+    var mastery = new List<ushort>();
+    var expansion = new List<ushort>();
     var unknown = new List<ushort>();
     var ascendancyIds = new HashSet<ushort>();
+    var masteryIds = new HashSet<ushort>();
+    var expansionIds = new HashSet<ushort>();
+    var startIds = new HashSet<ushort>();
     var known = new HashSet<ushort>();
     foreach (string candidate in new[] { Path.Combine(dataFolder, "tables", "PassiveSkills.json"), "data/tables/PassiveSkills.json" })
     {
@@ -131,7 +145,15 @@ static (List<ushort> Ordinary, List<ushort> Ascendancy, List<ushort> Unknown) Cl
         {
             if (!row.TryGetProperty("PassiveSkillGraphId", out var idElement) || !idElement.TryGetUInt16(out ushort id) || id == 0) continue;
             known.Add(id);
-            if (row.TryGetProperty("AscendancyKey", out var key) && key.ValueKind == JsonValueKind.Number) ascendancyIds.Add(id);
+            bool Flag(string name) => row.TryGetProperty(name, out var flag) && flag.ValueKind == JsonValueKind.True;
+            // A class start node is implicit on the tree (PassiveSkills lists the class it starts): allocating it is refused.
+            if (row.TryGetProperty("Characters", out var characters) && characters.ValueKind == JsonValueKind.Array
+                && characters.GetArrayLength() > 0) startIds.Add(id);
+            // An ascendancy node: its key, or the bloodline starts that carry no key.
+            if (row.TryGetProperty("AscendancyKey", out var key) && key.ValueKind == JsonValueKind.Number || Flag("IsAscendancyStartingNode"))
+                ascendancyIds.Add(id);
+            if (Flag("IsMastery") || Flag("IsJustIcon")) masteryIds.Add(id);
+            if (Flag("IsExpansion") || Flag("IsProxyPassive")) expansionIds.Add(id);
         }
         break;
     }
@@ -139,9 +161,12 @@ static (List<ushort> Ordinary, List<ushort> Ascendancy, List<ushort> Unknown) Cl
     {
         if (known.Count > 0 && !known.Contains(node)) unknown.Add(node);
         else if (ascendancyIds.Contains(node)) ascendancy.Add(node);
+        else if (masteryIds.Contains(node)) mastery.Add(node);
+        else if (expansionIds.Contains(node)) expansion.Add(node);
+        else if (startIds.Contains(node)) { }
         else ordinary.Add(node);
     }
-    return (ordinary, ascendancy, unknown);
+    return (ordinary, ascendancy, mastery, expansion, unknown);
 }
 
 static int ClassIndex(string name) => name switch
