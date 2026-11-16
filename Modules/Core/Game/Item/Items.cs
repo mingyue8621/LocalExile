@@ -927,7 +927,7 @@ public static partial class Game
         uint id, WorldItemObject ground, string how, (int X, int Y)? from = null)
     {
         string? why = null;
-        byte[]? update = null;
+        GroundPickup? taken = null;
         // Take the pile out of the ground here, under the lock, and only then send the removal. Doing the state change
         // inside Send's atGate meant a batch or a guarded send could drop the callback: the caller still saw "true"
         // although neither the ground nor the client changed, and no failure was ever logged.
@@ -952,20 +952,23 @@ public static partial class Game
                     else if (TakeGroundStack(conn, id, ground) is not { } pickup) why = "already taken";
                     else
                     {
-                        update = [.. InstanceProtocol.RemoveObject(id), .. pickup.Update];
+                        taken = pickup;
                         lock (conn.SeenGround) conn.SeenGround.Remove(id);
                     }
                 }
             }
         }
-        if (update is not null)
+        if (taken is not null)
         {
             Console.WriteLine($"[gateway] {remote} gold 0x{id:x} {how} (+{ground.Item.StackSize}): removed from ground");
-            await Send(remote, stream, ciphers, update, $"gold 0x{id:x} {how} (+{ground.Item.StackSize})");
+            // A lockstep client applies world removals only as OutputRecord.Remove in its world batch. Sending a bare
+            // 0x02bd here took the pile out of the server's ground but left the object on the player's screen forever.
+            await SendWorldRemoval(remote, stream, ciphers, conn, id, $"0x02bd remove gold 0x{id:x}");
+            await Send(remote, stream, ciphers, taken.Update, taken.Log);
         }
         else if (why is not null)
             Console.WriteLine($"[gateway] {remote} gold 0x{id:x} not picked up ({how}): {why}");
-        return update is not null;
+        return taken is not null;
     }
 
 
