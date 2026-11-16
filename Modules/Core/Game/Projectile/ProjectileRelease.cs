@@ -57,6 +57,10 @@ public static partial class Game
             Console.WriteLine($"[gateway] {remote} {SkillsFor(conn).EffectId(effect)} unavailable: no placeable totem for this skill");
             return false;
         }
+        // A totem's projectile is fired by its proxy from the totem's cell, not by the player's cast: the placement
+        // gate above is the one that matters here. Holy Flame Totem's active skill is flagged is_projectile but has
+        // no player-side projectile recipe, so it was refused before the totem could ever be placed.
+        if (IsTotemSkill(conn, skillId)) return true;
         if (!UsesProjectileRuntime(effect)) return true;
         try
         {

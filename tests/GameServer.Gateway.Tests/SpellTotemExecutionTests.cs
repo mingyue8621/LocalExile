@@ -118,6 +118,13 @@ public sealed class SpellTotemExecutionTests
             // dropped every native totem gem — Decoy Totem was reported uncastable live 2026-11-16 because of it.
             skill = Equip(conn, "SkillGemShockwaveTotem", "SupportGemSpellTotem");
             Assert.True(Game.ProjectilePathAvailable("test", conn, skill, Game.SupportedSkill(conn, skill).Effect));
+            // Holy Flame Totem's active skill is flagged is_projectile but the player never fires its projectile:
+            // the totem's proxy does. The cast must pass the projectile gate (live 2026-11-16: "no available
+            // projectile recipe/metadata" refused every cast before the totem could be placed).
+            skill = Equip(conn, "SkillGemFlameTotem", "SupportGemAddedFireDamage");
+            var flame = Game.SupportedSkill(conn, skill);
+            Assert.True(Game.IsTotemSkill(conn, skill));
+            Assert.True(Game.ProjectilePathAvailable("test", conn, skill, flame.Effect));
             // Decoy Totem has no aura at all (its one job is to be hit) and still has to be placeable.
             skill = Equip(conn, "SkillGemDecoyTotem", "SupportGemAddedFireDamage");
             var decoy = Game.SupportedSkill(conn, skill);
