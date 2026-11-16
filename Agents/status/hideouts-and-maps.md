@@ -258,7 +258,9 @@
   自动化检查覆盖报文格式；实机开窗核对待做。
   配方解锁与应用工艺现在已实现；见 protocol/21-hideouts.md。
 - Hideout editing moves and rotates installed furniture, the waypoint and NPCs through native C→S 0x5b.
-  Placements persist per character/template; runtime interactions and path blockers follow the moved objects.
+  Selection, placements and Monster Statues persist per account/template; legacy homes migrate from the first
+  character with a selected hideout (an explicit migration source can be configured). Cross-character client verification pending.
+  Runtime interactions and path blockers follow the moved objects.
   Every template of the selected hideout is editable: one without a captured walk map leaves cell checks to the client.
   Furniture moves send 0x161 to rebuild native hideout model collision without changing object ids.
   Server blockers are registered again at saved positions on entry.
@@ -401,3 +403,12 @@
 - 地图装置：没有行走地图抓取的地图会把玩家丢在任意格子（海滩有抓取）；竞技场大门落在其配对物旁边而不是传送垫上；
   传送门看起来像玩家传送门；已打开的地图在 Gateway 重启后丢失
   （[21](../docs/protocol/21-hideouts.md) §5 的 "Open"）。
+- Hideouts: adding/removing decorative trees/tents and changing decoration appearance are not implemented.
+  Personal template selection, saved home login and functional furniture placement are implemented
+  ([21](../docs/protocol/21-hideouts.md)).
+- Map device: a map without a walk-map capture puts the player at an arbitrary cell (Beach is captured);
+  such a map now gets a random seed instead of seed 1, which is the seed captures are dumped at — pinning it there handed
+  the client a layout it could not build and it exited (`MapWorldsColosseum`: "no suitable room found … cage_turn");
+  the arena gates land next to their pair, not on the telepads;
+  the portals look like player portals; the open map is lost on a Gateway restart
+  ([21](../docs/protocol/21-hideouts.md) §5, "Open").
