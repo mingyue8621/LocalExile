@@ -540,6 +540,16 @@ public sealed class SpellTotemExecutionTests
         var bytes = new List<byte>();
         Game.TickSpellTotemsLocked("test", wire.Stream, wire.Ciphers, conn, bytes);
         Assert.True(Game.SpellTotemCurrent(conn, totem));
+        Assert.True(Game.IsTotemSkill(conn, skill));
+        var definition = Game.ResolveProjectileDefinition(gem.Effect);
+        Assert.NotNull(definition);
+        Assert.Equal("Metadata/Projectiles/TotemHolyFireSpray", definition!.Metadata);
+        var stats = Game.SupportedSkill(conn, skill).Stats;
+        var merged = Game.MergeSkillStats(Game.CharacterPlayerStats(conn), stats);
+        int Get(string name) => Program.Stats.Key(name) is uint k ? merged.GetValueOrDefault(k) : 0;
+        var profile = definition.Parameters.Resolve(Get, 900, false);
+        Assert.Equal(3, profile.Count);
+        Assert.Equal(-1, profile.Pierce);
         Program.SetGameLogic(previous!); Game.CombatLifetime = previousLifetime; lifetime.Stop(_ => { });
         PlayerInventories.Forget("HolyFlameTick"); TestEnvironment.ReleaseSaves(path);
         Assert.True(totem.NextCast > now);

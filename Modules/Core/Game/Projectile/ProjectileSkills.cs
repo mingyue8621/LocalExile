@@ -14,6 +14,10 @@ public static partial class Game
         const string fissureProjectile = "Metadata/Projectiles/VolcanicSlamMortar";
         definitions["VolcanicFissure"] = SkillProjectileDefinition("VolcanicFissure", fissureProjectile,
             SkillProjectileParameters("VolcanicFissure", fissureProjectile));
+        // The totem's flame spray is likewise catalogued under the totem's name, not the gem's.
+        const string holyFlameProjectile = "Metadata/Projectiles/TotemHolyFireSpray";
+        definitions["HolyFlameTotem"] = SkillProjectileDefinition("HolyFlameTotem", holyFlameProjectile,
+            SkillProjectileParameters("HolyFlameTotem", holyFlameProjectile));
     }
 
     static partial void ConfigureCatalogProjectileDefinition(int effect, ref ProjectileSkillDefinition? definition)

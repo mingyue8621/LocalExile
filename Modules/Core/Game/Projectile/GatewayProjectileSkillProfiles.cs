@@ -15,7 +15,7 @@ public static class GatewayProjectileSkillProfiles
         { "Fireball", "KineticBlast", "KineticBlastAltX", "KineticBlastAltY",
             "KineticBolt", "KineticBoltAltX", "KineticBoltAltY",
             "MoltenStrike", "MoltenStrikeAltX", "MoltenStrikeAltY", "VaalMoltenStrike",
-            "VolcanicFissure" });
+            "VolcanicFissure", "HolyFlameTotem" });
 
     static readonly HashSet<string> CannotReturn = new(StringComparer.Ordinal)
     {
@@ -98,6 +98,19 @@ public static class GatewayProjectileSkillProfiles
                 EndArea = new("molten-strike", 0),
                 EndAreaReasons = new HashSet<ProjectileEndReason> { ProjectileEndReason.Landing, ProjectileEndReason.Terrain }
             };
+        // Holy Flame Totem sprays native TotemHolyFireSpray flame bolts from the totem each tick. Its Projectiles
+        // row is named after the totem, not the gem, so the catalog lookup needs the explicit recipe in
+        // ProjectileSkills; three piercing bolts, as the client tooltip says.
+        else if (effect == "HolyFlameTotem")
+            p = p with
+            {
+                // The totem's own row supplies the three bolts directly (unlike Volcanic Fissure's base + implicit).
+                Count = Math.Max(1, get("base_number_of_projectiles")),
+                Pierce = -1, // the engine's "always pierce" marker, as the tooltip says
+                CannotReturn = true,
+                NativeVolley = new() { FixedDegrees = 8 }
+            };
+
         // Volcanic Fissure: the slam sends a crack to the aim and the molten bursts erupt along it. The client's
         // Projectiles row (VolcanicSlamMortar) is not named after the effect, so the catalog lookup finds nothing;
         // the explicit recipe in ProjectileSkills supplies it. Six lava mortars (one base plus the gem's additional
