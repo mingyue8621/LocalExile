@@ -927,31 +927,47 @@ public static partial class Game
         uint id, WorldItemObject ground, string how, (int X, int Y)? from = null)
     {
         string? why = null;
-        await Send(remote, stream, ciphers, [], $"gold 0x{id:x} {how} (+{ground.Item.StackSize})", atGate: () =>
+        byte[]? update = null;
+        // Take the pile out of the ground here, under the lock, and only then send the removal. Doing the state change
+        // inside Send's atGate meant a batch or a guarded send could drop the callback: the caller still saw "true"
+        // although neither the ground nor the client changed, and no failure was ever logged.
+        lock (conn.Monsters)
         {
-            lock (conn.Monsters)
+            if (!CurrentGameWork) why = "game work retired";
+            else if (conn.Closed || conn.LeavingArea) why = "connection closed";
+            else if (conn.PlayerLife == 0 || conn.Paused) why = "dead or paused";
+            else if (HardcoreProgressBlocked(conn)) why = "hardcore progress blocked";
+            else if (!GameEvents.AllowsLoot(conn)) why = "loot suppressed";
+            else if (!IsGold(ground)) why = "not gold any more";
+            else
             {
-                if (!CurrentGameWork) return null;
-                if (conn.Closed || conn.LeavingArea) return null;
-                if (conn.PlayerLife == 0 || conn.Paused) return null;
-                if (HardcoreProgressBlocked(conn)) { why = "hardcore progress blocked"; return null; }
-                if (!GameEvents.AllowsLoot(conn)) { why = "loot suppressed"; return null; }
-                if (!IsGold(ground)) { why = "not gold any more"; return null; }
                 var measuredFrom = from ?? conn.Walk.Position(conn.Clock.Elapsed.TotalSeconds);
                 double radius = SystemSettings.Default.GoldAutoLootRadius;
                 if (how == "auto-looted" && Dist(measuredFrom, (ground.GridX, ground.GridY)) > radius)
-                { why = $"out of the {radius:0.#}-cell auto-loot radius"; return null; }
-                var (by, shared) = conn.Instance.Ground.Origin(id);
-                if (!shared && !ReferenceEquals(by, conn)) { why = "another character's drop"; return null; }
-                if (TakeGroundStack(conn, id, ground) is not { } pickup) { why = "already taken"; return null; }
-                lock (conn.SeenGround) conn.SeenGround.Remove(id);
-                return [.. InstanceProtocol.RemoveObject(id), .. pickup.Update];
+                    why = $"out of the {radius:0.#}-cell auto-loot radius";
+                else
+                {
+                    var (by, shared) = conn.Instance.Ground.Origin(id);
+                    if (!shared && !ReferenceEquals(by, conn)) why = "another character's drop";
+                    else if (TakeGroundStack(conn, id, ground) is not { } pickup) why = "already taken";
+                    else
+                    {
+                        update = [.. InstanceProtocol.RemoveObject(id), .. pickup.Update];
+                        lock (conn.SeenGround) conn.SeenGround.Remove(id);
+                    }
+                }
             }
-        });
-        if (why is not null && how != "auto-looted")
+        }
+        if (update is not null)
+        {
+            Console.WriteLine($"[gateway] {remote} gold 0x{id:x} {how} (+{ground.Item.StackSize}): removed from ground");
+            await Send(remote, stream, ciphers, update, $"gold 0x{id:x} {how} (+{ground.Item.StackSize})");
+        }
+        else if (why is not null)
             Console.WriteLine($"[gateway] {remote} gold 0x{id:x} not picked up ({how}): {why}");
-        return why is null;
+        return update is not null;
     }
+
 
     public sealed record GroundPickup(byte[] Update, string Log, uint RestId = 0, WorldItemObject? Rest = null);
 
