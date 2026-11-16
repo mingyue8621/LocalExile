@@ -941,6 +941,8 @@ public static partial class Game
                 return [.. InstanceProtocol.RemoveObject(id), .. pickup.Update];
             }
         });
+        if (why is not null && how != "auto-looted")
+            Console.WriteLine($"[gateway] {remote} gold 0x{id:x} not picked up ({how}): {why}");
         return why is null;
     }
 
