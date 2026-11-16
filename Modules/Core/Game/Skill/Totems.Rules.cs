@@ -96,7 +96,10 @@ public static partial class Game
         var source = SupportedSkill(conn, skillId);
         bool SourceCurrent() => SupportedSkill(conn, skillId) is var live && live.Host == source.Host
             && SameTotemSource(source, live) && IsTotemSkill(conn, skillId);
-        bool Valid() => CurrentGameWork && ReferenceEquals(lifetime, CombatLifetime) && current() && SourceCurrent()
+        // A quick tap ends the client's action as soon as it is released; the totem's windup still has to finish.
+        // Requiring current() for the whole delay dropped every tap and only worked while the key was held.
+        // Once the cast has been paid the placement follows the skill source, not the client's button state.
+        bool Valid() => CurrentGameWork && ReferenceEquals(lifetime, CombatLifetime) && SourceCurrent()
             && !conn.Closed && !conn.LeavingArea && conn.PlayerLife > 0;
         double start = AreaTime(conn), placedAt = start + seconds;
         async Task<bool> WaitUntil(double at)
@@ -106,7 +109,12 @@ public static partial class Game
                 if (!Valid()) return false;
                 await AreaWait(PlayerUpdateRole.Minions, 25);
             }
-            return Valid();
+            if (!Valid())
+            {
+                Console.WriteLine($"[gateway] {CharacterName(conn)}'s totem placement cancelled at its release");
+                return false;
+            }
+            return true;
         }
         bool spell = SpellTotemEffect(conn, effect);
         double contact = spell ? start + seconds * Animations.SpellRelease(SkillsFor(conn).ClassFor(conn.ClassRow).AnimatedObject) : placedAt;
