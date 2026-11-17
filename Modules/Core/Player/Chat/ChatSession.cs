@@ -59,6 +59,9 @@ sealed class ChatSession(ChatService chat, string name, ClientState conn) : IDis
         await Tell("Connected to the local chat server.");
     }
 
+    /// <summary>Ask the chat server for its current headcount; it answers with an Online frame in chat.</summary>
+    public void AskOnline() => _link?.Send(new ChatFrame(ChatFrame.Count));
+
     public void Send(ChatFrame frame)
     {
         ChatLink? link;
@@ -162,6 +165,7 @@ sealed class ChatSession(ChatService chat, string name, ClientState conn) : IDis
             ChatFrame.Whispered when named && text.Length > 0 =>
                 Deliver(InstanceChat.ChatLine(text, "@" + frame.Name, InstanceChat.WhisperSentFlag, chat.LineItems(Conn, text, frame.Items)), $"0x0017 whisper to {frame.Name}"),
             ChatFrame.Offline when named => Tell($"{frame.Name} is not online."),
+            ChatFrame.Online when text.Length > 0 => Tell(text),
             ChatFrame.TooFast => Tell("You are sending messages too fast."),
             _ => Task.CompletedTask,
         };

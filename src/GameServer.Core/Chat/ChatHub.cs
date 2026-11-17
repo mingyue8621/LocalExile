@@ -59,6 +59,7 @@ public sealed class ChatHub(TimeProvider? time = null)
                 case ChatFrame.Join: Join(member, frame); break;
                 case ChatFrame.Say: Say(member, frame); break;
                 case ChatFrame.Whisper: Whisper(member, frame); break;
+                case ChatFrame.Count: member.Send(OnlineFrame()); break;
             }
         }
     }
@@ -75,7 +76,11 @@ public sealed class ChatHub(TimeProvider? time = null)
         var key = (kind, room.Channel, room.Language);
         if (!_channels.TryGetValue(key, out var members)) _channels[key] = members = [];
         members.Add(member);
+        // Show the headcount in chat as soon as the player joins a channel; /online asks for the same line later.
+        member.Send(OnlineFrame());
     }
+
+    ChatFrame OnlineFrame() => new(ChatFrame.Online, Text: $"当前在线 {_members.Count} 人。");
 
     void Remove(ChatMember member, ChatChannelKind kind, (ushort Channel, byte Language) room)
     {

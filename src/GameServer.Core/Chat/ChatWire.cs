@@ -11,8 +11,9 @@ namespace GameServer.Core.Chat;
 public sealed record ChatFrame(string Type, string? Name = null, ChatChannelKind? Kind = null, ushort? Channel = null, string? Text = null, byte? Language = null,
     IReadOnlyList<ChatFrameItem>? Items = null)
 {
-    public const string Hello = "hello", Join = "join", Say = "say", Whisper = "whisper";
-    public const string Welcome = "welcome", Line = "line", Whispered = "whispered", Offline = "offline", TooFast = "too-fast";
+    public const string Hello = "hello", Join = "join", Say = "say", Whisper = "whisper", Count = "count";
+    public const string Welcome = "welcome", Line = "line", Whispered = "whispered", Offline = "offline", TooFast = "too-fast",
+        Online = "online";
 }
 
 /// <summary>An item linked in a line: the '_' of the text it stands on, and the item as the Gateway's ChatItems wrote it. A

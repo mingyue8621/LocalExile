@@ -20,6 +20,8 @@ public sealed class ChatModule : IModule
         GameEvents.Packet(InstanceChat.LinkItemId).Add(module.Manifest.Id, (conn, bytes) => chat.Linked(conn, InstanceChat.ReadLinkItem(bytes.AsSpan())));
         GameEvents.Packet(InstanceChat.ChatId).Add(module.Manifest.Id, (conn, bytes) => chat.Typed(conn, InstanceChat.ReadChat(bytes.AsSpan())));
         GameEvents.Packet(InstanceChat.JoinChannelId).Add(module.Manifest.Id, (conn, bytes) => chat.Join(conn, bytes));
+        GameEvents.Command(module.Manifest.Id, "online", "/online (在聊天频道显示当前在线人数)",
+            (conn, _) => { chat.Online(conn); return Task.CompletedTask; });
         GameEvents.AreaGenerated.Add(module.Manifest.Id, conn => chat.Entered(conn));
         GameEvents.PlayerLeaving.Add(module.Manifest.Id, (conn, why) => chat.Leaving(conn, why));
         _ = chat.Rejoin();
@@ -45,6 +47,9 @@ sealed class ChatService : IDisposable
         _local.Start();
         log($"local chat server on 127.0.0.1:{LocalPort}" + (Remote is var (host, port) ? $", remote chat server {host}:{port}" : ""));
     }
+
+    /// <summary>Ask this character's chat server for its headcount.</summary>
+    public void Online(ClientState conn) => Session(conn).AskOnline();
 
     public void RouteChanged()
     {
