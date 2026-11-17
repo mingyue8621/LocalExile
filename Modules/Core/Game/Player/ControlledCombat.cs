@@ -29,6 +29,9 @@ static partial class Game
         {
             if (GemSkillInstanceDisabled(conn, gem.Effect, gem.Id) is not null) continue;
             if (!SkillHitPlan.ForSkill(SkillsFor(conn), gem.Effect, gem.Level, gem.Quality).CanHit) continue;
+            // Reactive reservation hits do not make their toggles usable as automatic attacks: a Herald or an aura that
+            // can hit on a condition is still a toggle, and a bot that "cast" it would switch it off (upstream fix).
+            if (ToggledReservation(conn, gem.Id) is not null) continue;
             double seconds = SkillsFor(conn).IsAttack(gem.Effect)
                 ? SupportedAttackSeconds(conn, gem.Id) : (CastMs(conn, gem.Effect, gem.Id) ?? 750) / 1000.0;
             var supported = SupportedSkill(conn, gem.Id);
@@ -130,8 +133,7 @@ static partial class Game
     /// one drinks at 40% of its life, a bold one at 20%), a mana one when casting ran it dry. False when there is nothing to
     /// drink, the bar is empty or it drank a moment ago.</summary>
     internal static async Task<bool> DrinkControlledFlask(ClientState conn, double now)
-    {
-        if (conn.PlayerLife == 0 || conn.PlayerMaxLife == 0) return false;
+    {        if (conn.PlayerLife == 0 || conn.PlayerMaxLife == 0) return false;
         double below = .2 + .2 * MindOf(conn).Caution;
         bool life = conn.PlayerLife / (double)conn.PlayerMaxLife <= below;
         int mana = UnreservedMana(conn);

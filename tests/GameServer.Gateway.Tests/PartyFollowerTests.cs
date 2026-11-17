@@ -54,7 +54,7 @@ public sealed class PartyFollowerTests
     }
 
     [Fact]
-    public void Followers_clear_the_entrance_remain_calm_and_balance_attacking_with_catching_up()
+    public async Task Followers_clear_the_entrance_remain_calm_and_balance_attacking_with_catching_up()
     {
         ControlledPlayerBuildChecks.VerifyCampaignBuilds();
         using var runtime = new Runtime();
@@ -129,7 +129,9 @@ public sealed class PartyFollowerTests
             if (idle.ActionCount != action)
             {
                 adjustments++;
-                Assert.InRange(Game.Dist(before, idle.Walk.Destination), 3, 8);
+                // The step is drawn on a radius of 4–8 cells and then rounded to the grid, so a diagonal step can reach
+                // sqrt(8²+1²) ≈ 8.06: the bound allows that rounding, not a longer walk.
+                Assert.InRange(Game.Dist(before, idle.Walk.Destination), 3, 9);
                 Assert.True(Game.Dist(idle.Walk.Destination, (100, 100)) <= 60);
                 action = idle.ActionCount;
             }
@@ -160,6 +162,7 @@ public sealed class PartyFollowerTests
         var isolated = new ClientState(new(1, "pocket", 300, 300, 100, 100,
             (x, y) => x <= 105 || x >= 115, []), 1, 1);
         Assert.True(Game.ControlledFollowerPoint(isolated, leader, arrival: true).X <= 105);
+        ControlledPlayerBuildChecks.VerifyReservationAttackSelection(runtime, wire);
     }
 
     [Fact]

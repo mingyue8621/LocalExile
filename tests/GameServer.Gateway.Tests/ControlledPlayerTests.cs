@@ -1,10 +1,48 @@
 using GameServer.Core.Accounts;
+using GameServer.Core.Protocol.Instance;
 using GameServer.Storage;
 
 namespace GameServer.Gateway.Tests;
 
 internal static class ControlledPlayerBuildChecks
 {
+    internal static void VerifyReservationAttackSelection(PartyFollowerTests.Runtime runtime, PartyFollowerTests.Wire wire)
+    {
+        var instance = new InstanceState();
+        var leader = runtime.Connection(instance, wire);
+        var bot = runtime.Connection(instance, wire, "HeraldFollower" + Guid.NewGuid().ToString("N"));
+        bot.Pools = new(25, 1000, 1000, 0, 0, Strength: 1000, Dexterity: 1000, Intelligence: 1000);
+        bot.Passives = [.. Game.BuildControlledPlayer(CharacterClass.Witch, 25).Passives!];
+        bot.LeagueModule = new(new League("test", "Standard", false, false), new HashSet<string>(["Game"]));
+        // Inspect the AI's own auto-attack scan without starting background player updates or a cast timer: a flask or a
+        // walk there would persist this character's items, and these are only ever held in memory here.
+        bot.PlayerSent = false;
+        try
+        {
+            var items = Game.ItemsOf(bot);
+            var wand = ItemCatalog.Create(Program.Items.Find("Driftwood Wand")!);
+            ItemSocket Socket(string name) => new(SocketColour.White, ItemCatalog.Create(Program.Items.FindGem(name)!.Value.Type));
+            items.Add(PlayerInventories.Weapon1, 0, 0, wand with
+            { Sockets = [Socket("Herald of Ice"), Socket("Herald of Thunder"), Socket("Fireball")] });
+            var gems = Game.GemSkillEffects(bot).ToArray();
+            Assert.Equal(new[] { "Herald of Ice", "Herald of Thunder", "Fireball" }, gems.Select(g => g.Name));
+            Assert.All(gems, g => Assert.True(SkillHitPlan.ForSkill(Program.Skills, g.Effect, g.Level, g.Quality).CanHit));
+            // The two Heralds hit reactively, but their reservation is a toggle: a bot that "cast" one would switch it
+            // off. Only Fireball is left to attack with.
+            Assert.Equal(gems[2].Effect, Assert.Single(Game.ControlledSkills(bot)).Effect);
+
+            // With only the reactive reservation hits equipped, automatic combat leaves their toggles alone.
+            var equipped = items.Items(PlayerInventories.Weapon1).Single();
+            items.Change(PlayerInventories.Weapon1, equipped.Id, item => item with { Sockets = [.. item.Sockets.Take(2)] });
+            Assert.Empty(Game.ControlledSkills(bot));
+        }
+        finally
+        {
+            PlayerInventories.Forget(bot.Character!);
+            CharacterEquipmentState.Replaced(bot.Character!);
+        }
+    }
+
     internal static void VerifyCampaignBuilds()
     {
         string path = Path.Combine(Path.GetTempPath(), $"controlled-player-{Guid.NewGuid():N}.db");

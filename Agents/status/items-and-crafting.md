@@ -628,6 +628,9 @@
   CoE beta pool and simulated-probability checks, ordinary/Shift inventory/stash dispatch and save reloads have
   automated coverage. The old live check (2026-10-21) predates these admission checks; native re-acceptance is pending.
   See [13](../docs/protocol/13-items.md), "Orb of Augmentation", and
+- Unique-flask mechanics; Oriath explosion parity, Sap, Brittle and Replica Rumi's Petrified remain open.
+  Docs: [13](../docs/protocol/13-items.md) §8a.
+
 - NPC divination card exchange supports all 456 active 3.29.3d card definitions and keeps the 14 client-disabled
   cards, including all Grand Spectrum bases and corruption implicits; local weights are not official probabilities.
   Docs: [17](../docs/protocol/17-npcs.md).

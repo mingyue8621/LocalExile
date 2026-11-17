@@ -60,6 +60,7 @@
   AI decisions now use 50 ms game-time steps with 100 ms bounded repaths and full-duration attack busy periods.
   Historical LocalExile controls verify chase response, turning, pacing and native pause; this port awaits a rerun.
   Automated cadence and lifecycle checks retain interruption and stage-completion guards.
+  Ordinary Melee follows resolved native clip clocks, including slow spans and published action-speed changes.
 - **Start:** the systems the 74 unsupported monster mods need (auras on allies, retaliation and on-death skills, ailments and
   curses on the player; [14](../docs/protocol/14-monster-packs.md) §5), stages of other bosses (`BossFights.cs` has Hillock's
   and `KingInMists.cs` the two-form Ritual pinnacle), pack
@@ -73,6 +74,10 @@
   Deathrattle's `SpawnedMonster.CorpseConsumed` flag, with no reservation shared between consumers.
   Preserve zero-Life, type, spectre and owned restrictions; dead snapshots also need Actor's conditional death bytes.
   Check every new component with `scripts/re/frida/check-components.js`.
+  Extend contact timing to off-hand/special actions only after resolving their actual AO, animation category and
+  selection rules; test fast/natural/slow/capped periods and mid-swing action-speed changes in both network modes.
+  Ambiguous addon resources and unsupported animation scripts need explicit extraction before opting in
+  ([11](../docs/protocol/11-skills.md) §6).
 - **Done when:** monsters in areas match the official game's (mods, rarity bonuses, emerge, boss bar).
 
 ## 4. 服务端设计

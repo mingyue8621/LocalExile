@@ -2,8 +2,7 @@ using GameServer.Core.Protocol.Instance;
 using GameServer.Core.Protocol.Login;
 
 public static partial class Game
-{
-    public static async Task InitializeControlledPlayer(ClientState conn, ClientState leader)
+{    public static async Task InitializeControlledPlayer(ClientState conn, ClientState leader)
     {
         RegisterVitalsAdmission(conn);
         PrepareCharacterForArea(conn.Wire.Remote, conn, conn.Pools.Level);
@@ -28,8 +27,7 @@ public static partial class Game
     }
 
     public static async Task StepControlledPlayer(ClientState conn, ClientState leader)
-    {
-        if (conn.Closed || leader.Closed || conn.LeavingArea || conn.Paused || !leader.PlayerSent) return;
+    {        if (conn.Closed || leader.Closed || conn.LeavingArea || conn.Paused || !leader.PlayerSent) return;
         EnsurePlayerUpdates(conn);
         double now = conn.Clock.Elapsed.TotalSeconds;
         if (conn.PlayerLife == 0)

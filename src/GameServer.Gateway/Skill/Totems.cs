@@ -39,6 +39,7 @@ public sealed class TotemState
         /// (Ancestral Blademaster).</summary>
         public int OwnerAttackSpeed, OwnerMeleeDamage, OwnerPhysAsFire;
         public double NextCast;
+        public SingleUseCooldownState? Cooldown;
         public ushort Sequence;
         public uint Life = maxLife;
         /// <summary>When it died; null while it lives.</summary>

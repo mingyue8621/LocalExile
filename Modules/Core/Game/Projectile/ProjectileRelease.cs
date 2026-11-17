@@ -381,7 +381,7 @@ public static partial class Game
             // Child stages and release specialization can introduce areas after this root is resolved.
             AreaHit = SupportedHitFrom(areaInputs, suppress: false),
             VsBlindedCriticalChance = SupportedCriticalChanceVsBlinded(conn, skillId, release: true),
-            VsProfaneCriticalChance = SupportedCriticalChanceVsProfane(conn, skillId, release: true),
+            VsGroundCriticalChance = SupportedCriticalChanceVsGround(conn, skillId, release: true),
             ActualCaster = totem is null ? null : TotemCasterStats(player),
             Effect = gem.Effect, Level = gem.Level, Quality = gem.Quality, SourceSkill = skillId,
             SkillStats = new Dictionary<uint, int>(own),

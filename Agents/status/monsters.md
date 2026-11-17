@@ -106,6 +106,7 @@
   他挥出 `DominusLightningSlam`（羁绊、标记与灵魂效果被跳过）；远处的 Boss 以睡眠状态创建，玩家靠近时唤醒。
   代码：`MavenNucleus.CombatEffect`、`SpawnMonster`。
   文档：[11](../docs/protocol/11-skills.md) §6。
+- Ordinary melee with resolved clip metadata follows native timing ([11](../docs/protocol/11-skills.md) §6).
 - Monsters belong to the area instance: re-entering it finds the living ones where they were, with their damage, and
   the dead stay dead; a new instance gets fresh packs.
   Code: `InstanceStore.cs`, `PopulateArea`, Gateway.
