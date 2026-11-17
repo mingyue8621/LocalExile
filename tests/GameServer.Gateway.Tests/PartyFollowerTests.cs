@@ -68,7 +68,9 @@ public sealed class PartyFollowerTests
         // Behind the leader, off the line it is walking down: a follower used to take a cell ahead of it, and five of them
         // made a wall the player's own pathfinder had to walk round (live 2026-11-10).
         Assert.True(ahead.X < 95);
-        Assert.InRange(Math.Sqrt(Math.Pow(ahead.X - 100, 2) + Math.Pow(ahead.Y - 100, 2)), 6, 20);
+        // The trail radii rotate with the follower's rank (PeerId % 3 over [12, 16, 20]) and each cell is rounded, so a
+        // radius-20 spot lands up to about 20.7 cells out: the bound covers the rounding, not a follower walking further.
+        Assert.InRange(Math.Sqrt(Math.Pow(ahead.X - 100, 2) + Math.Pow(ahead.Y - 100, 2)), 6, 21);
         var runner = runtime.Connection(instance, wire);
         runner.Walk.Teleport(201, 100, 0);
         runner.ControlledNextAction = 1000;
