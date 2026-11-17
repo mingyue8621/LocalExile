@@ -15,7 +15,8 @@ public class ChatHubTests
     static (ChatMember Member, List<ChatFrame> Heard) Enter(ChatHub hub, string name)
     {
         var heard = new List<ChatFrame>();
-        return (hub.Enter(name, heard.Add)!, heard);
+        // The headcount frame on join is covered by ChatOnlineCountTests; these tests hear only chat lines.
+        return (hub.Enter(name, f => { if (f.Type != ChatFrame.Online) heard.Add(f); })!, heard);
     }
 
     [Fact]
