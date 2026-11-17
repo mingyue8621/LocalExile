@@ -20,8 +20,8 @@ public sealed class ChatModule : IModule
         GameEvents.Packet(InstanceChat.LinkItemId).Add(module.Manifest.Id, (conn, bytes) => chat.Linked(conn, InstanceChat.ReadLinkItem(bytes.AsSpan())));
         GameEvents.Packet(InstanceChat.ChatId).Add(module.Manifest.Id, (conn, bytes) => chat.Typed(conn, InstanceChat.ReadChat(bytes.AsSpan())));
         GameEvents.Packet(InstanceChat.JoinChannelId).Add(module.Manifest.Id, (conn, bytes) => chat.Join(conn, bytes));
-        GameEvents.Command(module.Manifest.Id, "online", "/online (在聊天频道显示当前在线人数)",
-            (conn, _) => { chat.Online(conn); return Task.CompletedTask; });
+        GameEvents.Command(module.Manifest.Id, "online", "/online (在聊天频道显示当前活跃人数)",
+            (conn, _) => chat.ShowActive(conn));
         GameEvents.AreaGenerated.Add(module.Manifest.Id, conn => chat.Entered(conn));
         GameEvents.PlayerLeaving.Add(module.Manifest.Id, (conn, why) => chat.Leaving(conn, why));
         _ = chat.Rejoin();
@@ -34,6 +34,10 @@ sealed class ChatService : IDisposable
     readonly ChatServer _local = new(IPAddress.Loopback, 0);
     readonly ConcurrentDictionary<string, ChatSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
     readonly ConcurrentDictionary<ClientState, ConcurrentDictionary<byte, Item>> _linked = new();
+    // The remote chat server has no headcount query. Count distinct speakers heard on the global channel in a rolling
+    // window instead: that is the currently active crowd, shown in chat with an honest label.
+    public const int ActiveWindowMinutes = 10;
+    readonly ConcurrentDictionary<string, DateTimeOffset> _active = new(StringComparer.OrdinalIgnoreCase);
 
     public ChatChannels Channels { get; } = new();
     public Action<string> Log { get; }
@@ -48,8 +52,23 @@ sealed class ChatService : IDisposable
         log($"local chat server on 127.0.0.1:{LocalPort}" + (Remote is var (host, port) ? $", remote chat server {host}:{port}" : ""));
     }
 
-    /// <summary>Ask this character's chat server for its headcount.</summary>
-    public void Online(ClientState conn) => Session(conn).AskOnline();
+    /// <summary>A speaker the character just heard on a chat channel.</summary>
+    public void Seen(string name) => _active[name] = DateTimeOffset.UtcNow;
+
+    /// <summary>Distinct speakers heard in the last ActiveWindowMinutes.</summary>
+    public int ActiveCount()
+    {
+        var cutoff = DateTimeOffset.UtcNow.AddMinutes(-ActiveWindowMinutes);
+        foreach (var (name, at) in _active)
+            if (at < cutoff) _active.TryRemove(name, out _);
+        return _active.Count;
+    }
+
+    public string ActiveLine() => $"当前活跃 {ActiveCount()} 人（最近 {ActiveWindowMinutes} 分钟全球频道发言）。";
+
+    public Task Show(ClientState conn, string text) => Session(conn).Show(text);
+
+    public Task ShowActive(ClientState conn) => Show(conn, ActiveLine());
 
     public void RouteChanged()
     {
@@ -175,6 +194,7 @@ sealed class ChatService : IDisposable
         Log($"{remote} <= 0x0134 join {join.Kind} chat channel {asked} ({(join.Automatic ? "on entering" : "command")}, language {join.Language})");
         var (channel, _) = JoinOn(Session(conn), CharacterName(conn), join.Kind, join.Channel, join.Language);
         await Send(remote, conn.Wire.Stream, conn.Wire.Ciphers, InstanceChat.ChannelJoined(join.Kind, channel, join.Language), $"0x0135 joined {join.Kind} chat channel {channel}");
+        if (join.Kind == ChatChannelKind.Global) await Show(conn, ActiveLine());
         if (!join.Automatic)
         {
             string text = ChatChannels.JoinedText(join.Kind, channel, join.Language);

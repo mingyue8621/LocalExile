@@ -157,9 +157,7 @@ sealed class ChatSession(ChatService chat, string name, ClientState conn) : IDis
         return frame.Type switch
         {
             ChatFrame.Line when named && frame.Kind is ChatChannelKind.Global or ChatChannelKind.Trade && text.Length > 0 =>
-                Deliver(InstanceChat.ChatLine(text, InstanceChat.Sender(frame.Kind == ChatChannelKind.Global ? TypedChannel.Global : TypedChannel.Trade, frame.Name!),
-                    items: chat.LineItems(Conn, text, frame.Items)),
-                    $"0x0017 {frame.Kind} chat line from {frame.Name}"),
+                Heard(frame, text),
             ChatFrame.Whisper when named && text.Length > 0 =>
                 Deliver(InstanceChat.ChatLine(text, "@" + frame.Name, items: chat.LineItems(Conn, text, frame.Items)), $"0x0017 whisper from {frame.Name}"),
             ChatFrame.Whispered when named && text.Length > 0 =>
@@ -170,6 +168,16 @@ sealed class ChatSession(ChatService chat, string name, ClientState conn) : IDis
             _ => Task.CompletedTask,
         };
     }
+
+    Task Heard(ChatFrame frame, string text)
+    {
+        if (frame.Kind == ChatChannelKind.Global) chat.Seen(frame.Name!);
+        return Deliver(InstanceChat.ChatLine(text, InstanceChat.Sender(TypedChannel.Global, frame.Name!),
+            items: chat.LineItems(Conn, text, frame.Items)), $"0x0017 {frame.Kind} chat line from {frame.Name}");
+    }
+
+    /// <summary>Show a line from the server in the character's chat window.</summary>
+    public Task Show(string text) => Tell(text);
 
     Task Tell(string text) => Deliver(InstanceChat.ChatLine(text), $"0x0017 chat line \"{text}\"");
 
