@@ -179,6 +179,7 @@ public sealed record MonsterMovement
 
 public sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange, int stopRange, uint maxLife, int chaseRange = 0)
 {
+    public uint ObjectId { get; set; }
     public MadnessExplosion? MadnessExplosion;
     public readonly SpiderWebState SpiderWebs = new();
 
