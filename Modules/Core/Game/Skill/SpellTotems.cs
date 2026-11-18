@@ -111,31 +111,12 @@ public static partial class Game
         foreach (var totem in conn.Totems.Living(now).Where(t => t.Effect >= 0).ToArray())
         {
             if (!SpellTotemCurrent(conn, totem)) { totem.DiedAt = now; continue; }
-            // Decoy's taunt is refreshed every tick (not only when its cast timer comes around) so a monster that
-            // walks into the radius is taunted at once and the buff never lapses while the totem stands.
-            if (SkillsFor(conn).EffectId(totem.Effect) is "DecoyTotem")
-                DecoyTauntLocked(conn, totem, now, SkillsFor(conn).CooldownMs(totem.Effect, 1) / 1000.0);
+            // Decoy Totem's taunt and Devouring Totem's corpse meal are not a spell totem's cast: their totems carry
+            // Effect -1 and are ticked by TickTotemUsesLocked (Totems.Rules.cs).
             if (conn.Paused || now < totem.NextCast) continue;
             // A lockstep client's totem exists from the end of the frame its create is written in: no order before that.
             if (conn.LockstepClient && !conn.WorldOutput.PublishedObject(totem.Id).IsReady) continue;
             double range = TotemTargetRange(conn, totem.SkillId);
-            // Devouring Totem eats a corpse near it and its owner recovers life and mana (corpse_consumption_life_to_gain
-            // / _mana_to_gain: 30 and 9 at gem level 1, 299 and 59 at 20). It wants no enemy, so it runs before the
-            // target lookup below and keeps its own one-second cadence. It also runs before the gem lookup: it never
-            // casts the gem's own skill.
-            if (SkillsFor(conn).EffectId(totem.Effect) is "DevouringTotem")
-            {
-                var devourSession = ProjectilesFor(remote, stream, ciphers, conn);
-                var devourLifetime = CombatLifetime;
-                totem.NextCast = now + 1;
-                devourSession.Runtime.Schedule(Math.Max(devourSession.Runtime.Now, ProjectileRuntime.Time(totem.NextCast)), () =>
-                {
-                    if (!devourSession.Active || !ReferenceEquals(devourLifetime, CombatLifetime)
-                        || !SpellTotemCurrent(conn, totem)) return;
-                    _ = DevourTotemCorpse(remote, stream, ciphers, conn, totem);
-                });
-                continue;
-            }
             var gem = GemSkillEffects(conn).First(g => g.Id == totem.SkillId);
             var summon = TotemSummon(conn, gem.Effect);
             var golem = GolemData.Find(SkillsFor(conn).EffectId(gem.Effect));

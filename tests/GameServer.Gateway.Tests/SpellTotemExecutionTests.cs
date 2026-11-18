@@ -133,11 +133,13 @@ public sealed class SpellTotemExecutionTests
             var flame = Game.SupportedSkill(conn, skill);
             Assert.True(Game.IsTotemSkill(conn, skill));
             Assert.True(Game.ProjectilePathAvailable("test", conn, skill, flame.Effect));
-            // Decoy Totem has no aura at all (its one job is to be hit) and still has to be placeable.
+            // Decoy Totem has no aura at all (its one job is to be hit and to taunt, DecoyTauntLocked): it is one of the
+            // executors this branch runs, so it must stay placeable rather than be refused as "not run yet".
             skill = Equip(conn, "SkillGemDecoyTotem", "SupportGemAddedFireDamage");
             var decoy = Game.SupportedSkill(conn, skill);
             Assert.True(Game.IsTotemSkill(conn, skill));
             Assert.NotNull(Game.TotemVariety(conn, decoy.Effect));
+            Assert.True(Game.TotemPathAvailable(conn, skill, decoy.Effect));
             Assert.True(Game.ProjectilePathAvailable("test", conn, skill, decoy.Effect));
             skill = Equip(conn, "SkillGemRejuvenationTotem", "SupportGemSpellTotem");
             Assert.NotNull(Game.TotemVariety(conn, Game.SupportedSkill(conn, skill).Effect));
@@ -565,6 +567,9 @@ public sealed class SpellTotemExecutionTests
                 new(SocketColour.White, Gem("SupportGemFocusedBallista"))], Links = [2] });
             var focused = Game.GemSkillEffects(conn).Single();
             Assert.False(Game.BallistaPathAvailable(conn, focused.Id));
+            // The dedicated-skill clause must not place what the ballista path refuses: this is a SummonsTotem skill,
+            // so the clause alone admitted it, and SpellTotemCurrent kept it alive through the same gate.
+            Assert.False(Game.TotemPathAvailable(conn, focused.Id, focused.Effect));
         }
         finally
         {

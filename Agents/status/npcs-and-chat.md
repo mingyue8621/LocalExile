@@ -5,6 +5,8 @@
 ## 已实现（已用真实客户端验证）
 
 - 普通商人/Kirac 的库存会保留；藏身处里的 Lilly 会为新角色提供服务：[17](../docs/protocol/17-npcs.md)。
+- Ordinary vendors/Kirac persist stock; hideout Lilly serves new characters: [17](../docs/protocol/17-npcs.md).
+- `/played` saves online character time across area changes, relog and module reload: [10](../docs/protocol/10-chat-and-commands.md).
 
 - 聊天命令 `/commands`（可写 `/com`；分页显示，`/com <名称>` 只看一条）、`/raw <十六进制>`、`/set_stat`、
   `/set_speed`、`/set_level <1 到 100>`（保存到账号，就地生效）、`/add_passive_points <n>`、`/add_passive <id>`

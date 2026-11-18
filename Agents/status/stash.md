@@ -156,6 +156,17 @@
 - **制作格。** 夺宝制作格接受装备、支持宝石交换，重载后保留内容。
   狮眼守望现在会在个人仓库旁边生成公会仓库。
   持久化检查通过；真实客户端打开过城镇公会仓库并加载了它的公会页签。
+- Unique-parent requests retain registered categories in an offline source fixture; native reopen #998 is unverified.
+- Personal stash and gold are shared only within the same account and full league, including mode combinations.
+  Guild stash storage is also league-scoped; Standard retains the legacy bank and other leagues use separate banks.
+  SSF refuses guild opening, tab requests and inventory moves.
+  Automated checks cover SSF guild-stash exclusion and ordinary guild-stash access.
+  Stash sharing, forged requests and dropped-item isolation are covered by automated checks.
+  Shared SSF town player presence remains separate from private dropped items.
+  See [league modes](../docs/game/league-modes.md).
+- **Crafting cells.** Delve crafting cells accept equipment, support swaps and retain their contents after reload.
+  Lioneye's Watch now creates a guild stash beside its personal stash.
+  Persistence checks pass; the real client opened the city guild stash and loaded its guild tab.
 
 ## 尚未实现
 

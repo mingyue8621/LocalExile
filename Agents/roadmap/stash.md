@@ -20,6 +20,18 @@
   （MapStashSpecialSubStashGroup / MapStashUniqueMapInfo）。传奇收藏分类与 `/item_tab` 填充已实现；
   传奇夺宝契约生成、以及原生收藏里不存在的目录条目仍不支持。占卜与宝石页签能显示物品（18 §7）。
 - **完成标准：** 页签设置被保留，且每个特殊页签都像真实版本那样收纳物品。
+- **Known:** the stash opens on the last tab, tabs load and items move by click and Ctrl + click
+  ([18](../docs/protocol/18-stash.md)); special tabs hold only their own items, the currency, essence and fragment
+  tabs each item in its slot, and affinities (0xd3) are saved (18 §7).
+  Currency stack limits follow the extracted table; lifeforce merging to 50 000 is verified in the real client.
+  Switching to a loaded tab sends nothing to the server.
+- **Start:** check live that the affinity window closes on S→C 0x136;
+  tab rename / colour (0xd2), order (0xcc) and folders (0xd1); the regular map tab
+  (MapStashSpecialSubStashGroup / MapStashUniqueMapInfo). Unique collection categories and `/item_tab` filling
+  are implemented; unique Heist contract generation and catalogue entries absent from the native collection remain
+  unsupported. The divination and gem tabs show items (18 §7).
+  Verify Unique Collection close/reopen (#998) in the native client; category retention has only offline evidence.
+- **Done when:** tab settings are kept and every special tab takes its items as the real one does.
 
 ### 特殊页签制作后续
 

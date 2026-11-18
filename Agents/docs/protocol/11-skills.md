@@ -2722,7 +2722,10 @@ monster AI, loot, experience and the instance save read only `Monsters`, so none
   If the use is still current and the player lives, the totem appears at the aimed cell, moved out of walls and
   monsters as a spawn is.
   The server registers the type (S→C 0x20, `<Id>@<level>`), creates a team-0 monster object (0x2bb) and enters it
-  in the wake zone (0x1a9) in one gated send, so a later Life update never precedes it.
+  in the wake zone (0x1a9) in one gated send, so a later Life update never precedes it, then plays the Emerge basic
+  action at once (0x1ab, 0x1ac): a totem has no Transitionable, so the monster rise's 0x2bc does not apply.
+  The placement wait does not gate on the cast's action token: live 2026-11-09 it dropped six of seven placements whose
+  mana was paid (the client walked 0.38 s after the cast). Source, cooldown, Vaal and channel checks still cancel it.
 - Level and Life: the totem's level is the gem level's `PlayerLevelReq`, as PoB's totem level.
   Its base Life is the variety's minion Life at that level (MonsterTypes `IsPlayerMinion`, `LifeMultiplier` 120:
   24 at gem level 1), times `1 + totem_life_+% / 100`; the maximum goes on the object's stats when it differs.
@@ -2765,19 +2768,23 @@ before action/cost admission. Enemy targeting of totems, placement range and the
 Protector, Ancestral Blademaster, Ancestral Warchief) place their own totem, resolved the same way: their
 `ActiveSkills.SkillTotemId` → `SkillTotemVariations` skin 0 → variety 2329/2277/2297/2307/2341/4925/4927. Before
 2026-11-15 `TotemVariety` asked `SpellTotemEffect` first, which excludes any skill of totem type 47, so none of them
-resolved: the cast fell through to a self-cast and no totem object was ever created ("no totem model"). The proxy of a
-native totem is its own effect with `is_totem` cleared, and the tick releases it as a projectile skill where the runtime
-carries one (Holy Flame Totem) or as the skill's own area hit from the totem's cell otherwise (the Ancestral totems'
-melee, Shockwave Totem's nova). Decoy, Devouring and Searing Bond stand with their model and Life; their taunt, corpse
-and beam payloads are not implemented.
+resolved: the cast fell through to a self-cast and no totem object was ever created ("no totem model").
+
+A dedicated totem skill (ActiveSkillType `SummonsTotem`; `SkillTotemId` is on every row) carries the spell totems'
+proxy `0x4000` plus its radius and `skill_is_non_pathing`; with the gem's own `is_totem` the client plays no action.
+Shockwave Totem is a `Nova`: it casts while a hostile is within `base_totem_range` (80) and hits within its radius (24)
+of itself at the end of each cast, as the Arc totem's hit. Devouring Totem eats the nearest corpse in range once a cast
+while the player misses Life or Mana; the corpse is the totem's, not the player's, so it meets no "consumed a corpse"
+condition of his. Decoy Totem taunts the monsters in its range (`DecoyTauntLocked`) and they hit it instead of the
+player. Still refused before cost, because this module does not run them yet: the ancestral melee totems
+(`ancestor_totem_parent_activiation_range`, owner buffs) and Searing Bond's burning beam.
 
 **Ancestral totems' gifts** (2026-11-15): while one stands its owner reads the totem's own per-level value —
 `melee_ancestor_totem_grant_owner_attack_speed_+%_final` (Protector, 10 → 20) as `attack_speed_+%`,
 `slam_ancestor_totem_grant_owner_melee_damage_+%_final` (Warchief, 8 → 18) as `melee_damage_+%`, and
 `slash_ancestor_totem_grant_owner_physical_damage_added_as_fire_+%` (Blademaster, 12 → 22) as
 `physical_damage_%_to_add_as_fire`. `Hierophant` sums them over the living totems each tick and resends the character's
-stats when the sum changes. **Devouring Totem** eats the nearest usable corpse within `base_totem_range` once a second
-and its owner recovers `corpse_consumption_life_to_gain` / `_mana_to_gain` (30/9 at gem level 1, 299/59 at 20).
+stats when the sum changes.
 `KnockbackOnHitLocked` had no caller at all until then; the area hit now runs it after the damage, so Shockwave Totem's
 own 25% `base_global_chance_to_knockback_%` (and Knockback Support, and every other source of the stat) shoves.
 
