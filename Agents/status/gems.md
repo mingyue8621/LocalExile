@@ -119,7 +119,8 @@
   and is consumed by a paid travel use; Block Chance Reduction lowers the monster's block roll and applies Overpowered;
   Machinations counts allocated keystones for its chaos gain and skill-local cost increase ([25](../docs/protocol/25-gem-supports.md)).
   Awakened supports' extra stats that have a consumer now apply: per-type supported gem levels, Brutality's Crush,
-  Spell Echo's double damage on the final repeat, and Generosity's aura effect with its "does not affect you".
+  Spell Echo's double damage on the final repeat, and Generosity's aura effect with its "does not affect you" (its buff
+  icon is no longer shown for a self-excluding aura, while the aura art and skill-bar association remain).
   Arrogance reserves its aura on life, Cruelty's hits grant its more damage over time buff, and Overheat consumes
   Fortification on use for more ailment damage ([25](../docs/protocol/25-gem-supports.md)).
   Multistrike repeats full swings within one paid use, cancels remaining repeats with the action, and keeps
@@ -157,6 +158,10 @@
 
 - **斩杀（Culling Strike）。** 近战、范围与投射物命中会在生命 10% 时斩杀；Cull the Weak 按其自身份额斩杀普通与魔法敌人，
   Pacifism 的命中会留下 1 点生命（[25](../docs/protocol/25-gem-supports.md)）。
+- **Culling Strike.** Melee, area and projectile hits cull at 10% Life; the target-state conditions (burning, frozen,
+  cursed, marked, poacher's-marked and under 10% Life) cull too, flat Life and Mana on cull are granted, Cull the Weak
+  culls normal and magic enemies at its own share, and Pacifism's hits leave 1 Life
+  ([25](../docs/protocol/25-gem-supports.md)).
 
 - **稳定的宝石技能 id（已测试，尚未用真实客户端核对）。** 每颗宝石在保持镶嵌期间保有自己的技能 id
   （经光标移动的宝石保留自己的 id；换进来的宝石绝不会继承旧 id），所以其他宝石进出时技能栏的键位不再移动；

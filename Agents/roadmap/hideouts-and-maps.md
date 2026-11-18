@@ -30,6 +30,13 @@
 - **入手：** 图鉴的保存进度（已完成节点、相邻解锁、点数发放）与图鉴图谱校验；虚空石；地图仓库页签的布局（18 A5）；
   官方掉落池。
 - **完成标准：** 地图能按 3.29 的方式掉落、存储与运行，图鉴能显示并保存进度。
+- **Known:** the 3.29 rules and the 20 generic map bases (`MapKeyTier1` … `MapKeyTier16` and four special ones) are in
+  [game/maps.md](../docs/game/maps.md).
+  Generic `MapKeyTierN` items, `MapKeys.dat` tiers, the MapKey component, the default Atlas layout and basic map drops
+  are implemented; see Status. The native Atlas panel/progress and the map stash are not.
+- **Start:** Atlas saved progress (completed nodes, adjacent unlocks, point awards);
+  Voidstones; the map stash tab's layout (18 A5); the official drop pools.
+- **Done when:** maps drop, are stored and run the 3.29 way, and the Atlas shows and saves progress.
 
 ### 藏身处：装饰、编辑与地图装置
 

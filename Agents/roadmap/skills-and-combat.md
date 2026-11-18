@@ -848,9 +848,8 @@ The issue #75 native matrices were run on the source LocalExile revisions, not r
   costs, death/resurrection and slow destination loading ([27](../docs/protocol/27-vaal-souls.md)).
   Validate the [modular Behemoth candidate](../docs/game/behemoth.md) natively; other Vaal executors and official
   distribution/capacity parity remain open.
-  Vaal Absolution/Domination need native activation verification.
-  Vaal Skeleton totem, trap and mine execution remains open; these casts are refused before souls or actions are spent.
-  Vaal Animate Weapon and minion stance targeting remain open.
+  Vaal minion totem, trap and mine execution remains open; these casts are refused before souls or actions are spent.
+  Vaal Animate Weapon, full ascended special attacks and minion stance targeting remain open.
 
 - 收集、有界的共享预算与已证明的 Actor 载荷（#308）通过自动化与有界原生核对。
   基线 `939b44fe` 上的来源检查覆盖属性/魔力组合、辅助、付款与当前发布。

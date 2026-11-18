@@ -260,7 +260,10 @@ public static partial class Game
             int radius = 4 + (int)((seed + (uint)trial * 7919u) % 5);
             var at = (X: here.X + (int)Math.Round(Math.Cos(angle) * radius),
                 Y: here.Y + (int)Math.Round(Math.Sin(angle) * radius));
-            if (Dist(at, at0) > ControlledFollowerLeash || !Floor(at.X, at.Y)
+            // A radius-three diagonal can round below the move admission's minimum distance. Keep trying instead
+            // of consuming this idle decision on a destination which MoveControlledFollower will refuse.
+            if (Dist(here, at) < 3) continue;
+            if (Dist(at, leader.Walk.Position(now)) > ControlledFollowerLeash || !Floor(at.X, at.Y)
                 || ClientPathfinder.ObjectBlocks(bodies, at.X, at.Y, 3, 6)) continue;
             // Never onto the player's own cell or beside it: a follower at arm's length is in the way the moment the
             // player turns.
