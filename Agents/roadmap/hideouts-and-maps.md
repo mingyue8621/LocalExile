@@ -8,14 +8,13 @@
 园艺台的摆放、原生配方浏览与物品配方的执行路径（定向/亲和重铸、增幅、词缀转换、原子化的生命之力付款）都已实现；
 见状态文档与 protocol/21-hideouts.md。
 剩下的丰收配方（势力、堆叠兑换、命运卡、宝石透镜、腐化地图与品质附魔）在等各自的前置系统。
-Harvest, what is left: Crop Rotation's tier upgrades, Refiner's Bargain's crops, Nature's Favour's lucky crafts and the Harvest-scarab weighting; the
-client questions (the Extractor/Irrigator state sequence after a crop starts and where seeds sit), and Oshabi's soul tree and boss state sequence captured live (the order of the three colours after
-Sacred, random here, and whether a Root Wall's TriggerableBlockage is sent blocked); AtlasNode 158 `OshabiBoss`'s
-completion (`HarvestLeagueBoss` has no `Bosses_MonsterVarietiesKeys`, so AtlasProgress never completes it); opening
-the Atlas RandomContent nodes (MapDeviceRecipes 74-89, whose RecipeItems hold the placeholder 3920) to reach the
-Overgrown Grove; a 3.29 source for `map_harvest_%_chance_for_faridun_seed` (Mirage areas); Oshabi's Sacred Suffering
-ground and vine teleports; the recipes for influences, exchanges, divination cards, gem lenses, corrupted maps and
-enchants.
+丰收还差什么：轮作的阶级升级、精炼师交易的作物、自然恩赐的幸运制作，以及丰收圣甲虫的权重；几个客户端上的疑问
+（作物开始之后提取器／灌溉器的状态顺序、种子落在哪），以及实机抓到的 Oshabi 灵魂树与首领状态序列（Sacred 之后三色的
+顺序——此处目前按随机处理，以及根墙的 TriggerableBlockage 是否按"被阻挡"发送）；AtlasNode 158 `OshabiBoss` 的完成判定
+（`HarvestLeagueBoss` 没有 `Bosses_MonsterVarietiesKeys`，所以 AtlasProgress 永远判不了它完成）；打开 Atlas 的
+RandomContent 节点（MapDeviceRecipes 74-89，其 RecipeItems 放的是占位 3920）才能进到 Overgrown Grove；
+`map_harvest_%_chance_for_faridun_seed`（Mirage 区域）在 3.29 的数据来源；Oshabi 的 Sacred Suffering 地面与藤蔓传送；
+以及势力、兑换、命运卡、宝石透镜、腐化地图与附魔这些配方。
 
 ### 切换藏身处模板
 
