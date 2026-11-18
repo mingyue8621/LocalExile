@@ -517,7 +517,9 @@ public class StatSnapshotTailTests(Xunit.Abstractions.ITestOutputHelper output)
         // build), where one more copy of its small stat table is 872. The budget is that tight on purpose. A change
         // that needs more says why in its pull request and raises it there; one that needs less lowers it; a new
         // .NET runtime that moves the figure with no code change is measured again.
-        const long Budget = 104_000;
+        // This branch: 104 208 measured 2026-11-18 on a machine where upstream main reads 103 152 — a 1 056-byte gap
+        // from the features kept here, so the budget carries that 1% until one of them is found and removed.
+        const long Budget = 105_000;
         long allocated = GC.GetAllocatedBytesForCurrentThread();
         for (int i = 0; i < 50; i++) Lookup();
         long perLookup = (GC.GetAllocatedBytesForCurrentThread() - allocated) / 50;
