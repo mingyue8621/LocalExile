@@ -9,7 +9,7 @@ namespace GameServer.Gateway.Tests;
 // must be the one a connection without a reused tail computes (same stats, same order), a repeated snapshot must reuse
 // the tail, and the verification mode (on in every Gateway test) compares that reuse with a fresh tail. The connection's
 // clock is stopped, so nothing timed changes between the snapshots of a step.
-public class StatSnapshotTailTests
+public class StatSnapshotTailTests(Xunit.Abstractions.ITestOutputHelper output)
 {
     [Fact]
     public void Conditional_equipment_cache_rebuilds_when_runtime_condition_inputs_change()
@@ -401,6 +401,129 @@ public class StatSnapshotTailTests
         Assert.Equal(0, Get(magicItem, "item_found_rarity_+%"));
         Assert.Equal(quantityWithNormal * (100 + quantity) / 100.0, global::Game.ItemQuantityFactor(conn), 10);
         Assert.Equal(rarityWithNormal - rarity, global::Game.IncreasedItemRarity(conn));
+    }
+
+    // Kills and mana spent recently are inputs of the item-stat sum only for a character one of whose stats counts
+    // them: for any other, a kill or a paid cost must leave the cached sum in place (it is asked for on every hit).
+    [Fact]
+    public void Item_stat_cache_survives_kills_and_mana_spent_unless_a_worn_stat_counts_them()
+    {
+        using var setup = new SnapshotSetup();
+        var conn = Connection("RecentAmountCache" + Guid.NewGuid().ToString("N"));
+        var inventory = (PlayerInventories)Game("ItemsOf", conn)!;
+        var items = (ItemCatalog)Game("ItemsFor", conn)!;
+        foreach (var (row, item) in inventory.EquipmentSnapshot()) inventory.Remove(row, item.Id);
+        double now = conn.Clock.Elapsed.TotalSeconds;
+        void Happen()
+        {
+            lock (conn.Monsters)
+            {
+                conn.RecentEvents.RecordAmount(StatConditions.KilledEnemy, now);
+                conn.RecentEvents.RecordAmount(StatConditions.SpentMana, now, 500);
+            }
+        }
+        Happen();   // The events themselves ("killed recently") are inputs for everyone: have them from the start.
+        Snapshot(conn);
+        var cached = conn.StatSourcesCache;
+        Happen();
+        Snapshot(conn);
+        Assert.Same(cached, conn.StatSourcesCache);
+
+        var counting = items.Mods.All.First(m => m.Stats.Count == 1
+            && StatConditions.TryRecentAmount(m.Stats[0].Id, out string counted, out _, out _) && counted == StatConditions.KilledEnemy);
+        inventory.Add(PlayerInventories.BodyArmour, 0, 0, ItemCatalog.Create(items.Find("Exquisite Leather")!, random: new Random(1)) with
+        {
+            Mods = [counting.Roll(ModSection.Explicit, new Random(1))],
+        });
+        Snapshot(conn);
+        cached = conn.StatSourcesCache;
+        Snapshot(conn);
+        Assert.Same(cached, conn.StatSourcesCache);
+        Happen();
+        Snapshot(conn);
+        Assert.NotSame(cached, conn.StatSourcesCache);
+
+        // The conditions' sums of the worn items (WornItemSum) are remembered for exactly the items they were asked for.
+        conn.PlayerLife = 1;
+        var belt = new UniqueCatalog(Program.Items).Create("Coward's Legacy", new Random(1))!;
+        uint cursedKey = Program.Stats.Key("cursed_by_vulnerability")!.Value;
+        int Cursed(params Item[] worn) =>
+            ((Dictionary<uint, int>)Game("SelfCurseConditionInputs", conn, worn, null, null, null, null)!)[cursedKey];
+        Assert.Equal(1, Cursed(belt));
+        Assert.Equal(0, Cursed());
+        Assert.Equal(1, Cursed(belt));
+    }
+
+    // The condition inputs a stat-sources lookup remembers (SelfCurseConditionInputs, WornGrantsFor) follow each thing
+    // they are worked out from: asked again after a change, the answer is the new one.
+    [Fact]
+    public void Remembered_condition_inputs_follow_the_overrides_the_players_life_and_the_worn_items()
+    {
+        using var setup = new SnapshotSetup();
+        var conn = Connection("ConditionMemo" + Guid.NewGuid().ToString("N"));
+        conn.PlayerLife = 1;
+        var uniques = new UniqueCatalog(Program.Items);
+        var belt = uniques.Create("Coward's Legacy", new Random(1))!;
+        uint cursedKey = Program.Stats.Key("cursed_by_vulnerability")!.Value;
+        int Cursed(params Item[] worn) =>
+            ((IReadOnlyDictionary<uint, int>)Game("SelfCurseConditionInputs", conn, worn, null, null, null, null)!)[cursedKey];
+        Assert.Equal(1, Cursed(belt));
+        Assert.Equal(1, Cursed(belt));
+        lock (conn.Monsters) conn.PlayerStats[Program.Stats.Key("immune_to_curses")!.Value] = 1;
+        Assert.Equal(0, Cursed(belt));
+        lock (conn.Monsters) conn.PlayerStats.Clear();
+        Assert.Equal(1, Cursed(belt));
+        conn.PlayerLife = 0;
+        Assert.Equal(0, Cursed(belt));
+
+        var boots = new InventoryItem(100, 0, 0, uniques.Create("Doryani's Delusion", new Random(1))!);
+        IReadOnlyList<WornGrantedSkills.Grant> Grants(params (byte Row, InventoryItem Item)[] equipment) =>
+            global::Game.AllWornGrantedSkillsOf(conn, equipment);
+        int worn = Grants((PlayerInventories.Boots, boots)).Count;
+        Assert.True(worn > 0);
+        Assert.Empty(Grants());
+        Assert.Equal(worn, Grants((PlayerInventories.Boots, boots)).Count);
+        // The same item under another id is another host.
+        Assert.All(Grants((PlayerInventories.Boots, boots with { Id = 200 })), g => Assert.Equal(200u, g.Host));
+    }
+
+    // Guard (Agents/docs/dev/performance.md, "Hot paths"): the stat-sources lookup runs hundreds of times a second in a
+    // fight and almost always finds nothing changed. Such a lookup must not add the worn items' mods up again: a
+    // feature that asks the items what they carry remembers the answer for those items (Game.PlainItemSum,
+    // Game.WornItemSum). If this fails, a check on the lookup's path calls ItemModStats.Sum directly.
+    [Fact]
+    public void A_stat_sources_lookup_with_nothing_changed_sums_no_item_mods()
+    {
+        using var setup = new SnapshotSetup();
+        var conn = Connection("LookupGuard" + Guid.NewGuid().ToString("N"));
+        conn.PlayerLife = 1;
+        var inventory = (PlayerInventories)Game("ItemsOf", conn)!;
+        var uniques = new UniqueCatalog(Program.Items);
+        long before = ItemModStats.SumsOnThisThread;
+        inventory.Add(PlayerInventories.Belt, 0, 0, uniques.Create("Coward's Legacy", new Random(1))!);
+        inventory.Add(PlayerInventories.Boots, 0, 0, uniques.Create("Doryani's Delusion", new Random(1))!);
+        void Lookup() => Game("CharacterStatSources", conn, null, null);
+        Lookup();
+        Assert.True(ItemModStats.SumsOnThisThread > before, "the first lookup of new items sums their mods");
+        Lookup();   // The second settles what the first lookup's own result changed (the inactive items, the cache).
+        before = ItemModStats.SumsOnThisThread;
+        var cached = conn.StatSourcesCache;
+        Lookup();
+        Assert.Same(cached, conn.StatSourcesCache);
+        Assert.Equal(0, ItemModStats.SumsOnThisThread - before);
+
+        // What such a lookup allocates is exact and repeats to the byte, unlike its time, and every table copied or
+        // list built on its path shows in it: 103 576 bytes for this bare character on 2026-11-17 (103 728 in a Debug
+        // build), where one more copy of its small stat table is 872. The budget is that tight on purpose. A change
+        // that needs more says why in its pull request and raises it there; one that needs less lowers it; a new
+        // .NET runtime that moves the figure with no code change is measured again.
+        const long Budget = 104_000;
+        long allocated = GC.GetAllocatedBytesForCurrentThread();
+        for (int i = 0; i < 50; i++) Lookup();
+        long perLookup = (GC.GetAllocatedBytesForCurrentThread() - allocated) / 50;
+        // In the test's output also when it passes (dotnet test --logger "console;verbosity=detailed"), for the trend.
+        output.WriteLine($"an unchanged stat-sources lookup allocates {perLookup} bytes (budget {Budget})");
+        Assert.True(perLookup <= Budget, $"an unchanged stat-sources lookup allocated {perLookup} bytes, over the budget of {Budget}");
     }
 
     [Fact]

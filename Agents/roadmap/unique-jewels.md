@@ -94,6 +94,17 @@
   要么把受影响的属性标为未生效。现在的无条件路径不可接受。
 - 加一个条件接口，让 `CharacterStatSources` 与命中、面板的消费者能在使用的当下查询。
 - 完成标准：每一行要么被完整建模，要么被明确拒绝，并在目录状态里写明原因。
+- The Adorned is implemented as the pilot (ordinary passive sockets only; see above).
+- Model the condition where it is cheap: per-item counts (Primordial items), per-charge, low/full life, recent kill,
+  reserved mana, and per-allocated-node counts.
+- Until a condition is modelled, the server must **not** apply the conditional part: either refuse the jewel in a
+  passive socket with a clear message or mark the affected stat as inactive. The current unconditional path is not
+  acceptable.
+- Add a condition interface that `CharacterStatSources` / the hit and panel consumers can query at the point of use.
+  That point is reached hundreds of times a second: a condition there is a cheap read of state the server already
+  keeps, or an answer remembered for the inputs it was worked out from
+  ([hot paths](../docs/dev/performance.md#hot-paths)).
+- Done when each row is either fully modelled or explicitly refused, with the reason in the catalogue status.
 
 ### 4. 半径型传奇珠宝（78 行、76 个不同名字；属性 + 伤害/防御试点已完成）
 
