@@ -17,7 +17,8 @@ public sealed class VolcanicFissureTests
         var sword = ItemCatalog.Create(Program.Items.Find("Metadata/Items/Weapons/OneHandWeapons/OneHandSwords/OneHandSword1")!);
         items.Add(PlayerInventories.Weapon1, 0, 0, sword with { Sockets = [new(SocketColour.White, Gem("SkillGemVolcanicFissure"))], Links = [1] });
         var gem = Game.GemSkillEffects(conn).Single();
-        // Volcanic Fissure uses the client's lava mortar: six lobbed bursts with the skill's own physical/fire
+        // Volcanic Fissure uses the client's lava mortar: five lobbed bursts (base_number_of_projectiles) with the
+        // skill's own physical/fire
         // damage, reduced by its -50% projectile hit/ailment stat.
         Assert.True(Game.UsesProjectileRuntime(gem.Effect));
         Assert.True(Game.ProjectilePathAvailable("test", conn, gem.Id, gem.Effect));
@@ -29,7 +30,7 @@ public sealed class VolcanicFissureTests
         var merged = Game.MergeSkillStats(Game.CharacterPlayerStats(conn), stats);
         int Get(string name) => Program.Stats.Key(name) is uint k ? merged.GetValueOrDefault(k) : 0;
         var profile = definition.Parameters.Resolve(Get, 600, false);
-        Assert.Equal(6, profile.Count);
+        Assert.Equal(5, profile.Count);
         Assert.True(profile.Lobbed);
         Assert.False(profile.DirectDamage);
         Assert.Equal(-50, Get("active_skill_hit_ailment_damage_with_projectile_+%_final"));

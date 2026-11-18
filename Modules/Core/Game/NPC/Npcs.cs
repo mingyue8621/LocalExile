@@ -54,7 +54,8 @@ public static partial class Game
         if (conn.Layout.Id == "HeistHub" && conn.EarnedQuestFlag("UsedHeistCoin"))
             await SetQuestFlags(remote, stream, ciphers, conn, ["UsedHeistCoin"], on: false);
         var notes = new List<string>();
-        var placements = HideoutFurniture(conn)?.Npcs ?? NpcCatalog.In(conn.Layout.Hash, conn.Seed, notes);
+        var furniture = HideoutFurniture(conn);
+        var placements = furniture?.Npcs ?? NpcCatalog.In(conn.Layout.Hash, conn.Seed, notes);
         if (conn.Layout.Id == "1_4_town")
             placements = [.. placements, new("Metadata/NPC/League/Delve/DelveMiner", 352, 618, 280 * MathF.PI / 180)];
         foreach (var note in notes) Console.WriteLine($"[gateway] {remote} npcs: {note}");
@@ -117,6 +118,13 @@ public static partial class Game
             if (best is { } cell) return cell;
         }
         return (x, y);
+    }
+
+    // Keep the client's room placements, which can intentionally stand on an unwalkable platform.
+    public static (int X, int Y) TownNpcCell(AreaLayout layout, NpcCatalog.Placement placement)
+    {
+        var at = (placement.X, placement.Y);
+        return !placement.FromRoom && layout.Walkable?.Invoke(at.X, at.Y) == false ? layout.Near(at) : at;
     }
 
     // A click on an NPC (C→S 0x24 on its object): the client walks to it first; follow it and answer once the player is there.

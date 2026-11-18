@@ -43,10 +43,13 @@ public sealed class PortalsModule : IModule
                     await Step("回城门", () => SpawnTownPortals(remote, stream, ciphers, conn));
                     await Step("藏身处摆设", () => SpawnHideoutDoodads(remote, stream, ciphers, conn));
                     await Step("地图返回门", () => SpawnMapReturnPortal(remote, stream, ciphers, conn));
+                    // 藏身处实例在最后一个人离开六分钟后消失，装置也跟着消失：那一局的传送门原本立在那里，
+                    // 现在跟随角色来到脚下这个实例，所以要在摆门之前把它们挪过来。
+                    await Step("跟随装置实例", () => PortalsRules.FollowDeviceToThisInstance(remote, conn));
                     // Everyone in this exact device instance sees and spends the same run's portals (upstream's shared
                     // map-device portals, by area and instance rather than by the character's own open map).
                     if (MapDevice.AtEntrance(conn.Layout.Hash, conn.InstanceNumber) is { PortalsLeft: > 0 } open)
-                        await Step("地图装置的门", () => SpawnMapPortals(remote, stream, ciphers, conn, open, firstAfterMs: MapPortalEntryMs));
+                        await Step("地图装置的门", () => SpawnMapPortals(remote, stream, ciphers, conn, open, firstAfterMs: MapPortalEntryMs, standing: true));
                 }
                 catch (Exception e)
                 {

@@ -168,6 +168,16 @@
 - **Done when:** the Wildwood's Wisp collection and its areas exist server-side, and the Primal Wisps found node
   feeds `azmeri_primalist_wisps_found_+%` into that system.
 
+### Vaal Vessels
+
+- **Known:** strongboxes are done ([status](../status/world.md), "Strongboxes"). Vaal Vessels are strongboxes too
+  (`VaalTempleChest`, `VaalEmpoweredChest`, `OrnateVaalBox*`): innately corrupted and rare, guarded by a Vaal side-area
+  boss, and the Exquisite ones of Valdo's maps roll the Vaalsmithed prefixes, daemons that cast a Vaal skill
+  (`ChestDaemonVaal*`: Spark, Flameblast, Firestorm, Caustic Arrow, Blade Vortex, Thrown Weapon, Volcanic Fissure).
+- **Start:** the Exquisite Vaal Vessels of Valdo's map mod as `MapStrongboxes` boxes; then each Vaal daemon, as the
+  strongbox spell daemons are (`StrongboxDaemonSpells.cs`).
+- **Done when:** Valdo's Exquisite Vaal Vessels spawn and their Vaalsmithed prefixes act.
+
 ### The Labyrinth
 
 - **已知：** 服务端移植能生成迷宫的各个房间（257 个里 249 个吻合），gate 基线列出了受支持的那些

@@ -8,6 +8,14 @@
 园艺台的摆放、原生配方浏览与物品配方的执行路径（定向/亲和重铸、增幅、词缀转换、原子化的生命之力付款）都已实现；
 见状态文档与 protocol/21-hideouts.md。
 剩下的丰收配方（势力、堆叠兑换、命运卡、宝石透镜、腐化地图与品质附魔）在等各自的前置系统。
+Harvest, what is left: Crop Rotation's tier upgrades, Refiner's Bargain's crops, Nature's Favour's lucky crafts and the Harvest-scarab weighting; the
+client questions (the Extractor/Irrigator state sequence after a crop starts and where seeds sit), and Oshabi's soul tree and boss state sequence captured live (the order of the three colours after
+Sacred, random here, and whether a Root Wall's TriggerableBlockage is sent blocked); AtlasNode 158 `OshabiBoss`'s
+completion (`HarvestLeagueBoss` has no `Bosses_MonsterVarietiesKeys`, so AtlasProgress never completes it); opening
+the Atlas RandomContent nodes (MapDeviceRecipes 74-89, whose RecipeItems hold the placeholder 3920) to reach the
+Overgrown Grove; a 3.29 source for `map_harvest_%_chance_for_faridun_seed` (Mirage areas); Oshabi's Sacred Suffering
+ground and vine teleports; the recipes for influences, exchanges, divination cards, gem lenses, corrupted maps and
+enchants.
 
 ### 切换藏身处模板
 
@@ -39,6 +47,16 @@
 - **Done when:** maps drop, are stored and run the 3.29 way, and the Atlas shows and saves progress.
 
 ### 藏身处：装饰、编辑与地图装置
+### Idols: what the side panel leaves out
+
+- **Known:** the `Idols` module works with the map device's storage grid as the Idol inventory ([Idols](../docs/game/idols.md)).
+  The client's own Idol inventories (three loadouts of up to 32 cells) have no panel in the 3.29.3 clients.
+- **Start:** the slots unlocked by Atlas objectives (`MapRelicInventoryLayout`, league quest flags `AtlasIdolSlotsUnlocked1` to `6`);
+  Kingsmarch's Idol gambling (`VillageIdolGamblingUnlocked`); the Ruthless versions of two unique Idols;
+  refusing Atlas passive allocations on the server while the tree is hidden; drop rates from recorded play.
+- **Done when:** a later client build with an Idol panel shows the three loadouts, or the items above work in the side panel.
+
+### Hideouts: decorations, editing and the map device
 
 - **已知：** Lush Hideout 可用：传送、传送点、仓库、Nessa、Edit 按钮与地图装置：槽位、
   Activate 以及六个通往地图的传送门（[21](../docs/protocol/21-hideouts.md) §5）。
@@ -77,7 +95,9 @@
   statues play their idle and are recreated on entry. See [21](../docs/protocol/21-hideouts.md), Monster Statue.
 - **Start:** create the rest of the decorations (`HideoutObject`, each type's components from
   data/object-types.json); the Edit mode's placement/removal and appearance messages;
-  maps: remaining scarab engines, Ambush affixes, Essence corruption/skills and Evolution/Apparitions (#505);
+  maps: remaining scarab engines, Ambush affixes, Essence corruption/skills, Torment spirits' skills and
+  Evolution/Apparitions (#505);
+  maps: remaining scarab engines, Essence corruption/skills and Evolution/Apparitions (#505);
   `An Audience With The King` opens the Crux; Simulacrum has arena selection and a wave controller.
   Simulacrum's native reward/fog presentation, specialised boss behaviour and full clear need verification.
   Personal template selection and login to the selected home are implemented (see Status).

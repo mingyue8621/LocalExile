@@ -123,12 +123,13 @@ public static class GatewayProjectileSkillProfiles
         else if (effect == "VolcanicFissure")
             p = p with
             {
-                // The client shows six: base_number_of_projectiles (5) plus the implicit one; the gem's own
-                // volcanic_fissure_number_of_additional_projectiles is added on top when present.
-                Count = Math.Max(1, get("base_number_of_projectiles") + 1
+                // The client's base_number_of_projectiles (5) plus the gem's own
+                // volcanic_fissure_number_of_additional_projectiles when present — upstream's count, and the SlamSweep
+                // tests hold it.
+                Count = Math.Max(1, get("base_number_of_projectiles")
                     + Math.Max(0, get("volcanic_fissure_number_of_additional_projectiles"))),
                 Lobbed = true, DirectDamage = false,
-                CannotPierce = true, CannotFork = true, CannotSplit = true, CannotReturn = true,
+                CannotPierce = true, CannotFork = true, CannotSplit = true, CannotChain = true, CannotReturn = true,
                 EndArea = new("volcanic-fissure", 0),
                 EndAreaReasons = new HashSet<ProjectileEndReason> { ProjectileEndReason.Landing, ProjectileEndReason.Terrain },
                 NativeVolley = new() { FixedDegrees = 18 }
