@@ -15,6 +15,7 @@ static class AnimationContactsTables
         var clips = new List<Dictionary<string, object?>>();
         var frames = new List<Dictionary<string, object?>>();
         var attacks = new List<Dictionary<string, object?>>();
+        var actions = new List<Dictionary<string, object?>>();
         using var doc = JsonDocument.Parse(json);
         foreach (var rig in doc.RootElement.EnumerateObject())
         {
@@ -60,11 +61,45 @@ static class AnimationContactsTables
                         };
                     attacks.Add(row);
                 }
+            // skillActions[stance] = { parent, actions[action] = { segments: [...], effects: [...] } }: the ACT's own
+            // actions, one row per segment, as generated_tables.animation_contacts writes them.
+            foreach (var (stance, entry) in Map("skillActions"))
+            {
+                string? parent = entry.TryGetProperty("parent", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : null;
+                if (!entry.TryGetProperty("actions", out var declared) || declared.ValueKind != JsonValueKind.Object) continue;
+                var segments = declared.EnumerateObject()
+                    .SelectMany(action => action.Value.GetProperty("segments").EnumerateArray().Select((s, k) => (action, s, k)))
+                    .ToList();
+                if (segments.Count == 0)
+                    // A stance that declares nothing (it inherits all of its parent's): one row so the parent is known.
+                    actions.Add(new() { ["rig"] = r, ["stance"] = stance, ["parent"] = parent, ["action"] = "", ["ord"] = 0,
+                        ["animation"] = null, ["source"] = null, ["index"] = null, ["begin"] = null, ["length"] = null,
+                        ["contact"] = null, ["cancel"] = null, ["slow"] = null, ["budget"] = null, ["item"] = false,
+                        ["pair"] = false, ["position"] = null, ["effects"] = null });
+                foreach (var (action, segment, ord) in segments)
+                {
+                    var row = new Dictionary<string, object?> { ["rig"] = r, ["stance"] = stance, ["parent"] = parent,
+                        ["action"] = action.Name, ["ord"] = ord };
+                    foreach (var field in segment.EnumerateObject())
+                        row[field.Name] = field.Value.ValueKind switch
+                        {
+                            JsonValueKind.String => field.Value.GetString(),
+                            JsonValueKind.Number when field.Name == "budget" => field.Value.GetDouble(),
+                            JsonValueKind.Number => field.Value.TryGetInt64(out long n) ? n : field.Value.GetDouble(),
+                            JsonValueKind.True => true,
+                            JsonValueKind.False => false,
+                            JsonValueKind.Array => List(field.Value),
+                            _ => null,
+                        };
+                    actions.Add(row);
+                }
+            }
         }
         var tables = new[]
         {
             ClientTable.FromRows("animation_rigs", rigs), ClientTable.FromRows("animation_clips", clips),
             ClientTable.FromRows("animation_clip_contacts", frames), ClientTable.FromRows("animation_default_attacks", attacks),
+            ClientTable.FromRows("animation_skill_actions", actions),
         }.ToDictionary(t => t.Name);
         return new AnimationContacts(name => tables.GetValueOrDefault(name));
     }

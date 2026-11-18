@@ -18,7 +18,7 @@ static partial class Game
         session.Advance();
         double acceptedAt = swingAt ?? ProjectileWorldTime(conn);
         double duration = SupportedAttackSeconds(conn, skillId);
-        double contact = GemAttackContactDelay(conn, gem.Effect, duration, out _, out _);
+        double contact = GemAttackContactDelay(conn, gem.Effect, duration, sequence, out _, out _);
         int repeats = MeleeAttackRepeats(conn, skillId);
         int action = conn.ActionCount;
         var stats = SupportedSkill(conn, skillId).Stats;

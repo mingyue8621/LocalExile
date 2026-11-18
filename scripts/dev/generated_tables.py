@@ -125,11 +125,14 @@ def animation_contacts(doc):
     """Per rig (.ao) its clips: animations[name] = [length ms, earliest contact ms], positions[name] = the contact point,
     cancels[name] = the lock_cancelling time (a null cancel is still listed: cancel_listed), contacts[name] = every
     contact frame [ms, point], indices[name] = the clip's index in the rig; and the default attack's stance pools.
-    clips[name] adds every clip's length, even without a contact, and its named events as ordered ms lists."""
-    rigs, clips, frames, events, attacks = [], [], [], [], []
+    clips[name] adds every clip's length, even without a contact, and its named events as ordered ms lists.
+    skillActions[stance] adds the ACT's other actions (the skills' own animations): each stance's parent stance and the
+    actions it declares, each one's animation segments in play order and the effects its .ao assigns to it."""
+    rigs, clips, frames, events, attacks, actions = [], [], [], [], [], []
     for r, (ao, value) in enumerate(doc.items()):
         rigs.append({"ao": ao, "amd": value.get("amd"), "act": value.get("act")})
-        known = set(value) - {"amd", "act", "animations", "positions", "cancels", "contacts", "indices", "clips", "defaultAttack"}
+        known = set(value) - {"amd", "act", "animations", "positions", "cancels", "contacts", "indices", "clips",
+                              "defaultAttack", "skillActions"}
         if known:
             raise ValueError(f"animation-contacts {ao}: unknown keys {sorted(known)}")
         names = list(dict.fromkeys([*value.get("animations", {}), *value.get("positions", {}), *value.get("cancels", {}),
@@ -150,8 +153,21 @@ def animation_contacts(doc):
                        for event, times in (full or {}).get("events", {}).items() for i, ms in enumerate(times)]
         for stance, entries in value.get("defaultAttack", {}).items():
             attacks += [{"rig": r, "stance": stance, "ord": i, **flat(a)} for i, a in enumerate(entries)]
+        for stance, entry in value.get("skillActions", {}).items():
+            bodies = entry["actions"]
+            if not bodies:
+                # 一个动作都没声明、全部继承父 stance：仍写一行，服务端靠它知道这个 stance 的父名。
+                actions.append({"rig": r, "stance": stance, "parent": entry.get("parent"), "action": "", "ord": 0,
+                                "animation": None, "source": None, "index": None, "begin": None, "length": None,
+                                "contact": None, "cancel": None, "slow": None, "budget": None, "item": False,
+                                "pair": False, "position": None, "effects": []})
+            for action, body in bodies.items():
+                for i, segment in enumerate(body["segments"]):
+                    actions.append({"rig": r, "stance": stance, "parent": entry.get("parent"), "action": action,
+                                    "ord": i, **flat(segment), "effects": body.get("effects") or []})
     return {"animation_rigs": rigs, "animation_clips": clips, "animation_clip_contacts": frames,
-            "animation_clip_events": events, "animation_default_attacks": attacks}
+            "animation_clip_events": events, "animation_default_attacks": attacks,
+            "animation_skill_actions": actions}
 
 
 def projectile_clips(doc):

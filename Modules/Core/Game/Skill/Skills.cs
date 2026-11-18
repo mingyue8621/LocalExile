@@ -566,10 +566,14 @@ public static partial class Game
             }
             int additionalAttackMs = SkillsFor(conn).IsAttack(effect) ? SkillAttackTiming.AdditionalMilliseconds(stats) : 0;
             SkillAttackTiming.Apply(SkillsFor(conn), effect, level, stats);
-            // The network skill record does not run the client's GrantedEffects.SkillID calculator. LeapSlam reads
-            // this value for Groundbreaking's shorter range and its unskipped startup (0x1412fafd0 / 0x1419fda80).
-            if (IsLeapSlam(conn, effect))
-                stats[StatKeys.SkillBehaviourVariation] = SkillsFor(conn).BehaviourVariation(effect);
+            // The network skill record does not run the client's GrantedEffects.SkillID calculator, so a skill that has
+            // one sends its own skill_behaviour_variation: an action takes its data row from it (a geometry channel its
+            // GeometryAttack row and that row's GeometryChannel, a mortar its MonsterMortar row). LeapSlam reads it for
+            // Groundbreaking's shorter range and its unskipped startup (0x1412fafd0 / 0x1419fda80). A skill without one
+            // sends none: row 0 has no GeometryChannel, which crashed the client (11-skills, King in the Mists).
+            int behaviour = SkillsFor(conn).BehaviourVariation(effect);
+            if (behaviour > 0 || IsLeapSlam(conn, effect))
+                stats[StatKeys.SkillBehaviourVariation] = behaviour;
             // The client reads the final duration, not its base: its own Spark sparks live skill_effect_duration ms
             // (0x141b3860a) and without it died on their first tick, so none was drawn.
             if (Stats.Key("base_skill_effect_duration") is uint baseDurationKey && own.GetValueOrDefault(baseDurationKey) > 0
@@ -610,9 +614,12 @@ public static partial class Game
                 && CooldownBypass.FlickerVigilantOverride(SkillsFor(conn).EffectId(effect), SkillsFor(conn).CooldownBypassType(effect, level))
                 && Stats.Key(CooldownBypass.PowerOverride) is uint overrideKey)
                 stats[overrideKey] = 1;
-            // The worn effect's skill_art_variation counts from the skill's own (SkillArtBase: Holy Sweep's is 2).
+            // The skill's own skill_art_variation (GrantedEffects __col23: Arc 10, Firestorm 30, Leap Slam 19) plus the
+            // worn effect's, sent only while the skill's SkillArtVariations row has that variation: an index past its
+            // Variants reads a slot the row does not have (Sweep's art 3 at 0 crashed the client).
             if (Stats.Key("skill_art_variation") is uint artKey
-                && SkillArtBase.Variation(SkillsFor(conn).EffectId(effect), stats.GetValueOrDefault(artKey)) is int art and not 0)
+                && SkillArtBase.Variation(SkillsFor(conn).EffectId(effect), stats.GetValueOrDefault(artKey),
+                    SkillsFor(conn).ArtVariation(effect), SkillsFor(conn).ArtVariants(effect)) is int art and not 0)
                 stats[artKey] = art;
             // The native spell action divides virtual BASE time by cast speed itself. Keep the catalog base
             // intact; only the panel's final casts-per-second stat is adjusted here.

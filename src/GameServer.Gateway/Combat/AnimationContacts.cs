@@ -49,7 +49,8 @@ public sealed class AnimationContacts
     public const double DefaultAttackContact = 0.4;
 
     private sealed record ActorAnimations(Dictionary<string, AnimationClip> Clips,
-        Dictionary<string, AnimationClip> AllClips, Dictionary<string, DefaultAttackClip[]> AttackPools);
+        Dictionary<string, AnimationClip> AllClips, Dictionary<string, DefaultAttackClip[]> AttackPools,
+        Dictionary<string, Dictionary<string, DefaultAttackClip[]>> SkillActions);
 
     private readonly Lazy<Dictionary<string, ActorAnimations>> _byAo;
 
@@ -132,6 +133,81 @@ public sealed class AnimationContacts
             || found.Clip.Contacts is not { } frames || index < 0 || index >= frames.Count) return null;
         return (found.Name, (double)frames[index] / found.Clip.Length);
     }
+
+    /// <summary>
+    /// When the client plays a skill's own action (<paramref name="actionName"/>, the GrantedEffects' ActiveSkills
+    /// ActionType Id: "HeavyStrike", "GlacialHammer"), the moment its hit lands, in seconds after the action starts, or
+    /// null when the class ACT has no such action for this weapon's stance (the client then plays the default attack
+    /// pool, which the caller uses instead). The ACT names the segments the client plays (GlacialHammer's
+    /// attack_maul_01a, then 01b, then bash1_mace with its ice effect); the hit is the first segment that strikes, which
+    /// is the swing the player sees land, not the end of the chain. A segment with an ACT <c>attack_time</c> budget
+    /// plays over it; the sequence is compressed into <paramref name="attackSeconds"/> when the attack is shorter.
+    /// Without this, a two-word skill Id ("heavystrike" for bash1_mace) found no rig clip and fell back to the attack1
+    /// keyframe, so the hit landed while the client was still winding up.
+    /// </summary>
+    public double? SkillActionContactSeconds(string animatedObject, WeaponProfile weapon, string? actionName,
+        double attackSeconds)
+    {
+        if (string.IsNullOrEmpty(actionName) || StanceFor(weapon) is not { } stance
+            || !_byAo.Value.TryGetValue(animatedObject, out var actor)
+            || !actor.SkillActions.TryGetValue(stance, out var actions)
+            || SkillActionSegments(actions, actionName) is not { Length: > 0 } segments) return null;
+        // The first segment that strikes: a chained action (GlacialHammer's wind-up then the ice hammer) reports its
+        // earliest hit, which is the swing the player sees land. A segment plays over its ACT budget, or over its own
+        // length, and is compressed when the attack is shorter.
+        foreach (var segment in segments)
+        {
+            if (segment.ContactMs < 0) continue;
+            double length = segment.BudgetSeconds is { } budget ? budget : segment.LengthMs / 1000.0;
+            if (!(length > 0)) return null;
+            double scale = attackSeconds > 0 && attackSeconds < length ? attackSeconds / length : 1;
+            return segment.ContactMs / 1000.0 * scale;
+        }
+        return null;
+    }
+
+    /// <summary>The action's segments: the ACT's own entry for <paramref name="actionName"/>, else the base action a
+    /// variant Id names (CycloneChannelled plays <c>Cyclone</c>, SweepAltX <c>Sweep</c>, VaalGlacialHammer
+    /// <c>GlacialHammer</c>). Only actions the ACT declares answer; anything else keeps the caller's default-attack
+    /// fallback, so this never invents an animation the client does not play.</summary>
+    static DefaultAttackClip[]? SkillActionSegments(Dictionary<string, DefaultAttackClip[]> actions, string actionName)
+    {
+        if (actions.TryGetValue(actionName, out var exact) && exact.Length > 0) return exact;
+        foreach (string name in BaseActionNames(actionName))
+            if (actions.TryGetValue(name, out var found) && found.Length > 0) return found;
+        return null;
+    }
+
+    /// <summary>The names a skill's ActionType Id is a variant of, most specific first: its Vaal/New prefixes and its
+    /// Channelled/AltX/AltY/New suffixes stripped one at a time (CycloneChannelled → Cyclone, SweepAltX → Sweep).</summary>
+    static IEnumerable<string> BaseActionNames(string actionName)
+    {
+        string current = actionName;
+        for (int step = 0; step < 3; step++)
+        {
+            string next = current;
+            foreach (string prefix in new[] { "VaalNew", "Vaal", "New" })
+                if (next.StartsWith(prefix, StringComparison.Ordinal) && next.Length > prefix.Length)
+                {
+                    next = next[prefix.Length..];
+                    break;
+                }
+            foreach (string suffix in new[] { "ChannelledEnd", "Channelled", "AltX", "AltY", "New", "_" })
+                if (next.EndsWith(suffix, StringComparison.Ordinal) && next.Length > suffix.Length)
+                {
+                    next = next[..^suffix.Length];
+                    break;
+                }
+            if (next == current) yield break;
+            current = next;
+            yield return current;
+        }
+    }
+
+    /// <summary>The ACT actions the class rig plays in a stance (the skill's own animations), for a test or a log.</summary>
+    public IReadOnlyCollection<string> SkillActionNames(string animatedObject, WeaponProfile weapon) =>
+        StanceFor(weapon) is { } stance && _byAo.Value.TryGetValue(animatedObject, out var actor)
+            && actor.SkillActions.TryGetValue(stance, out var actions) ? [.. actions.Keys] : [];
 
     /// <summary>
     /// The selected skill clip's natural length and the earliest/latest occurrences of a named event, all in ms.
@@ -303,6 +379,7 @@ public sealed class AnimationContacts
         var framesByClip = By("animation_clip_contacts", "clip");
         var eventsByClip = By("animation_clip_events", "clip");
         var attacksByRig = By("animation_default_attacks", "rig");
+        var skillsByRig = By("animation_skill_actions", "rig");
         foreach (var rig in rigs)
         {
             string ao = rig.Text("ao")!;
@@ -343,9 +420,53 @@ public sealed class AnimationContacts
                     throw new InvalidDataException($"Invalid default attack animation pool {ao}/{stance.Key}.");
                 pools.Add(stance.Key, entries);
             }
-            result[ao] = new ActorAnimations(clips, allClips, pools);
+            result[ao] = new ActorAnimations(clips, allClips, pools, SkillActionsOf(skillsByRig[rig.Index]));
         }
         return result;
+    }
+
+    /// <summary>
+    /// The ACT's actions per stance, for the skill contacts: each stance's segments, with the ones it inherits from its
+    /// parent stance (the ACT nests OneHandSwordShield inside OneHandSword, and a child's own entry wins).
+    /// </summary>
+    static Dictionary<string, Dictionary<string, DefaultAttackClip[]>> SkillActionsOf(IEnumerable<ClientRow> rows)
+    {
+        var parents = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var declared = new Dictionary<string, Dictionary<string, DefaultAttackClip[]>>(StringComparer.Ordinal);
+        foreach (var stance in rows.GroupBy(r => r.Text("stance")!, StringComparer.Ordinal))
+        {
+            parents[stance.Key] = stance.First().Text("parent");
+            var actions = new Dictionary<string, DefaultAttackClip[]>(StringComparer.Ordinal);
+            foreach (var action in stance.GroupBy(r => r.Text("action")!, StringComparer.Ordinal))
+                if (!string.IsNullOrEmpty(action.Key)) actions[action.Key] = [.. action.OrderBy(r => r.Int("ord")).Select(SkillActionClip)];
+            declared[stance.Key] = actions;
+        }
+        var resolved = new Dictionary<string, Dictionary<string, DefaultAttackClip[]>>(StringComparer.Ordinal);
+        Dictionary<string, DefaultAttackClip[]> Stance(string stance, HashSet<string> seen)
+        {
+            if (resolved.TryGetValue(stance, out var cached)) return cached;
+            if (!seen.Add(stance)) return [];
+            var actions = parents.TryGetValue(stance, out string? parent) && parent is not null
+                ? new Dictionary<string, DefaultAttackClip[]>(Stance(parent, seen), StringComparer.Ordinal)
+                : new Dictionary<string, DefaultAttackClip[]>(StringComparer.Ordinal);
+            foreach (var (action, segments) in declared.GetValueOrDefault(stance) ?? new Dictionary<string, DefaultAttackClip[]>())
+                actions[action] = segments;
+            resolved[stance] = actions;
+            return actions;
+        }
+        foreach (string stance in parents.Keys.ToArray()) Stance(stance, []);
+        return resolved;
+    }
+
+    static DefaultAttackClip SkillActionClip(ClientRow row)
+    {
+        long[] slow = row.Longs("slow");
+        return new DefaultAttackClip(row.Text("animation")!, row.Text("source") ?? row.Text("animation")!, row.Int("index"),
+            row.Int("begin"), row.Int("length"), row.IsNull("contact") ? -1 : row.Int("contact"),
+            row.IsNull("cancel") ? null : row.Int("cancel"),
+            slow.Length == 2 ? (int)slow[0] : null, slow.Length == 2 ? (int)slow[1] : null,
+            row.RealOrNull("budget"), row.Text("stance") ?? "", 1, row.BoolOrNull("item") ?? false, false,
+            Point(row, "position"));
     }
 
     /// <summary>A list column of three numbers as a point (<see cref="Point(double[])"/>).</summary>

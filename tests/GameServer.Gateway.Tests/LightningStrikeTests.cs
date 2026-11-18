@@ -84,7 +84,7 @@ public sealed class LightningStrikeTests
         // Linked Rupture and Multistrike share one critical roll: each full swing adds a Rupture and a stronger bleed.
         Assert.Equal(2, Game.MeleeAttackRepeats(c, f.Gem.Id));
         double duration = Game.SupportedAttackSeconds(c, f.Gem.Id);
-        double contact = Game.GemAttackContactDelay(c, f.Gem.Effect, duration, out _, out _);
+        double contact = Game.GemAttackContactDelay(c, f.Gem.Effect, duration, 0, out _, out _);
         f.Set("bleed_on_hit_with_attacks_%", 100);
         c.Pools = c.Pools with { CriticalStrikeChancePct = 10000 };
         Assert.Equal(10000, Game.SupportedCriticalChance(c, f.Gem.Id));

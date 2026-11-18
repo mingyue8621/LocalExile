@@ -31,6 +31,7 @@ import json, os, re, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ot_components import REPO, all_contacts, amd_of, extends_of, fetch, first_contact, read_text, rig_clips  # noqa: E402
 import clientdb  # noqa: E402  (on the path through ot_components)
+import skill_actions  # noqa: E402  (the skills' own ACT animations, beside the default attack's pools)
 
 
 def contacts(animations):
@@ -245,15 +246,20 @@ def main():
         text = read_text(act)
         if text is None:
             raise ValueError(f"Missing character ACT asset: {act}")
+        views = ao_views(ao, fetch_missing=fetch_missing)
         result[ao] = {"amd": amd, "act": act, "animations": contacts(animations), "positions": positions(animations),
                       "cancels": {a["name"]: next((t for e, t, _ in a["events"] if e == "lock_cancelling"), None)
                                   for a in animations if first_contact(a["events"]) is not None},
                       "contacts": every_contact(animations),
                       "indices": {a["name"]: i for i, a in enumerate(animations)},
                       "clips": named_clips(animations),
-                      "defaultAttack": default_attack_pools(text, animations, ao_views(ao, fetch_missing=fetch_missing))}
+                      "defaultAttack": default_attack_pools(text, animations, views),
+                      # 技能动作（ACT 的每个非 Melee 动作）：客户端播放重击、冰川之锤这些技能时真正的动画段，
+                      # 与默认攻击分开，服务端读它算技能的命中时刻（skill_actions.py）。
+                      "skillActions": skill_actions.skill_actions(text, animations, views)}
         print(f"{c['Name']}: {ao} -> {amd}, {len(result[ao]['animations'])} animations with a contact, "
-              f"{len(result[ao]['defaultAttack'])} default attack stances", file=sys.stderr)
+              f"{len(result[ao]['defaultAttack'])} default attack stances, "
+              f"{sum(len(v) for v in result[ao]['skillActions'].values())} skill actions", file=sys.stderr)
     with open(dest + ".tmp", "w", encoding="utf-8") as f:
         json.dump(result, f, indent=1)
     os.replace(dest + ".tmp", dest)   # never leave a truncated file for the Gateway

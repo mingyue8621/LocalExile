@@ -342,6 +342,31 @@ public sealed class SkillCatalog(string folder = "data", bool hardMode = false)
     public ushort? ActionHash(int effectRow) => _effectActions.Value.TryGetValue(effectRow, out ushort hash) ? hash : null;
 
     /// <summary>
+    /// The ActionTypes Id of a GrantedEffects row's active skill ("HeavyStrike", "GroundSlam"): the name the class ACT
+    /// keys its animations by, so the server can read which clip the client plays for the skill (AnimationContacts
+    /// .SkillActionContactSeconds), or null when the effect has no active skill or action.
+    /// </summary>
+    public string? ActionTypeName(int effectRow) => _effectActionNames.Value.GetValueOrDefault(effectRow);
+
+    private readonly Lazy<Dictionary<int, string>> _effectActionNames = new(() =>
+    {
+        var result = new Dictionary<int, string>();
+        if (!ClientTables.Has("GrantedEffects") || !ClientTables.Has("ActiveSkills") || !ClientTables.Has("ActionTypes")) return result;
+        var effects = ClientTables.Table("GrantedEffects");
+        var active = ClientTables.Table("ActiveSkills");
+        var actions = ClientTables.Table("ActionTypes");
+        int row = 0;
+        foreach (var effect in effects)
+        {
+            int index = row++;
+            if (effect.IntOrNull("ActiveSkill") is not int a || a < 0 || a >= active.Count) continue;
+            if (active[a].IntOrNull("ActionType") is not int t || t < 0 || t >= actions.Count) continue;
+            if (actions[t].Text("Id") is { Length: > 0 } name) result[index] = name;
+        }
+        return result;
+    });
+
+    /// <summary>
     /// A GrantedEffects row's SkillID, 0 for none: the value the client's own skill-stat builder adds as
     /// <c>skill_behaviour_variation</c> (0x1921; 0x141eefbe3 loads the row's +0xbe). An action takes its data row from it:
     /// a mortar its MonsterMortar row, a geometry channel its GeometryAttack row (by Id) and that row's GeometryChannel.
@@ -365,6 +390,36 @@ public sealed class SkillCatalog(string folder = "data", bool hardMode = false)
         {
             int index = row++;
             if (effect.IntOrNull("__col23") is int value && value > 0) result[index] = value;
+        }
+        return result;
+    });
+
+    /// <summary>The fewest variants the effect's SkillArtVariations row defines, -1 when it has none (Ice Nova, Stormbind):
+    /// <c>skill_art_variation</c> indexes that row's Variants list, so a value at or past the count reads a slot the row
+    /// does not have (molten_shell 8 of 8, tornado 2 of 2). A skill with no row keeps 0: the client draws its own fixed
+    /// art, not a variant.</summary>
+    public int ArtVariants(int effectRow) => _artVariantCounts.Value.GetValueOrDefault(effectRow, -1);
+
+    private readonly Lazy<Dictionary<int, int>> _artVariantCounts = new(() =>
+    {
+        var result = new Dictionary<int, int>();
+        if (!ClientTables.Has("GrantedEffects") || !ClientTables.Has("SkillArtVariations")) return result;
+        var byEffect = new Dictionary<int, int>();
+        var byActive = new Dictionary<int, int>();
+        foreach (var row in ClientTables.Table("SkillArtVariations"))
+        {
+            int count = row.Texts("Variants").Length;
+            foreach (int e in row.Ints("GrantedEffect"))
+                byEffect[e] = Math.Min(byEffect.GetValueOrDefault(e, int.MaxValue), count);
+            foreach (int a in row.Ints("ActiveSkill"))
+                byActive[a] = Math.Min(byActive.GetValueOrDefault(a, int.MaxValue), count);
+        }
+        int index = 0;
+        foreach (var effect in ClientTables.Table("GrantedEffects"))
+        {
+            int i = index++;
+            if (byEffect.TryGetValue(i, out int n)) result[i] = n;
+            else if (effect.IntOrNull("ActiveSkill") is int a && byActive.TryGetValue(a, out int m)) result[i] = m;
         }
         return result;
     });

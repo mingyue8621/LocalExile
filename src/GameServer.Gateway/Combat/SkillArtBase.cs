@@ -14,7 +14,17 @@ public static class SkillArtBase
         ["Sweep"] = 2, ["SweepAltX"] = 2, ["SweepAltY"] = 2,
     };
 
-    /// <summary>The skill_art_variation the skill sends: its base plus the worn effects' (0 when none is worn).</summary>
-    public static int Variation(string? effectId, int worn) =>
-        (effectId is not null && Bases.TryGetValue(effectId, out int b) ? b : 0) + worn;
+    /// <summary>The skill_art_variation the skill sends: its base plus the worn effects' (0 when none is worn).
+    /// <paramref name="own"/> is the skill's own GrantedEffects value (<c>SkillCatalog.ArtVariation</c>), which every
+    /// skill with a variant carries (Arc 10, Firestorm 30, Leap Slam 19); the table above only covers the Sweep gems
+    /// that have no value of their own. <paramref name="variants"/> is the fewest variants the skill's SkillArtVariations
+    /// row defines: the value indexes that list, so one at or past it (molten_shell 8 of 8, tornado 2 of 2) is dropped
+    /// rather than read as a slot the row does not have. A negative count means the skill has no art row at all.</summary>
+    public static int Variation(string? effectId, int worn, int own = 0, int variants = 0)
+    {
+        int baseValue = own > 0 ? own : effectId is not null && Bases.TryGetValue(effectId, out int b) ? b : 0;
+        int total = baseValue + worn;
+        if (total <= 0 || variants < 0) return 0;
+        return variants == 0 || total < variants ? total : 0;
+    }
 }

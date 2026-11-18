@@ -1190,6 +1190,16 @@
   （劈砍、横扫、大地震击的替代品质形态与瓦尔大地震击自己的爆炸都走同一路径），
   且这类挥击的接触现在来自它自己的骨架剪辑（`GemAttackContactDelay`：groundslam_maul 是攻击的 0.633，
   而该职业的 attack1_maul、也就是默认攻击的挥击是 0.692）——两者都与扫描一起记录。
+  职业 ACT 里点了名动作的攻击宝石改用那个动作的第一个出手段
+  （`AnimationContacts.SkillActionContactSeconds`：重击的 bash1_mace、冰川之锤 attack_maul_01a 在 0.6 s 预算的 0.499、
+  旋风的 whirl_*、横扫的 sweep_*）：原来拿技能 Id 去猜剪辑名（「heavystrike」对不上 ACT 的 `bash1_mace`）猜不到，
+  退回 attack1，命中就在客户端还在抬手时落地。
+  技能 Id 是变体名时（CycloneChannelled、SweepAltX、VaalGlacialHammer）先剥掉 Vaal/New 前缀与 Channelled/AltX/AltY
+  后缀再查同一个 ACT（`BaseActionNames`），只认 ACT 真有的动作，其余仍回退默认攻击池。
+  `skill_art_variation` 现在按数据下发（`SkillCatalog.ArtVariation` + `ArtVariants`：Arc 10/14、Firestorm 30/42、
+  Leap Slam 19/40），越界或没有美术行的不发（molten_shell 8/8、tornado 2/2、Ice Nova 无行）。
+  `skill_behaviour_variation` 从只给 Leap Slam 扩到所有带 SkillID 的技能（169 行）。
+  Bane 的持续伤害（`BaneCast`）复用 Contagion 的怪物槽位，死亡时不传播（SpreadMore 0）。
   尚未用真实客户端核对。
   剩余：客户端把它的 Move 排到剪辑的切入（Lockstep.cs），而服务端在 Move 到达时就走了，所以挥击期间
   服务端位置会领先最多约 0.3 s；把 Move 持到接触时刻（`HeldMove`）能让它们对齐，需要 `Messages.cs`、
@@ -2028,6 +2038,17 @@
   Slam alone (Cleave, Sweep, Ground Slam's alternate-quality forms and Vaal Ground Slam's own blast all take the same
   path), and each such swing's contact now comes from its own rig clip (`GemAttackContactDelay`: groundslam_maul's 0.633
   of the attack, where the class's attack1_maul, the default attack's swing, is 0.692) — both are logged with the sweep.
+  An attack gem whose class ACT names its action takes that action instead, at its first striking segment
+  (`AnimationContacts.SkillActionContactSeconds`: HeavyStrike's bash1_mace, GlacialHammer's attack_maul_01a at 0.499 of
+  its 0.6 s budget, Cyclone's whirl_*, Sweep's sweep_*): the guessed clip name (a skill's "heavystrike" against the ACT's
+  `bash1_mace`) found nothing and fell back to attack1, so the hit landed while the client was still winding up.
+  A variant Id (CycloneChannelled, SweepAltX, VaalGlacialHammer) strips its Vaal/New prefixes and Channelled/AltX/AltY
+  suffixes before the same ACT lookup (`BaseActionNames`); only actions the ACT declares answer, the rest keep the
+  default-attack fallback. `skill_art_variation` now comes from the data (`SkillCatalog.ArtVariation` + `ArtVariants`:
+  Arc 10 of 14, Firestorm 30 of 42, Leap Slam 19 of 40), and a value at or past the variant list, or a skill with no art
+  row, sends none (molten_shell 8/8, tornado 2/2, Ice Nova). `skill_behaviour_variation` went from Leap Slam only to
+  every skill with a SkillID (169 rows). Bane's damage over time (`BaneCast`) shares Contagion's slot and spreads nothing
+  when a monster dies (SpreadMore 0).
   Not yet checked with the real client.
   Remaining: the client queues its Move until the clip's cut-in (Lockstep.cs) while the server walks on the Move as it
   arrives, so the server's position leads by up to about 0.3 s during a swing; holding the Move until the contact

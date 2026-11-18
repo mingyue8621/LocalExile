@@ -137,15 +137,28 @@ public static partial class Game
         return AttackTiming.ContactDelay(attackSeconds, contact, approach ? HitContactOffsetSeconds() : 0);
     }
 
-    // A gem melee attack's contact: the skill's own rig clip when the data has one (Ground Slam's groundslam_maul, 0.633
-    // of the attack), else the class's attack1 keyframe (AttackContactDelay: 0.692 for the Str rig's attack1_maul, the
-    // default attack's own swing). The clip is taken to stretch to the attack time, as the client plays it, so the
-    // server's hit lands where the client's weapon visually hits. clip/fraction come back for the sweep's log.
-    public static double GemAttackContactDelay(ClientState conn, int effect, double attackSeconds,
+    // A gem melee attack's contact: the class ACT's own action for the skill where the client plays one (HeavyStrike's
+    // bash1_mace, GlacialHammer's attack_maul_01a→01b→bash1_mace: AnimationContacts.SkillActionContactSeconds), else the
+    // skill's rig clip when the data names one (Ground Slam's groundslam_maul, 0.633 of the attack), else the default
+    // attack's own stance clip (the rigs' attack1/attack2 views with their ACT budget), which is what a skill the ACT
+    // sends to "Melee" plays. The clip is taken to stretch to the attack time, as the client plays it, so the server's
+    // hit lands where the client's weapon visually hits. clip/fraction come back for the sweep's log.
+    public static double GemAttackContactDelay(ClientState conn, int effect, double attackSeconds, ushort sequence,
         out string? clip, out double fraction)
     {
         string ao = Environment.GetEnvironmentVariable("Game_PLAYER_AO") ?? SkillsFor(conn).ClassFor(conn.ClassRow).AnimatedObject;
         var weapon = WeaponProfileFor(conn, activeSet: true);
+        // The client's own skill action first: the ACT's segments are the animations it actually plays, and the hit is
+        // the first segment that strikes (GlacialHammer's attack_maul_01a, not its wind-up nor the end of its chain).
+        if (SkillsFor(conn).ActionTypeName(effect) is { } action
+            && Animations.SkillActionContactSeconds(ao, weapon, action, attackSeconds) is double actionContact
+            && attackSeconds > 0)
+        {
+            (clip, fraction) = (action, Math.Clamp(actionContact / attackSeconds, 0, 1));
+            // A gem melee swing keeps its hit over the next attack (AreaSkillHit's holdsItsSwing), so its contact may use
+            // the whole attack, not the quarter-early bound a held button's next use imposes.
+            return AttackTiming.ContactDelay(attackSeconds, fraction, 0, early: false);
+        }
         // A transfigured gem (Id + AltX / AltY) swings its base gem's clip: Holy Sweep of Hammerfalls (SweepAltX) shares
         // Sweep's Animation row (173) and its sweep_maul, whose contact is 350 of 1375 ms; without it the hit fell back
         // to attack1's 0.69 and landed long after the swing (live 2026-11-09).
@@ -156,8 +169,13 @@ public static partial class Game
             (clip, fraction) = (found.Name, found.Contact);
             return AttackTiming.ContactDelay(attackSeconds, found.Contact, 0);
         }
+        // The ACT sends this skill to the stance's default attack ("HeavyStrike = "@Melee";"): the client plays the
+        // pool's own clip, whose budget/slow span decides when it hits (attack_sword_01a at 0.56 of a 0.645 s swing,
+        // not attack1's 0.45). Falling back to the attack1 keyframe alone left the hit early (2026-11-17).
         clip = null;
-        fraction = Animations.AttackContact(ao, weapon);
+        fraction = attackSeconds > 0
+            ? Animations.DefaultAttackContactSeconds(ao, weapon, sequence, attackSeconds) / attackSeconds
+            : Animations.AttackContact(ao, weapon);
         return AttackTiming.ContactDelay(attackSeconds, fraction, 0);
     }
 
@@ -1711,10 +1729,14 @@ public static partial class Game
         if (Stat("base_deal_no_damage") != 0) return;
         if (!hitPlan.CanHit)
         {
-            // Contagion has no hit: its cast puts a chaos damage over time on the monsters in its area (MonsterContagions.cs).
+            // Contagion and Bane have no hit: their cast puts a chaos damage over time on the monsters in its area
+            // (MonsterContagions.cs; Bane shares the slot and spreads nothing when one of them dies).
             if (ContagionCast(conn, skillId, gem.Effect) is { } contagion)
                 await CastContagion(conn, gem.Effect, skillId, from, to,
                     contagion with { SpreadAo = ContagionSkinAo(conn, gem.Gem) }, repeat, radiusMore,
+                    actionToken ?? cooldownUse?.ActionToken ?? conn.ActionCount, cooldownUse?.Instant == true, Current);
+            else if (BaneCast(conn, skillId, gem.Effect) is { } bane)
+                await CastContagion(conn, gem.Effect, skillId, from, to, bane, repeat, radiusMore,
                     actionToken ?? cooldownUse?.ActionToken ?? conn.ActionCount, cooldownUse?.Instant == true, Current);
             return;
         }
@@ -1740,7 +1762,7 @@ public static partial class Game
         double contactFraction = 0;
         lock (conn.Monsters) delay = spell
             ? castDuration.Value / 1000.0 * (repeat + Animations.SpellAreaRelease(SkillsFor(conn).ClassFor(conn.ClassRow).AnimatedObject)) + repeatDelay
-            : GemAttackContactDelay(conn, gem.Effect, SupportedAttackSeconds(conn, skillId), out contactClip, out contactFraction)
+            : GemAttackContactDelay(conn, gem.Effect, SupportedAttackSeconds(conn, skillId), sequence, out contactClip, out contactFraction)
                 + repeatDelay;
         // A caller's own shape (Shield Charge's path and end, ShieldCharge.cs) replaces the skill's area radius.
         int radius = (int)Math.Round((radiusOverride ?? SkillRadius(conn, skillStats, spell, gem.Effect)) * radiusMore);

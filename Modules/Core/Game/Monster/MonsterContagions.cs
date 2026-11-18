@@ -49,6 +49,33 @@ static partial class Game
         return new(dps, seconds, radius, id == "ContagionAltX" ? 0.75 : 1, skillId, Caster: conn);
     }
 
+    /// <summary>Bane (GrantedEffects <c>Bane</c>, <c>BaneAltX</c> of Condemnation, <c>BaneAltY</c>): a curse whose cast puts
+    /// a chaos damage over time on every monster in its area. It shares Contagion's slot on the monster (the strongest
+    /// application deals the damage, MonsterContagion), and spreads nothing when one dies (SpreadMore 0: each application
+    /// is only its own cast's). Null for any other skill.</summary>
+    internal static MonsterContagion.Cast? BaneCast(ClientState conn, ushort skillId, int effect)
+    {
+        string? id = SkillsFor(conn).EffectId(effect);
+        if (id is not ("Bane" or "BaneAltX" or "BaneAltY")) return null;
+        var own = SupportedSkill(conn, skillId).Stats;
+        var player = CharacterPlayerStats(conn);
+        var merged = MergeSkillStats(player, own);
+        int Get(string name) => Stats.Key(name) is uint k ? merged.GetValueOrDefault(k) : 0;
+        int Own(string name) => Stats.Key(name) is uint k ? own.GetValueOrDefault(k) : 0;
+        int Player(string name) => Stats.Key(name) is uint k ? player.GetValueOrDefault(k) : 0;
+
+        double perSecond = Get("base_chaos_damage_to_deal_per_minute") / 60.0;
+        if (!(perSecond > 0) || DamageStats.Prohibited(DamageType.Chaos, Get)) return null;
+        double increased = (double)Get("damage_+%") + Get("spell_damage_+%") + Get("area_damage_+%") + Get("chaos_damage_+%")
+            + Get("damage_over_time_+%") + Get("chaos_damage_over_time_+%");
+        double more = ContagionSupportMore.Aggregate(1.0, (m, name) => m * Math.Max(0, 1 + Own(name) / 100.0));
+        double multiplier = 1 + ((double)Get("dot_multiplier_+") + Get("chaos_dot_multiplier_+")) / 100.0;
+        double dps = perSecond * Math.Max(0, 1 + increased / 100.0) * more * Math.Max(0, multiplier);
+        double seconds = SkillDurationModifiers.Seconds(Own("base_skill_effect_duration"), Player, Own);
+        int radius = SkillRadius(conn, own, spell: true, effect);
+        return new(dps, seconds, radius, SpreadMore: 0, skillId, Caster: conn);
+    }
+
     /// <summary>A Contagion cast: once the area cast clip reaches its contact (as AreaSkillHit times a spell), every live
     /// hostile monster within the radius of the centre is affected. It has no hit, so it deals nothing until it ticks.</summary>
     internal static async Task CastContagion(ClientState conn, int effect, ushort skillId, (int X, int Y) from, (int X, int Y) to,
@@ -74,7 +101,7 @@ static partial class Game
                     affected++;
                 }
         }
-        Console.WriteLine($"[gateway] contagion: {affected} monster(s) within {radius} of ({centre.X}, {centre.Y}), " +
+        Console.WriteLine($"[gateway] {SkillsFor(conn).EffectId(effect)}: {affected} monster(s) within {radius} of ({centre.X}, {centre.Y}), " +
             $"{cast.DamagePerSecond:0.#}/s for {cast.Seconds:0.##} s");
     }
 
@@ -146,7 +173,8 @@ static partial class Game
             drain = m.EssenceDrain.TakeSpread(now);
             // PoE1: the spread carries the time the dead monster's Contagion had left; nothing spreads with none left.
             cast = m.Contagion.TakeSpread(now);
-            if (cast is null) return null;
+            // Bane's application spreads nothing: only Contagion's own carries a share (SpreadMore 0 marks the others).
+            if (cast is null || !(cast.SpreadMore > 0)) return null;
             at = m.Walk.Position(now);
             var next = cast with { DamagePerSecond = cast.DamagePerSecond * cast.SpreadMore };
             foreach (var (otherId, other) in conn.Monsters)

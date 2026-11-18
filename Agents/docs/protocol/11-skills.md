@@ -564,6 +564,23 @@ the 0..387 ms view of `doublestrike_sword`, with a 0.5 s budget.
 Falling back to `attack1_maul` releases the server's next Move while the client still queues it;
 the attack completion then discards that queued walk's path (`0x141e95f10` → `0x141e9b860`).
 
+An attack gem plays the class ACT's own action for the skill, which is not named after the skill: `HeavyStrike` is
+`bash1_mace`, `GlacialHammer` is `attack_maul_01a` (0.6 s) then `attack_maul_01b` (0.8) then `bash1_mace`, `Cyclone`
+`whirl_sword`/`whirl_maul`, `Sweep` `bladestorm_sword_01`/`sweep_greataxe` (`animation_skill_actions`,
+`scripts/re/skill_actions.py`; the action is the GrantedEffects' ActiveSkills ActionType Id). The hit is the *first*
+segment that strikes — GlacialHammer's wind-up segment, not the end of the chain — and a segment plays over its
+`attack_time` budget, the sequence compressing into a shorter attack time. Stances inherit their parent block's actions
+(`OneHandSwordShield` inside `OneHandSword`); a skill the ACT sends to `@Melee` plays the default attack pool above. Only
+five actions carry an ACT `effect` (GlacialHammer's `icehammer_geo`, `PowerShot`'s soul siphon, `DodgeBack`, `ThrowOff`):
+every other skill's visual is the client's own skill data, not an ACT attachment, so the server sends no effect for it.
+
+A skill whose ActionType Id names a variant of the ACT's action plays that action: `CycloneChannelled` → `Cyclone`,
+`SweepAltX` → `Sweep`, `VaalGlacialHammer` → `GlacialHammer`. The server strips the `Vaal`/`New` prefixes and the
+`Channelled`/`AltX`/`AltY`/`New`/`_` suffixes one at a time and takes the first name the ACT declares
+(`ActorAnimations.BaseActionNames`); an action it never declares still falls back to the default attack pool, so the
+lookup never invents an animation the client does not play. 8 of the 364 attack gems resolve this way (the rest name
+actions no ACT block declares: Frenzy, Reave, Ice Shot, Lightning Arrow …).
+
 Burning Arrow's muzzle flash is `Projectiles.MiscAnimatedFlash` (row 3657), which `DefaultArrow` does not have. The client
 creates an effect object at the clip's contact, without a server message: in the same trace at about 375 ms after the
 action starts (contact 399 ms at speed 1.045 is 382 ms), and the server's arrow arrived at about 450 ms. That the object
