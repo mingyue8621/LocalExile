@@ -195,9 +195,8 @@ So:
    `a2b-Killed{Str,Int,Dex}Bandit` flags set) is Ralakesh's avatar, Greust when all three died or no bandit quest was
    done. The client's own lines say so: Eramir's `EramirRalakeshQuestOak`/`…Alira`/`…Kraityn`/`…Greust` and Helena's
    `HelenaOn…Quest` ("He truly believed that if he stood against Oak…").
-   Nothing on the server sets the `a2b-Killed…Bandit` flags yet but `/quest_flag` (the campaign's quest engine sets
-   them on the bandit lords' kills; their help-or-kill dialogue is not offered), and an instance's boss follows the first
-   character to enter it: others who join that instance meet the same boss.
+   The campaign's quest engine sets the kill flags. An instance's boss follows the first character to enter it, and
+   other players who join the instance meet the same boss.
    **Not placed** (the check below lists them with the reason): Marceus the Defaced (The Marketplace) is a tile's
    statue spawner (`Spawner_StoneStatueLargeMaleBoss`) that wakes as the player comes near, and tile spawners are not
    among the generated quest objects (`AreaObjects.QuestTypes`); The Solaris Temple Level 2's three Banners have their
@@ -425,3 +424,8 @@ The first byte is stored at component +0xf0; the essence references occupy +0xc8
 The object's four Transitionable states start at 1 and release at 4; its interaction distance override is 20.
 Its `targetable` shared state is inverted: 0 enables targeting, 1 disables it.
 Transition 4 removes collision and hides its marker; use component indices 4 and 6 for transition and shared-state updates.
+Essence-list changes recreate the same object id; the verified `0x74` currency target is also used for monoliths.
+Vaal Orbs replaced Remnants in 3.27; the legacy `CurrencyCorruptMonolith` table row is not a current gameplay input.
+The historical `deal_chaos_damage_per_second_for_10_seconds_on_hit` id has an **8-second** duration in the pinned
+client's `stat_descriptions` block. Its Decay icon is BuffDefinitions row 766 (`IsRecovery=false`, `__col44=false`):
+no inline values or `u82`, despite its granted per-minute chaos-damage stat.

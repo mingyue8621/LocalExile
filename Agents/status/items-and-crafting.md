@@ -629,6 +629,10 @@
   automated coverage. The old live check (2026-10-21) predates these admission checks; native re-acceptance is pending.
   See [13](../docs/protocol/13-items.md), "Orb of Augmentation", and
 - Unique-flask mechanics; Oriath explosion parity, Sap, Brittle and Replica Rumi's Petrified remain open.
+- Native skin-transfer bind/reclaim preserves complete donors across character and stash saves. Optional item-stat
+  sources exclude socket/skill hosts; 3.29.3c picker binding and protocol reclaim pass, with the shift-click gesture
+  and 3.29.3d picker untested. Docs: [23](../docs/protocol/23-microtransactions.md).
+
 - Unique-flask mechanics; Oriath explosion parity and Replica Rumi's Petrified remain open.
   Docs: [13](../docs/protocol/13-items.md) §8a.
 

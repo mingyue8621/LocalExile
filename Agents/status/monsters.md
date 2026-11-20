@@ -258,6 +258,8 @@
   Elder's super siphon (9061), the Uber Elder pairing's shared phases (each boss runs its own), Sirus' death storms and
   the apparitions/clones (separate monsters and encounters) and his meteor's per-effect ground layers. Code:
   `Modules/Core/Game/Monster/AtlasBosses.cs`, `AtlasBossFight.cs`, `ShaperFight.cs`, `ElderFight.cs`, `SirusFight.cs`.
+  The client's side of Sirus (his action classes and the rows that pick his art) is in
+  [game/sirus-client](../docs/game/sirus-client.md).
 - Dominus (Upper Sceptre of God): both forms fight to the end without a client crash (live 2026-11-05).
   He swings `DominusLightningSlam` (bond, mark and souls effects are skipped); a far boss is created asleep and
   woken when the player comes near. Code: `MavenNucleus.CombatEffect`, `SpawnMonster`.
@@ -281,6 +283,8 @@
   Garukhan 1.7×、Vilenta 2.0×；Arakaali 的 4.8× 与 Piety 的野兽 5.8× 会被压到上限。法术命中（`SkillCatalog.HitDamage`）
   读技能自身的 `spell_minimum/maximum_base_{type}_damage`，不做封顶，因为那是客户端的真实数值。
   尚未用真实客户端核对。
+- Population follows local gates and waits for walkability; isolated pockets stay empty and cleared saves stay cleared.
+
 - Native variety weapons reach ordinary monster inventories; explicit equipment overrides remain authoritative.
   Native appearance references resolve; rendered model parity remains unverified.
 

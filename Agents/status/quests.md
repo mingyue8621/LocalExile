@@ -132,7 +132,9 @@
   The Library's candle opens the hidden door for the instance only.
   The two exits the layout disables and a quest gates (The Upper Sceptre of God → The Aqueduct, The Library → The
   Archives) are created (`scripts/re/exits --quests`: `gated` at seed 1 and three other seeds).
-  Every quest object, chest and NPC the rules name is placed at seed 1.
+  Every quest object, chest and NPC the rules name is placed at seed 1. Helena's rescue uses her visible state 2
+  on the kill and on re-entry; her asset's last state hides her. Sin's first appearance after Innocence advances
+  the paused entrance to state 2, while a return starts in the completed pose.
   Driver step files: `scripts/dev/campaign/quests/a2q*.py`, `a3q*.py`.
   Code: `Acts/Act2.cs`, `Acts/Act3.cs` (QuestObjects module).
   Docs: [12](../docs/protocol/12-quests.md) §11–12; [act 2](../docs/game/campaign/act2.md),
@@ -185,10 +187,11 @@
   Yeena burns the webs), a7q6, a7q4 (Arakaali's entrance lands inside the arena, the bridge into
   Act 8); a8q1, a8q5, a8q4, a8q6, a8q7 (the legion's multi-kill), a8q3 and a8q2 (both orbs at the fight starter,
   Solaris and Lunaris, the bridge exit into Act 9); a9q3 (the mummy event), a9q5 (the Bottled Storm carried to the
-  barrier, both Shakaris), a9q4, a9q2 (the feather to Irasha), a9q1 (both ingredients in one click, the membrane, the
-  three spirits, the Trinity, Lilly's voyage); a10q1 (Plaguewing comes near Bannon), a10q6, a10q4, a10q5, a10q2
+  barrier, Shakari retreats at 65% life and resumes in her second arena), a9q4, a9q2 (the feather to Irasha), a9q1
+  (both ingredients in one click, the membrane, the three spirit gauntlets, the Trinity, Lilly's voyage); a10q1 (Plaguewing comes near Bannon), a10q6, a10q4, a10q5, a10q2
   (Bannon becomes Innocence: Oriath Docks' two stages; the Chambers shortcut waits for the instance's kill), a10q3 (the horns, Kitava's scripted end: `EndGameAvailable`
-  earned, −60% with Act 5's, before him −30%; Sin's portal home) and A11q0 (Lilly sails to Karui Shores). Every act
+  earned, −60% with Act 5's, before him −30%; Sin's portal) and A11q0 (Lilly sails). Both routes arrive at
+  Karui Shores' shore entrance. Every act
   7–10 quest done with every act 7–10 flag of `EpilogueAtlasDemo`, 24 quest passive points and 20 refund points.
   The exits the layouts disable and a quest gates (The Ashen Fields' way north, The Harbour Bridge's into Act 9, Sin's
   portal home) are created (`scripts/re/exits --quests`: `gated` at seed 1 and three other seeds); burnt Oriath's
@@ -306,6 +309,33 @@
   代码：`Acts/Act7.cs` …… `Acts/Act10.cs`（QuestObjects 模块）、奥瑞亚码头 InnocenceTown 那行在 `NPC/TownNpcs.cs`。
   文档：[12](../docs/protocol/12-quests.md) §16–19；[第七幕](../docs/game/campaign/act7.md) ……
   [第十幕](../docs/game/campaign/act10.md)。
+- New characters pick up their class weapon, talk to the dying exile and kill the biting zombie for their skill gem.
+  Their first arrival starts lying down, facing the room's fitted start direction, and the first click plays getup
+  in place. The introduction is saved once and does not reset progressed characters.
+  Other players in the instance see the character standing throughout.
+  A first click on an object gets the character up the same way, instead of walking to it.
+  That follows the client's own server code and has not been checked in the client yet.
+  A Gateway regression covers the get-up echo and retry, both room-angle formulas and the wake-up bytes alongside
+  Vaal soul budgets, including soul-only Actor payloads and progressed characters.
+  The support gem comes from its chest, which requires the player to walk into range.
+  Placements use captured room data and gem claims are saved once; existing characters keep their items and progress.
+  The complete Witch weapon, zombie/gem and chest/support-gem sequence was checked live.
+  The exile remembers his weapon prompt and uses the matching short or long dialogue before the bite.
+  Combat starts when the 3.1-second bite finishes, without the former frozen wait.
+  Closing the armed dialogue starts the bite immediately and retains only its 3.1-second animation before combat.
+  Closing the unarmed weapon prompt does not trigger it.
+  The corrected sequence was checked with an already-equipped Duelist and a Witch who equipped after the prompt.
+  Fresh Duelist and Witch client checks confirmed the corrected lying direction and getup action.
+  Skipped long and short speech started the bite within 0.07 seconds of closing, then combat after about 3.1 seconds.
+  The combat zombie moved and animated its attacks, and the Duelist claimed Double Strike.
+  Tutorial popup acknowledgements and force walls 1/2 remain unimplemented, and placement still needs local captures.
+  See [opening encounter](../docs/protocol/12-quests.md#opening-encounter-2026-10-25).
+- Quest exits with a Transitionable (Merveil's exit, the arena doors) open without their animation (plain
+  AreaTransition), and the arena doors are not created at all.
+- In Act 2, solo players talk to a bandit leader to open the native Help or Kill choice. An allied leader accepts both
+  rivals' amulets for the reward, then offers the Apex. Killing all three leads to Eramir's hand-in.
+- Characters whose activated waypoints carry a quest flag as an access flag (a1q1's Hillock for the Coast) skip that
+  flag's world changes: with OfflineWitch, The Twilight Strand's wall was not created and its gate stood open.
 
 - 新角色会捡起本职业武器、与垂死的流放者对话，并击杀咬人的僵尸换取技能宝石。
   首次进入时角色躺着、朝向房间设定的起始方向，第一次点击就地播放起身。

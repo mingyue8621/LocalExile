@@ -156,6 +156,8 @@
 - **制作格。** 夺宝制作格接受装备、支持宝石交换，重载后保留内容。
   狮眼守望现在会在个人仓库旁边生成公会仓库。
   持久化检查通过；真实客户端打开过城镇公会仓库并加载了它的公会页签。
+- Tab folders: Create New Folder, moving tabs in and out (C→S 0xd1) and Delete Folder (0xd2) are kept with the stash; a
+  deleted folder stays hidden so the later tabs keep their places (18 "C→S"). Checked offline; not yet in the real client.
 - Unique-parent requests retain registered categories in an offline source fixture; native reopen #998 is unverified.
 - Personal stash and gold are shared only within the same account and full league, including mode combinations.
   Guild stash storage is also league-scoped; Standard retains the legacy bank and other leagues use separate banks.
@@ -173,3 +175,6 @@
 - 仓库：切换到已经加载过的页签时不发送任何内容，所以如果玩家没有重新打开仓库、也没有移动物品就登出，这次切换会丢失；
   特殊页签的槽位规则、页签文件夹（页签顺序、名称与颜色会被保留，2026-10-22）、公会仓库真正对接公会，
   以及其他城镇的仓库（[18](../docs/protocol/18-stash.md) 的 "Open" 一节）。
+- Stash: a switch to an already loaded tab sends nothing, so it is missed if the player logs out without reopening the
+  stash or moving an item; the special tabs' slot rules, real guilds for the guild stash and stashes in other towns
+  ([18](../docs/protocol/18-stash.md) "Open").

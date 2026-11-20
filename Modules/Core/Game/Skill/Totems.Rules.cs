@@ -158,7 +158,7 @@ public static partial class Game
         var lifetime = CombatLifetime;
         var source = SupportedSkill(conn, skillId);
         bool SourceCurrent() => SupportedSkill(conn, skillId) is var live && live.Host == source.Host
-            && SameTotemSource(source, live) && IsTotemSkill(conn, skillId);
+            && SameSocketedSkillSource(source, live) && IsTotemSkill(conn, skillId);
         // A quick tap ends the client's action as soon as it is released; the totem's windup still has to finish.
         // Requiring current() for the whole delay dropped every tap and only worked while the key was held.
         // Once the cast has been paid the placement follows the skill source, not the client's button state.

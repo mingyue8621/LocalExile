@@ -8,7 +8,7 @@ using GameServer.Core;
 /// in memory per character name and saved after every change (<see cref="CharacterSaves"/>, data/saves/), so they follow
 /// the player through area changes and Gateway restarts.
 /// </summary>
-public sealed class PlayerInventories
+public sealed partial class PlayerInventories
 {
     public const byte MainInventory = 0, BodyArmour = 1, Weapon1 = 2, Offhand1 = 3, Helmet = 4, Gloves = 8,
         Boots = 9, Belt = 10, Flask = 11, MapDevice = 13, Weapon2 = 14, Offhand2 = 15, CraftingBench = 16,
@@ -302,15 +302,15 @@ public sealed class PlayerInventories
     /// held (or null), or null with the reason.
     /// </summary>
     public (InventoryItem Item, InventoryItem HeldBefore, InventoryItem? HeldNow)? Socket(byte row, uint itemId, int socket,
-        Func<Item, Shape?> shapeOf, Func<uint> newId, out string why, Func<Item, SocketColour?>? gemColour = null)
+        Func<Item, Shape?> shapeOf, Func<uint> newId, out string why)
     {
-        var result = SocketCore(row, itemId, socket, shapeOf, newId, out why, gemColour);
+        var result = SocketCore(row, itemId, socket, shapeOf, newId, out why);
         if (result is not null) Persist();
         return result;
     }
 
     (InventoryItem Item, InventoryItem HeldBefore, InventoryItem? HeldNow)? SocketCore(byte row, uint itemId, int socket,
-        Func<Item, Shape?> shapeOf, Func<uint> newId, out string why, Func<Item, SocketColour?>? gemColour = null)
+        Func<Item, Shape?> shapeOf, Func<uint> newId, out string why)
     {
         lock (_lock)
         {
@@ -331,16 +331,8 @@ public sealed class PlayerInventories
                 why = sockets[socket].Colour == SocketColour.Abyss ? "an Abyss socket requires an Abyss jewel" : "the held item is not a gem";
                 return null;
             }
-            // The socket's colour is the gem's: a red gem in a red socket, and so on; a white socket takes any colour and
-            // so does a white gem (3.x). Until 2026-11-15 any gem went into any coloured socket.
-            var socketColour = sockets[socket].Colour;
-            if (socketColour is SocketColour.Red or SocketColour.Green or SocketColour.Blue
-                && gemColour?.Invoke(held.Item) is SocketColour gem
-                && gem is SocketColour.Red or SocketColour.Green or SocketColour.Blue && gem != socketColour)
-            {
-                why = $"a {gem} gem does not go into a {socketColour} socket";
-                return null;
-            }
+            // 3.29: any gem fits any coloured socket; the colour only adds quality (10% for a matching one). Patch 3.29.0
+            // made that the default, so an off-colour gem simply replaces the one in the socket.
             var old = sockets[socket].Gem;
             sockets[socket] = sockets[socket] with { Gem = held.Item };
             items[at] = item with { Item = item.Item with { Sockets = sockets } };
@@ -520,7 +512,10 @@ public sealed class PlayerInventories
     {
         lock (_lock)
             return [.. VisibleSlots.OrderBy(e => e.Value).Select(e =>
-                _items.TryGetValue(e.Key, out var l) && l.Count > 0 && look(l[0].Item) is { } v ? v with { Slot = e.Value } : VisibleItem.Empty(e.Value))];
+                _items.TryGetValue(e.Key, out var l) && l.Count > 0 && look(l[0].Item) is { } v
+                    ? v with { Slot = e.Value, SkinVisual = l[0].Item.SkinTransferSource is { } source
+                        && look(source) is { } donor ? donor.VisualIdentity : v.SkinVisual }
+                    : VisibleItem.Empty(e.Value))];
     }
 
     /// <summary>Which weapon set is in the hands: 0 the first, 1 the second (the 0x21 / 0xde flag the panel's I / II tab
@@ -993,7 +988,7 @@ public sealed class PlayerInventories
         lock (_lock)
         {
             if (_offered.ContainsKey(itemId) || ItemsIn(row).FirstOrDefault(i => i.Id == itemId) is not { } it
-                || it.Item.Sockets.Any(s => s.Gem is not null)) return null;
+                || it.Item.SkinTransferSource is not null || it.Item.Sockets.Any(s => s.Gem is not null)) return null;
             if (row == Cursor)
             {
                 var shape = shapeOf(it.Item) ?? new(1, 1, "");

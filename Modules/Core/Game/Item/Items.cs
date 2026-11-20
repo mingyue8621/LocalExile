@@ -134,7 +134,7 @@ public static partial class Game
                     missing = unmet;
                 else
                 {
-                    done = items.Socket(row, s.ItemId, (int)s.Socket, ShapeOf, items.NewItemId, out why, GemSocketColour(conn));
+                    done = items.Socket(row, s.ItemId, (int)s.Socket, ShapeOf, items.NewItemId, out why);
                     if (done is not null && ItemModStats.EquipmentRows.Contains(row))
                     {
                         if (done.Value.HeldNow is { } displaced)
@@ -173,12 +173,6 @@ public static partial class Game
             $"0x00bf inventory {s.InventoryId}: item {item.Id} with a gem in socket {s.Socket}");
         if (ItemModStats.EquipmentRows.Contains(row)) await SendEquipment(remote, stream, ciphers, conn, items);
     }
-
-    // A gem's socket colour: SkillGems GemColour (1 red, 2 green, 3 blue, 4 white, which any socket takes); null for an
-    // item whose colour the tables do not name, where no check applies.
-    static Func<Item, SocketColour?> GemSocketColour(ClientState conn) => gem =>
-        ItemsFor(conn).ByHash(gem.TypeHash) is { } baseType && ItemsFor(conn).Gem(baseType) is { } type
-            && type.Colour is >= 1 and <= 4 ? (SocketColour)type.Colour : null;
 
     // The gem one level up, or null with the reason it cannot level: the "+" (0x31) answers with the reason and Level Up All
     // (0x32) skips that gem without affecting the others. A locked gem, one at its highest level, and one whose next level's
