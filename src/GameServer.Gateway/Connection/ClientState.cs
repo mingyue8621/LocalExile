@@ -1311,6 +1311,17 @@ public sealed partial class ClientState(AreaLayout layout, uint ticket, uint see
     public double NextChannelHitAt;
     /// <summary>When the channel last heard from the client (its start, or a C→S 0x197 update; Clock seconds).</summary>
     public double LastChannelUpdateAt;
+    /// <summary>A lockstep client moved the cursor of its running channel: the next frame answers with 0x1ad. A lockstep
+    /// client sends no 0x197/0x198/0x199 — its held channel re-aims with 0x18e repeats and 0x192 — and the frame is the
+    /// only place its stream is at hand (live 2026-11-21).</summary>
+    public bool LockstepChannelAimPending;
+    /// <summary>The lockstep channel's newest aim cell, noted by the read handler (0x18e/0x192) for the frame pass: the
+    /// path search it needs must not run per packet (it stalled every input behind it, live 2026-11-21).</summary>
+    public (int X, int Y) LockstepChannelAim;
+    /// <summary>The aim cell the channel's walk was last set up for (LockstepChannelAim is applied only when it moves).</summary>
+    public (int X, int Y) LockstepChannelAimedAt;
+    /// <summary>When that walk was last set up (Clock seconds): the path search is throttled to one per ChannelAimSeconds.</summary>
+    public double LockstepChannelAimAt;
     /// <summary>The instance this connection is in (its number), for a portal back to it.</summary>
     public ulong InstanceNumber { get; init; }
     /// <summary>Arrive at this cell instead of the spawn (back through a town portal).</summary>

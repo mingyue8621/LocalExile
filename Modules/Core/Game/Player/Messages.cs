@@ -147,6 +147,22 @@ public static partial class Game
                     continue;
                 }
                 Mark("disabled");
+                // A channelled skill already running and re-sent at the cursor: a predictive client says that with 0x197
+                // (handled above), and a second 0x25 is the same re-aim when it comes instead. Ending and starting the
+                // channel again restarted its whirl and dropped the walk (live 2026-11-21: a lockstep client's repeats
+                // arrive as 0x18e, and the player turned on the spot).
+                if (cast && gem.Name is not null && conn.ChannelSkill == use.SkillId
+                    && Supports.Of(gem.Effect)?.Types.Contains(47) == true
+                    && conn.Clock.Elapsed.TotalSeconds - conn.LastChannelUpdateAt <= ChannelSilenceSeconds
+                    && !PlayerActionBlocked(conn, at, conn.Clock.Elapsed.TotalSeconds))
+                {
+                    using (ProjectileMutation(conn))
+                    {
+                        ChannelAimedAt(conn, use.X, use.Y, at);
+                        conn.LastChannelUpdateAt = conn.Clock.Elapsed.TotalSeconds;
+                    }
+                    continue;
+                }
                 // The ordinary ranged attack fires at the ground point; it is neither a melee hit nor a Move action.
                 // Both bows and wands create their native Projectiles.dat object at the weapon's attack contact.
                 string? ordinaryProjectile = OrdinaryRangedAttack.ProjectileId(WeaponProfileFor(conn, activeSet: true));

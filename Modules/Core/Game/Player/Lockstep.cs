@@ -6,6 +6,11 @@ using GameServer.Core.Protocol.Login;
 // Lockstep.Differences.cs, not here.
 public static partial class Game
 {
+    // A lockstep channel's aim is walked to at most this often. The client re-aims per packet as the cursor moves, and a
+    // path search for each of those stalled every input behind it (live 2026-11-21). One per 50 ms keeps up with the aim
+    // updates an aimed predictive channel sends (C→S 0x197, every 80 ms) with room to spare.
+    const double ChannelAimSeconds = 0.05;
+
     // C→S 0x18e, 0x18f, 0x192, 0x195 and 0x196, which a client sends only in lockstep. They only change what the player asks
     // for: everything starts in the frame pass, as on GGG's server, which answers a click at the next frame start and the
     // rest from the player's own tick. The offsets are from the client's cell, and GGG's target is that cell plus the
@@ -30,6 +35,17 @@ public static partial class Game
                 else
                 {
                     Console.WriteLine($"[gateway] {remote} <= 0x018e skill 0x{click.SkillId:x4} at ({aim.X}, {aim.Y}), flags 0x{click.Flags:x4}, u8 {click.Extra}");
+                    // A channelled skill's button held down: the client re-sends the same use (0x18e) as the cursor
+                    // moves, in place of the 0x197 a predictive client sends (live 2026-11-21: no 0x197/0x198/0x199 at
+                    // all from a lockstep client, only these repeats). It is a re-aim, not a new start: the channel
+                    // runs on and Cyclone walks toward the new point. Starting it again ended the channel and began
+                    // the whirl afresh several times a second, so the player turned on the spot and never followed the
+                    // cursor.
+                    if (conn.ChannelSkill != 0 && conn.ChannelSkill == click.SkillId && conn.LockstepSkill.Held)
+                    {
+                        ReaimLockstepChannel(conn, aim);
+                        return;
+                    }
                     conn.LockstepHold.Clear();
                     conn.LockstepSkill.Press(aim, null, click.SkillId, click.Flags, LockstepRepeats(conn, click.SkillId));
                 }
@@ -38,9 +54,11 @@ public static partial class Game
             {
                 var (dx, dy) = InstanceProtocol.ReadLockstepMoveUpdate(bytes);
                 conn.LockstepHold.Update((here.X + dx, here.Y + dy));
-                conn.LockstepSkill.Update((here.X + dx, here.Y + dy));
+                // The held channel's newest aim: this is the lockstep stand-in for a predictive client's 0x197, so the
+                // channel walks toward it and the client is told where it now points (ReaimLockstepChannel).
                 if (conn.ChannelSkill != 0 && conn.LockstepSkill.Channel == conn.ChannelSkillSequence)
-                    conn.LastChannelUpdateAt = conn.Clock.Elapsed.TotalSeconds;
+                    ReaimLockstepChannel(conn, (here.X + dx, here.Y + dy));
+                else conn.LockstepSkill.Update((here.X + dx, here.Y + dy));
             }
             else if (id == InstanceProtocol.LockstepMoveStopId)
             {
@@ -64,6 +82,40 @@ public static partial class Game
                 else conn.LockstepUse = new(target, skill, 0, flags);
             }
         }
+    }
+
+    // A lockstep client's held channel is aimed anew. It has no 0x197: the button being down re-sends the skill (0x18e)
+    // as the cursor moves, and 0x192 carries the newest target. Both come here. Only the aim is noted — the walk to it
+    // (ChannelAimedAt, a path search) and the 0x1ad that answers it belong to the frame pass (LockstepChannelAim), because
+    // this runs in the read handler with conn.Monsters held: a search per packet stalled every input behind it (0x192
+    // took 303 ms, 0x18e 440 ms, and the client's walk stuttered — live 2026-11-21).
+    static void ReaimLockstepChannel(ClientState conn, (int X, int Y) aim)
+    {
+        conn.LockstepSkill.Update(aim);
+        conn.LockstepChannelAim = aim;
+        conn.LastChannelUpdateAt = conn.Clock.Elapsed.TotalSeconds;
+        conn.LockstepChannelAimPending = true;
+    }
+
+    // The channel's newest aim is set up for walking, at most once per ChannelAimSeconds and only when the cursor has
+    // moved since the last setup; true when the aim is answered (the frame owes the client a 0x1ad). Runs in the frame
+    // pass, under conn.Monsters: the search it may do is the reason the aim is not applied where it is read.
+    public static bool ApplyLockstepChannelAim(ClientState conn, double at)
+    {
+        if (!conn.LockstepChannelAimPending || conn.ChannelSkill == 0) return false;
+        var aim = conn.LockstepChannelAim;
+        if (aim == conn.LockstepChannelAimedAt)
+        {
+            // The cursor has not moved since the last setup: answer it, walk nothing.
+            conn.LockstepChannelAimPending = false;
+            return true;
+        }
+        if (at - conn.LockstepChannelAimAt < ChannelAimSeconds) return false;
+        ChannelAimedAt(conn, aim.X, aim.Y, at);
+        conn.LockstepChannelAimedAt = aim;
+        conn.LockstepChannelAimAt = at;
+        conn.LockstepChannelAimPending = false;
+        return true;
     }
 
     // A channelled skill starts once and runs until the release; anything else repeats while the button stays down.
@@ -99,7 +151,7 @@ public static partial class Game
         (int X, int Y) target = default, from = default;
         int action = 0;
         ushort sequence = 0, ended = 0;
-        bool skill = false;
+        bool skill = false, channelAim = false;
         double at;
         InstanceTransfer.UseSkillOnObject? use = null;
         using (ProjectileMutation(conn, phase: "lockstep"))
@@ -120,12 +172,32 @@ public static partial class Game
             StepWalkers(conn, at);
             conn.LockstepTrail.Enqueue((at, conn.Walk.Position(at)));
             if (conn.LockstepTrail.Count > 150) conn.LockstepTrail.Dequeue();
+            // A lockstep client holds a channel with its button and has no 0x197 to refresh the aim silence: its release is
+            // 0x195/0x196, and a still cursor sends nothing at all. The held request is therefore the channel's life, as a
+            // held Winter Orb's is. Before, a held Cyclone ended a second after the cursor stopped moving and the whirl
+            // vanished mid-fight (live 2026-11-21).
+            if (conn.ChannelSkill != 0 && conn.LockstepSkill.Held && conn.LockstepSkill.Channel == conn.ChannelSkillSequence)
+                conn.LastChannelUpdateAt = conn.Clock.Elapsed.TotalSeconds;
             if (conn.LockstepSkill.ChannelReleased() is { } channel)
             {
+                // A walking channel stops where it took the player, not at the cursor it was aimed at: the release ends
+                // the walking too (Combat.ChannelReleased does the same for a predictive client's 0x199).
+                if (conn.ChannelMovement.Skill != 0 && conn.ChannelMovement.Skill == conn.ChannelSkill)
+                {
+                    var (sx, sy) = conn.Walk.Position(at);
+                    conn.Walk.Order(sx, sy, at);
+                }
                 ended = channel;
                 conn.ChannelSkill = 0;
                 conn.ChannelGeneration++;
+                conn.LockstepChannelAimPending = false;
             }
+            // The channel's newest aim, once per frame: a lockstep client gets 0x1ad for it (07 §6), and the walk to it
+            // (ChannelAimedAt) is what keeps the server's estimate with the client's actor. The path search is throttled —
+            // the client aims several times a frame as the cursor moves, and searching for each of those in the read
+            // handler stalled the input (live 2026-11-21). A pending aim is kept until it is applied, so the cursor's last
+            // cell is never lost.
+            else if (ApplyLockstepChannelAim(conn, at)) channelAim = true;
             // Readiness belongs to the client's frame. Projectile time may already be ahead of it; using that
             // clock can start a Move before pickup completion, whose cleanup then discards the new path.
             bool free = LockstepPlayerFree(conn, frameStart);
@@ -161,8 +233,19 @@ public static partial class Game
                 {
                     (target, from) = (due, placed);
                     CancelMeleeRepeats(conn, at);
-                    action = Interlocked.Increment(ref conn.ActionCount);
-                    conn.ChannelSkill = 0;
+                    // A moving channel (Cyclone) walks on these Moves: they are the channel's own walking, not another
+                    // action. Ending it here — as a Move outside a channel does — restarted the whirl and dropped the
+                    // walk every time the cursor moved, and the player turned on the spot without following it (live
+                    // 2026-11-21). The channel keeps its action token, so its sweeps and the 0x1ae stay its own.
+                    bool channelWalk = conn.ChannelMovement.Skill != 0
+                        && conn.ChannelMovement.Skill == conn.ChannelSkill
+                        && conn.PaidChannel is { } paid && paid.Skill == conn.ChannelSkill;
+                    if (channelWalk) action = conn.PaidChannel!.Action;
+                    else
+                    {
+                        action = Interlocked.Increment(ref conn.ActionCount);
+                        conn.ChannelSkill = 0;
+                    }
                     conn.LockstepCastWindow = null;
                     conn.LockstepBusyUntil = frameStart;
                     sequence = NextLockstepSequence(conn);
@@ -171,6 +254,7 @@ public static partial class Game
         }
         // GGG ends a channel with 0x1ae on the release (35 ms later).
         if (ended != 0) await SendWorldRecord(remote, stream, ciphers, conn, PlayerId, InstanceProtocol.ChannelFinished(PlayerId, ended), $"0x01ae channel 0x{ended:x4} ended");
+        if (channelAim) await AimLockstepChannel(remote, stream, ciphers, conn);
         if (sequence == 0) return;
         if (skill) StartLockstepSkill(remote, stream, ciphers, conn, sequence, at);
         else if (use is not null)
