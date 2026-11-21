@@ -510,6 +510,15 @@ public sealed class BeyondTests
                 name => Program.Stats.Key(name) is uint k ? stats.GetValueOrDefault(k) : 0);
         }
 
+        // This server scales every ranged monster hit: sql/updates/world/2026_11_11_190000_monster_ranged_damage.sql
+        // sets monster_ranged_damage_multiplier to 0.75, so the ranged and spell baselines here read 75, not the 100
+        // this test assumes. Ghorr's own share is what it checks, so run it with the multiplier at 1 and put the row
+        // back afterwards.
+        var settingsBefore = SystemSettings.Default.Values;
+        SystemSettings.Default.Replace(new Dictionary<string, double>(settingsBefore)
+        {
+            ["monster_ranged_damage_multiplier"] = 1,
+        });
         try
         {
             // Baseline (Ghorr inactive): every path deals full 100 damage and factor is 1.0.
@@ -557,6 +566,7 @@ public sealed class BeyondTests
         {
             MapBeyond.Leave(conn);
             PlayerInventories.Forget(conn.Character!);
+            SystemSettings.Default.Replace(settingsBefore);
             lifetime.Stop(ex => throw ex);
             Game.CombatLifetime = previousLifetime;
             Program.SetGameLogic(previousLogic!);
