@@ -438,12 +438,15 @@ public sealed class ItemDrops(ItemCatalog catalog, ItemRolls? rolls = null, stri
     }
 
     /// <summary>An approximate generic-map drop: a map of the current map tier (or tier 1 in the campaign). Our own
-    /// rates until the game pools are known.</summary>
-    public Drop? Map(int monsterLevel, MonsterRarity monster, int mapTier, Random rng, int voidstones = 0)
+    /// rates until the game pools are known. <paramref name="chanceFactor"/> scales the chance (a monster's or league's
+    /// map-related drop chance).</summary>
+    public Drop? Map(int monsterLevel, MonsterRarity monster, int mapTier, Random rng, int voidstones = 0, double chanceFactor = 1)
     {
-        double chance = monster switch { MonsterRarity.Normal => 0.012, MonsterRarity.Magic => 0.03, MonsterRarity.Rare => 0.08, _ => 0.25 };
-        chance = Math.Min(1, chance * SystemSettings.Default.DropMultiplier("maps"));
-        if (chance <= 0) { MapRefused("the maps drop multiplier is 0 (world.db drop_multiplier_maps)"); return null; }
+        double chance = monster switch { MonsterRarity.Normal => 0.004, MonsterRarity.Magic => 0.012, MonsterRarity.Rare => 0.05, _ => 0.20 };
+        double multiplier = SystemSettings.Default.DropMultiplier("maps");
+        chance = Math.Min(1, chance * multiplier * Math.Max(0, chanceFactor));
+        if (multiplier <= 0) { MapRefused("the maps drop multiplier is 0 (world.db drop_multiplier_maps)"); return null; }
+        if (chanceFactor <= 0) { MapRefused("the caller passed a map drop chance factor of 0"); return null; }
         if (maps is null) { MapRefused("there is no Atlas catalogue (MapKeys / AtlasNode)"); return null; }
         if (rng.NextDouble() >= chance) return null;
         int stones = Math.Max(0, voidstones);
