@@ -33,6 +33,8 @@ public static partial class Game
             return "this skill can only trigger on a linked melee attack's kill";
         if (GolemStat(gem.Stats, "cast_spell_while_linked_skill_channelling") != 0)
             return "this skill can only trigger while a linked skill is channelled";
+        if (GolemStat(gem.Stats, "skill_triggered_by_snipe") != 0)
+            return "this skill can only be triggered by Snipe";
         if (GolemStat(gem.Stats, "spell_uncastable_if_triggerable") != 0 || TriggeredSpell(conn, gem))
             return "this trigger has no server executor; manual use is unavailable";
         return null;

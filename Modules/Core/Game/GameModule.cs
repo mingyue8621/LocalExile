@@ -25,6 +25,7 @@ public sealed class GameModule : IModule, IDisposable
             Rules.GolemData.Warm();
             AreaPopulation.Warm();
             _ = HideoutCatalog.Hideouts;
+            _ = CharacterAudioCatalog.Default.Value;
         }
         catch (Exception e) when (e is IOException or InvalidDataException or Microsoft.Data.Sqlite.SqliteException or KeyNotFoundException or InvalidOperationException)
         {
@@ -50,6 +51,7 @@ public sealed class GameModule : IModule, IDisposable
         ControlledPlayers.GearFitsClass = global::Game.GearFitsClass;
         module.Lifetime.Own(Rules.CleanupTemporaryAuras());
         module.Lifetime.Own(Rules.CleanupEssenceAuras());
+        module.Lifetime.Own(Rules.CleanupMonsterSummons());
         GameEvents.Tick.Add(module.Manifest.Id, (conn, _) => global::Sirus.Tick(conn));
         // A map device's portal labels read "<area> (Completed)" once that run's boss is dead (World/Portals.cs).
         GameEvents.Tick.Add(module.Manifest.Id, (conn, _) => Rules.TickMapRunBoss(conn));
@@ -175,6 +177,15 @@ public sealed class GameModule : IModule, IDisposable
         GameEvents.PlayerStatSources.Add(module.Manifest.Id, global::Hierophant.PlayerStats);
         GameEvents.PlayerLeaving.Add(id, (conn, _) => global::Hierophant.Leaving(conn));
         GameEvents.PlayerLeaving.Add(id, (conn, _) => global::BrineKing.Leaving(conn));
+        GameEvents.CompanionTick.Add(id, Rules.TickBrands);
+        GameEvents.PlayerStatSources.Add(id, Rules.BrandPlayerStats);
+        GameEvents.PlayerLeaving.Add(id, (conn, _) => { Rules.ClearBrands(conn); return Task.CompletedTask; });
+        GameEvents.TransientClosing.Add(id, Rules.ClearBrands);
+        GameEvents.GrantedSkillExecutable.Add(id, (_, effectId) => Rules.IsBrandsurgeEffect(effectId));
+        GameEvents.Kill.Add(id, Rules.BrandOnMonsterKill);
+        module.Lifetime.Own(Rules.CleanupBrandsOnUnload());
+        GameEvents.AreaGenerated.Add(id, CharacterVoiceLines.OnAreaGenerated);
+        GameEvents.Kill.Add(id, CharacterVoiceLines.OnKill);
     }
 }
 
@@ -260,6 +271,7 @@ public sealed class GameLogic(IModuleLifetime? lifetime = null) : IGameLogic, IC
         conn.NonChaosDotBypassCarry = conn.NonChaosDotTakenCarry = conn.ChaosDotBypassCarry = 0;
         conn.IncomingAilments.Clear();
         Rules.ClearPlayerDecay(conn);
+        Rules.ClearCorruptedBlood(conn);
         Rules.ClearEssenceAuraExposure(conn);
         conn.RetirePlayerUpdates();
         Rules.FortificationOf(conn).Clear();

@@ -127,12 +127,13 @@ def animation_contacts(doc):
     contact frame [ms, point], indices[name] = the clip's index in the rig; and the default attack's stance pools.
     clips[name] adds every clip's length, even without a contact, and its named events as ordered ms lists.
     skillActions[stance] adds the ACT's other actions (the skills' own animations): each stance's parent stance and the
-    actions it declares, each one's animation segments in play order and the effects its .ao assigns to it."""
-    rigs, clips, frames, events, attacks, actions = [], [], [], [], [], []
+    actions it declares, each one's animation segments in play order and the effects its .ao assigns to it.
+    singleSkillClips adds the one clip each (stance, skill) pair plays, where the ACT names it."""
+    rigs, clips, frames, events, attacks, actions, skill_clips = [], [], [], [], [], [], []
     for r, (ao, value) in enumerate(doc.items()):
         rigs.append({"ao": ao, "amd": value.get("amd"), "act": value.get("act")})
         known = set(value) - {"amd", "act", "animations", "positions", "cancels", "contacts", "indices", "clips",
-                              "defaultAttack", "skillActions"}
+                              "defaultAttack", "skillActions", "singleSkillClips"}
         if known:
             raise ValueError(f"animation-contacts {ao}: unknown keys {sorted(known)}")
         names = list(dict.fromkeys([*value.get("animations", {}), *value.get("positions", {}), *value.get("cancels", {}),
@@ -165,9 +166,13 @@ def animation_contacts(doc):
                 for i, segment in enumerate(body["segments"]):
                     actions.append({"rig": r, "stance": stance, "parent": entry.get("parent"), "action": action,
                                     "ord": i, **flat(segment), "effects": body.get("effects") or []})
-    return {"animation_rigs": rigs, "animation_clips": clips, "animation_clip_contacts": frames,
-            "animation_clip_events": events, "animation_default_attacks": attacks,
-            "animation_skill_actions": actions}
+        skill_clips.extend({"rig": r, **a} for a in value.get("singleSkillClips", []))
+    result = {"animation_rigs": rigs, "animation_clips": clips, "animation_clip_contacts": frames,
+              "animation_clip_events": events, "animation_default_attacks": attacks,
+              "animation_skill_actions": actions}
+    if skill_clips:
+        result["animation_skill_clips"] = skill_clips
+    return result
 
 
 def projectile_clips(doc):
