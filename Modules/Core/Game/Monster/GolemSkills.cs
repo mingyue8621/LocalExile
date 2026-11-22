@@ -250,7 +250,8 @@ public static partial class Game
             {
                 string slug = type.ToString().ToLowerInvariant();
                 conversion.AddSkill(DamageType.Physical, type, Raw($"base_physical_damage_%_to_convert_to_{slug}") + Raw($"skill_physical_damage_%_to_convert_to_{slug}"));
-                conversion.AddGlobal(DamageType.Physical, type, mods[$"physical_damage_%_to_convert_to_{slug}"]);
+                conversion.AddGlobal(DamageType.Physical, type, mods[$"physical_damage_%_to_convert_to_{slug}"]
+                    + mods[$"base_physical_damage_%_to_convert_to_{slug}"]);
                 conversion.AddGain(DamageType.Physical, type, mods[$"physical_damage_%_to_add_as_{slug}"]);
             }
             if (effect == 306) conversion.AddSkill(DamageType.Physical, prismatic, 100);
@@ -296,6 +297,7 @@ public static partial class Game
             string id = catalog.EffectId(effect) ?? "";
             double range = spell ? Math.Max(20, 70 * (1 + Raw("spell_maximum_action_distance_+%") / 100.0)) : variety.AttackRange;
             if (!spell && golem.Weapon is { } weapon) range = weapon.Melee ? weapon.Range : 70;
+            if (effect == 9638) range = Math.Max(range, Raw("smite_lightning_target_range"));
             if (id.Contains("Whirling", StringComparison.Ordinal) || id.Contains("Cyclone", StringComparison.Ordinal) || id.Contains("Leap", StringComparison.Ordinal)) range = 45;
             double radius = Raw("active_skill_base_area_of_effect_radius");
             if (radius <= 0) radius = id.Contains("Slam", StringComparison.Ordinal) ? 15 : 10;

@@ -164,6 +164,7 @@ public static partial class Game
             angle: HitAngle(to.X - from.X, to.Y - from.Y)), null, g.Id, m, WorldId: attacker));
         conn.Minions.OutputQueue.Add(new([], "golem takes damage", g.Id, m, PlayerMinions.OutputKind.Life));
         if (m.Life == 0) GolemDieLocked(conn, g, now);
+        else if (MinionInstabilityLocked(conn, g, now)) return true;
         else if (g.Definition.Kind == "Ice" && g.Definition.Special && !g.DeathBurstDone && m.Life * 2L <= m.MaxLife)
         {
             g.DeathBurstDone = true;
@@ -182,6 +183,7 @@ public static partial class Game
     {
         if (g.Monster.Dead && double.IsFinite(g.ReviveAt)) return;
         g.Monster.Dead = true; g.Monster.Life = 0; g.Monster.ActionGeneration++; g.Pending = null;
+        if (g.Definition.Kind == "AnimatedGuardian") RecordAnimatedGuardianDeath(conn);
         g.ShieldPool.Empty();
         PublishEnergyShieldLocked(conn, g);
         foreach (var hazard in g.Hazards) if (hazard.Object is uint obj) conn.Minions.OutputQueue.Add(new(InstanceProtocol.RemoveObject(obj), null, WorldId: obj, RemovesObject: true));
