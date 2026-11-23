@@ -232,6 +232,7 @@ public static partial class Game
         // A gate into an ExtraTerrainFeatures sub-area stands only where a module of the league fills it.
         if (transition.Feature is { } feature && !GameEvents.FillsFeature(player, feature)) return false;
         if (Sirus.GateShown(player, transition) is bool sirusShown) return sirusShown;
+        if (DoedreSewers.GateShown(player, transition) is bool doedreShown) return doedreShown;
         if (DepravedTrinity.GateShown(player, id, transition) is bool shown) return shown;
         if (KitavaActFive.GateShown(player, transition) is bool kitavaShown) return kitavaShown;
         if (KitavaActTen.GateShown(player, transition) is bool finalKitavaShown) return finalKitavaShown;

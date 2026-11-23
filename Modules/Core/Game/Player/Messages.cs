@@ -904,6 +904,7 @@ public static partial class Game
                     if (!ReferenceEquals(arrivalLayout, player.Layout)) player.Use(arrivalLayout);
                     if (arrivalNote is not null) Console.WriteLine($"[gateway] {player.Connection.Remote} {arrivalNote}");
                     Sirus.ConfigureArrival(player);
+                    DoedreSewers.ConfigureArrival(player);
                     // An area with a Trial of Ascendancy gives the Lord's Labyrinth quest, before the player object carries the flags.
                     if (LabyrinthTrials.For(player.Layout.Id) is not null && !player.Character.HasQuestFlag(Quests.LabyrinthQuestReceived))
                         await SetQuestFlags(player, [Quests.LabyrinthQuestReceived]);

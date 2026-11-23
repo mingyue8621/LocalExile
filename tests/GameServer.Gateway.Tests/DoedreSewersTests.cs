@@ -87,6 +87,39 @@ public sealed class DoedreSewersTests
         }
     }
 
+    [Fact]
+    public void Sewer_outlet_stands_at_the_upper_left_gate_and_waits_for_the_boss()
+    {
+        // Live seed 1783119192: the area-name gate (the way back to the sewer grate) stands at (1356, 289) and the
+        // "Sewer Outlet" gate at (1388, 186). The client puts the outlet on the first of those two tiles; keep each
+        // model with its tile and swap the gates' meaning instead.
+        const uint outletLabel = 2179728026; // ClientStrings.MapStairAlternativeSewerOutlet.
+        var grate = (1391, 1023);
+        var waypoint = (621, 479);
+        var upperLeft = new AreaTransitionObject(1356, 289, 0xf363, "Metadata/Terrain/RuinedCity/Sewers/Features/doedre_sewer_grate_v01_01_area_transition2.ao")
+        { Kind = 1, TeleportTo = grate };
+        var right = new AreaTransitionObject(1388, 186, 0xf363, "Metadata/Terrain/RuinedCity/Sewers/Features/doedre_sewer_grate_v01_01_areatransition1.ao")
+        { Kind = 1, Label = outletLabel, TeleportTo = waypoint };
+        var c = new Player(new(0xf363, "2_8_2_2", 1600, 1600, 1000, 1000, (_, _) => true, [(1u, upperLeft), (2u, right)]), 1, 1)
+        { Instance = new() };
+
+        DoedreSewers.ConfigureArrival(c);
+
+        var upper = c.Layout.AreaTransitions.Single(e => e.Id == 1).Transition;
+        var other = c.Layout.AreaTransitions.Single(e => e.Id == 2).Transition;
+        Assert.Equal(outletLabel, upper.Label);
+        Assert.Equal(waypoint, upper.TeleportTo);
+        Assert.Null(other.Label);
+        Assert.Equal(grate, other.TeleportTo);
+        Assert.Equal((1356, 289), (upper.GridX, upper.GridY));
+        Assert.Equal((1388, 186), (other.GridX, other.GridY));
+        Assert.False(DoedreSewers.GateShown(c, upper) ?? false);
+        Assert.True(DoedreSewers.GateShown(c, other) is null);
+
+        c.Instance.SetState(Quests.InstanceFlag("DoedreSewers-Won"));
+        Assert.True(DoedreSewers.GateShown(c, upper) ?? false);
+    }
+
     sealed class Wire : IDisposable
     {
         readonly TcpListener listener = new(IPAddress.Loopback, 0);

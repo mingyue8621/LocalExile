@@ -10,6 +10,10 @@ public static class DoedreSewers
 {
     public const string Boss = "Metadata/Monsters/Doedre/DoedreSewers";
     internal const string Area = "2_8_2_2", Objects = "Metadata/Monsters/Doedre/DoedreSewer/";
+    // ClientStrings.MapStairAlternativeSewerOutlet ("Sewer Outlet"): the boss room's way out, which the game creates
+    // only after Doedre falls. The other boss-room gate (teleport1-%areaname%) shows the area's own name, so no label.
+    const uint SewerOutletLabel = 2179728026;
+    static string Flag(string name) => Quests.InstanceFlag("DoedreSewers-" + name);
     const string Art = "Metadata/Effects/Spells/monsters_effects/act8/Doedre/";
     const int Melee = 406, Wand = 6437, Burst = 6440, Warp = 6447, Emerge = 6742, Drain = 6743;
     static readonly int[] Effects = [Melee, Warp, Drain, Wand, Burst, Emerge];
@@ -26,6 +30,31 @@ public static class DoedreSewers
     public static byte[] HazardAnimation(uint objectId, uint clip) => InstanceProtocol.AnimationUpdate(objectId, 0, clip, 1);
     public static StateMachineData? StartStates(MonsterCatalog.Variety v) => IsBoss(v)
         ? v.StateMachine?.Set("disable_life_bar", 1).Set("boss_life_bar", 0) : null;
+
+    /// <summary>The boss room has two in-area gates on the same grate tile. The client's room node names them
+    /// "teleport1-%areaname%" (back to the sewer grate) and "teleport4-MapStairAlternativeSewerOutlet" (the way out).
+    /// Their tiles place them the other way round: the outlet stands at the gate the client models as
+    /// area_transition2, on the upper left of the cauldron. Keep each object's model, rotation and height with its
+    /// tile, and swap only what the gate means: its label and its landing point.</summary>
+    internal static void ConfigureArrival(Player c)
+    {
+        if (c.Layout.Id != Area) return;
+        (uint Id, AreaTransitionObject Gate)? outlet = null, back = null;
+        foreach (var (id, gate) in c.Layout.AreaTransitions)
+        {
+            if (gate.Label == SewerOutletLabel) outlet = (id, gate);
+            else if (gate.Label is null && gate.Kind == 1 && gate.TeleportTo is not null) back = (id, gate);
+        }
+        if (outlet is null || back is null) return;
+        var (outletId, outletGate) = outlet.Value;
+        var (backId, backGate) = back.Value;
+        c.ReplaceAreaTransition(outletId, outletGate with { Label = null, TeleportTo = backGate.TeleportTo });
+        c.ReplaceAreaTransition(backId, backGate with { Label = SewerOutletLabel, TeleportTo = outletGate.TeleportTo });
+    }
+
+    /// <summary>The sewer outlet does not exist until Doedre is dead; the gate back stands from the start.</summary>
+    internal static bool? GateShown(Player c, AreaTransitionObject gate) =>
+        c.Layout.Id == Area && gate.Label == SewerOutletLabel ? c.Instance.HasState(Flag("Won")) : null;
     static ushort Skill(int effect) => (ushort)(0x4000 + Array.IndexOf(Effects, effect));
     public static Dictionary<uint, int> PlayerStats(Player c, Dictionary<uint, int> stats)
     {
@@ -307,7 +336,9 @@ public static class DoedreSewers
                     await ClearHazards(c);
                     foreach (var p in Present) await Clear(p);
                     await States();
-                    Console.WriteLine("[gateway] Doedre: defeated, valve disabled, effluent cleared");
+                    c.Instance.SetState(Flag("Won"));
+                    foreach (var p in Present) await UpdateShownTransitions(p, "Doedre's Cesspool sewer outlet");
+                    Console.WriteLine("[gateway] Doedre: defeated, valve disabled, effluent cleared, sewer outlet opened");
                 }
                 return;
             }
