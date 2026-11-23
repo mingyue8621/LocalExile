@@ -9,15 +9,18 @@ public static partial class Game
             if (Skills.ProjectileFor(Skills.EffectRow(effect)) is { } projectile)
                 definitions.Add(effect, SkillProjectileDefinition(effect, projectile.Id,
                     SkillProjectileParameters(effect, projectile.Id)));
-        // Volcanic Fissure's lava erupts from VolcanicSlamMortar, a Projectiles row named after Volcanic Slam rather
-        // than the gem. Register it explicitly or the catalog lookup leaves the skill without a recipe.
-        const string fissureProjectile = "Metadata/Projectiles/VolcanicSlamMortar";
-        definitions["VolcanicFissure"] = SkillProjectileDefinition("VolcanicFissure", fissureProjectile,
-            SkillProjectileParameters("VolcanicFissure", fissureProjectile));
-        // The totem's flame spray is likewise catalogued under the totem's name, not the gem's.
+        foreach (string effect in new[] { "ExplosiveArrow", "ExplosiveArrowAltX", "ExplosiveArrowAltY", "ExplosiveArrowRoyale" })
+            definitions[effect] = SkillProjectileDefinition(effect, FuseArrowProjectile,
+                SkillProjectileParameters(effect, FuseArrowProjectile));
+        const string tetheringArrow = "Metadata/Projectiles/TetheringArrow";
+        foreach (string effect in new[] { "EnsnaringArrow", "EnsnaringArrowAltX", "EnsnaringArrowAltY", "EnsnaringArrowRoyale" })
+            definitions[effect] = SkillProjectileDefinition(effect, tetheringArrow, SkillProjectileParameters(effect, tetheringArrow));
         const string holyFlameProjectile = "Metadata/Projectiles/TotemHolyFireSpray";
         definitions["HolyFlameTotem"] = SkillProjectileDefinition("HolyFlameTotem", holyFlameProjectile,
             SkillProjectileParameters("HolyFlameTotem", holyFlameProjectile));
+        const string fissureProjectile = "Metadata/Projectiles/VolcanicSlamMortar";
+        definitions["VolcanicFissure"] = SkillProjectileDefinition("VolcanicFissure", fissureProjectile,
+            SkillProjectileParameters("VolcanicFissure", fissureProjectile));
     }
 
     static partial void ConfigureCatalogProjectileDefinition(int effect, ref ProjectileSkillDefinition? definition)
@@ -130,6 +133,7 @@ public static partial class Game
                 if (GatewayProjectileSkillProfiles.IsKineticBlast(effect))
                     return use with { Payload = shot with { AreaVisual = Art.AnimatedInPlaceOf(KineticBlastExplosionAo, context.Variation),
                         Presentation = new() { EffectLifetime = ProjectileRuntime.Time(.35) } } };
+                if (IsEnsnaringArrow(effect)) return use with { Payload = shot with { Ensnare = CaptureEnsnare(context, Get) } };
                 if (!GatewayProjectileSkillProfiles.IsFireball(metadata)) return use;
                 string ao = Art.AnimatedInPlaceOf(DefaultProjectileImpactAo, context.Variation);
                 return use with { Payload = shot with { Presentation = new()

@@ -11,6 +11,10 @@
   关系是账号级的并且会持久化；见 [28](../docs/protocol/28-player-trade.md) §6。
 - **入手：** 好友备注、屏蔽列表与状态编辑；在多个独立的 Gateway 进程之间核对在线状态。
 - **完成标准：** 社交面板里剩下的这些操作会持久化，并在两个账号的原生界面上正确更新。
+- **Known:** friends can be added, accepted and removed through the native Social UI.
+  Relations are account-level and persisted; see [28](../docs/protocol/28-player-trade.md) §6.
+- **Start:** friend notes; verify ignore lists, status editing and presence across separate Gateway processes.
+- **Done when:** these remaining Social-panel actions persist and update the native UI for both accounts.
 
 ### NPC：对话选项、商店与其他城镇
 

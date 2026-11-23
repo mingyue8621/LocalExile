@@ -171,6 +171,12 @@ public static partial class Game
                 await SetQuestFlags(player, ["Visited-11_town"], on: false);
             Console.WriteLine($"[gateway] {player.Connection.Remote} a11q1: Helena has spoken; the \"Talk to Helena\" tracker entry leaves the log");
         }
+        player.StashOpen = false;
+        player.GuildStashOpen = false;
+        player.BenchOpen = false;
+        player.ModuleWindow = null;
+        player.ModuleWindowAnchor = null;
+        await RefreshBenchBalance(player, clear: true);
         player.AutomaticNpcTalkRows.Clear();
         player.TalkingTo = id;
         player.InNpcTalk = false;

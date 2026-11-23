@@ -11,6 +11,11 @@ public static partial class Game
     // path search for each of those stalled every input behind it (live 2026-11-21). One per 50 ms keeps up with the aim
     // updates an aimed predictive channel sends (C→S 0x197, every 80 ms) with room to spare.
     const double ChannelAimSeconds = 0.05;
+    const double MovingChannelAimInterval = .05;
+
+    static bool HeldLockstepMovingChannel(Player player) =>
+        player.Connection.LockstepClient && player.ChannelMovement.Skill != 0 && player.ChannelMovement.Skill == player.ChannelSkill
+        && player.LockstepSkill.Held && player.LockstepSkill.Channel == player.ChannelSkillSequence;
 
     // C→S 0x18e, 0x18f, 0x192, 0x195 and 0x196, which a client sends only in lockstep. They only change what the player asks
     // for: everything starts in the frame pass, as on GGG's server, which answers a click at the next frame start and the
@@ -46,7 +51,12 @@ public static partial class Game
                     return;
                 }
                 player.LockstepHold.Clear();
-                player.LockstepSkill.Press(aim, null, click.SkillId, click.Flags, LockstepRepeats(player, click.SkillId));
+                if (player.ChannelSkill == click.SkillId && HeldLockstepMovingChannel(player))
+                {
+                    player.LockstepSkill.Retarget(null, aim);
+                    player.LockstepChannelAimPending = true;
+                }
+                else player.LockstepSkill.Press(aim, null, click.SkillId, click.Flags, LockstepRepeats(player, click.SkillId));
             }
         }
         else if (id == InstanceProtocol.LockstepMoveUpdateId)
@@ -55,14 +65,19 @@ public static partial class Game
             player.LockstepHold.Update((here.X + dx, here.Y + dy));
             // The held channel's newest aim: this is the lockstep stand-in for a predictive client's 0x197, so the
             // channel walks toward it and the client is told where it now points (ReaimLockstepChannel).
-            if (player.ChannelSkill != 0 && player.LockstepSkill.Channel == player.ChannelSkillSequence)
+            player.LockstepSkill.Update((here.X + dx, here.Y + dy));
+            if (HeldLockstepMovingChannel(player))
+            {
+                player.LockstepChannelAim = player.LockstepSkill.Aim;
+                player.LockstepChannelAimPending = true;
+            }
+            else if (player.ChannelSkill != 0 && player.LockstepSkill.Channel == player.ChannelSkillSequence)
             {
                 ReaimLockstepChannel(player, (here.X + dx, here.Y + dy));
                 // Snipe keeps its own release aim: the channel's walk above is for a moving channel, this is where
                 // its arrow will go (upstream Snipe, 2026-11-21).
                 SnipeAimedAt(player, (here.X + dx, here.Y + dy));
             }
-            else player.LockstepSkill.Update((here.X + dx, here.Y + dy));
         }
         else if (id == InstanceProtocol.LockstepMoveStopId)
         {
@@ -179,6 +194,7 @@ public static partial class Game
         int action = 0;
         ushort sequence = 0, ended = 0;
         bool skill = false, channelAim = false;
+        (ushort Sequence, (int X, int Y) Aim)? movingAim = null;
         double at;
         InstanceTransfer.UseSkillOnObject? use = null;
         using (ProjectileMutation(player, phase: "lockstep"))
@@ -189,6 +205,7 @@ public static partial class Game
             {
                 player.LockstepHold.Clear();
                 player.LockstepSkill.Clear();
+                player.LockstepChannelAimPending = false;
                 player.LockstepCastWindow = null;
                 player.LockstepUse = null;
                 return;
@@ -224,10 +241,22 @@ public static partial class Game
                     player.Walk.Order(sx, sy, at);
                 }
                 ended = channel;
-                player.ChannelSkill = 0;
-                player.ChannelGeneration++;
                 player.LockstepChannelAimPending = false;
-                SnipeWakeChannel(player);
+                ChannelReleased(player, at);
+            }
+            else if (player.LockstepChannelAimPending && HeldLockstepMovingChannel(player)
+                && !PlayerActionBlocked(player, at, at))
+            {
+                var aim = player.LockstepSkill.Aim;
+                if (player.LastLockstepChannelAim is { } last && aim == last.Aim)
+                    player.LockstepChannelAimPending = false;
+                else if (player.LastLockstepChannelAim is not { } previous || at - previous.At >= MovingChannelAimInterval)
+                {
+                    ChannelAimedAt(player, aim.X, aim.Y, at);
+                    player.LastLockstepChannelAim = (aim, at);
+                    player.LockstepChannelAimPending = false;
+                    movingAim = (player.ChannelSkillSequence, aim);
+                }
             }
             // The channel's newest aim, once per frame: a lockstep client gets 0x1ad for it (07 §6), and the walk to it
             // (ChannelAimedAt) is what keeps the server's estimate with the client's actor. The path search is throttled —
@@ -301,6 +330,7 @@ public static partial class Game
         // GGG ends a channel with 0x1ae on the release (35 ms later).
         if (ended != 0) await SendWorldRecord(player, player.Id, InstanceProtocol.ChannelFinished(player.Id, ended), $"0x01ae channel 0x{ended:x4} ended");
         if (channelAim) await AimLockstepChannel(player);
+        if (movingAim is { } aimed) await SendLockstepChannelAim(player, aimed.Sequence, aimed.Aim);
         if (sequence == 0) return;
         if (skill) StartLockstepSkill(player, sequence, at);
         else if (use is not null)
@@ -319,20 +349,26 @@ public static partial class Game
             });
             _ = OnUseObject(player, use with { Sequence = sequence, Started = true }, at);
         }
-        else await SendWorldRecord(player, player.Id, [], $"0x01ab lockstep walk to ({target.X}, {target.Y})",
-            atGate: () =>
-            {
-                using (ProjectileMutation(player, phase: "send"))
+        else
+        {
+            bool moved = false;
+            await SendWorldRecord(player, player.Id, [], $"0x01ab lockstep walk to ({target.X}, {target.Y})",
+                atGate: () =>
                 {
-                    if (!PlayerActionCurrent(player, action)) return null;
-                    double gateAt = player.Connection.LockstepFrame?.Start ?? frameStart;
-                    StepWalkers(player, gateAt);
-                    if (PlaceLockstepPlayerMove(player, target, gateAt) is not { } placed) return null;
-                    from = placed;
-                    return LockstepActionStart(player, from, target, sequence);
-                }
-            },
-            still: () => PlayerActionCurrent(player, action));
+                    using (ProjectileMutation(player, phase: "send"))
+                    {
+                        if (!PlayerActionCurrent(player, action)) return null;
+                        double gateAt = player.Connection.LockstepFrame?.Start ?? frameStart;
+                        StepWalkers(player, gateAt);
+                        if (PlaceLockstepPlayerMove(player, target, gateAt) is not { } placed) return null;
+                        from = placed;
+                        moved = true;
+                        return LockstepActionStart(player, from, target, sequence);
+                    }
+                },
+                still: () => PlayerActionCurrent(player, action));
+            if (moved) await CloseInteractionsIfMovingAway(player, target, AreaTime(player));
+        }
     }
 
     // A player Move due at `at`: placed and its start cell returned when the client takes it (LockstepTakesMove). The
@@ -630,7 +666,11 @@ public static partial class Game
         channel = player.LockstepSkill.Channel is { } sequence ? (sequence, player.LockstepSkill.Aim) : null;
         if (channel is { } current) AimChannelTriggers(player, current.Aim);
         return channel is { } c
-            ? SendWorldRecord(player, player.Id, InstanceProtocol.ActionTarget(player.Id, c.Sequence, c.Aim.X, c.Aim.Y), $"0x01ad channel aims at ({c.Aim.X}, {c.Aim.Y})")
+            ? SendLockstepChannelAim(player, c.Sequence, c.Aim)
             : Task.CompletedTask;
     }
+
+    static Task SendLockstepChannelAim(Player player, ushort sequence, (int X, int Y) aim) =>
+        SendWorldRecord(player, player.Id, InstanceProtocol.ActionTarget(player.Id, sequence, aim.X, aim.Y),
+            $"0x01ad channel aims at ({aim.X}, {aim.Y})");
 }

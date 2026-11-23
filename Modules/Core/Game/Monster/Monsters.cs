@@ -140,7 +140,7 @@ public static partial class Game
     // Predictive only (a lockstep client's chase walk-up swings by its own goal test, StepFrames): how long after its order
     // a melee swing can still turn out not to have begun on the client, and how far inside its reach a monster must be to
     // swing at a walking player (37 cells a second over the order's way to the client). Neither is sourced yet.
-    const double SwingOrderSeconds = .15, MovingReachMargin = 2, SwingWaitSeconds = 2.5;
+    const double SwingOrderSeconds = .15, MovingReachMargin = 2;
     // A melee walk-up farther than this past the reach goes in legs of this many cells (07 §5): the client paths every
     // order out of one budget per frame, which a search toward a player a long way off spends, finding nothing 27–57 %
     // of the time, and one of a dozen cells leaves whole, finding its path 94 % (live 2026-11-03).
@@ -298,7 +298,8 @@ public static partial class Game
         byte level, MonsterRarity rarity, int x, int y, string? name = null, bool friendly = false, bool log = true, uint? damagedLife = null,
         MonsterModSet? mods = null, bool alone = true, bool? unrisen = null, float rotation = 0,
         IReadOnlyList<(uint Key, int Value)>? extraStats = null, Action<uint, SpawnedMonster>? owned = null, Func<bool>? ownedCurrent = null,
-        IReadOnlyList<GrantedSkill>? ownedSkills = null, uint? ownedMaximumLife = null, uint ownedMaximumEnergyShield = 0,
+        IReadOnlyList<GrantedSkill>? ownedSkills = null,
+        uint? ownedMaximumLife = null, uint ownedMaximumEnergyShield = 0,
         uint ownedEnergyShield = 0,
         MonsterModSet? extraMods = null, bool scripted = false, IReadOnlyList<VisibleItem>? ownedLooks = null,
         Func<bool>? ownedAdmission = null, bool ownedInitialDeath = false,
@@ -339,10 +340,7 @@ public static partial class Game
         if (extraMods is not null) mods = mods with { Effects = mods.Effects.Plus(extraMods.Effects) };
         if (!friendly && MapModsOf(player) is { } mapMods && MapMonsterEffects(mapMods) is { Count: > 0 } mapStats)
             mods = mods with { Effects = mods.Effects.Combine(mapStats) };
-        // The party bonus (Game.PartyBonus): each player beyond the first adds to the monsters' life by their rarity —
-        // +50% normal, +60% magic, +80% rare, +100% unique (the client's own constants). Uniques take it too: it is the
-        // official rule, and a party bot counts as a player because it is one (a controlled connection). Act bosses are
-        // long in a party, which is what the hearts and stages of their fights are for.
+        // The party bonus (Game.PartyBonus): each player beyond the first adds to the monsters' life by their rarity.
         if (!friendly && PartyMonsterLife(player, rarity) is int party and > 0)
             mods = mods with { Effects = mods.Effects.Combine(new Dictionary<uint, int> { [Stat.MaximumLifePlusPct] = party }) };
         // Full life: the client derives the base from the level (MonsterCatalog.BaseLife); the mods' maximum goes on its Stats.
@@ -391,15 +389,9 @@ public static partial class Game
         // A mortar skill's projectile (Sand Spitter): the shot flies and lands its hit; other ranged skills keep the
         // instant contact until their projectile is known (SkillCatalog.MonsterProjectile). Its release time and point
         // come from the clip the client plays for it (MonsterReleaseFor). MavenProjectile and the Nucleus barrages are
-        // monster_projectile_spell rows (not mortars): MavenNucleus.Shot names their Projectiles.dat art. A bow- or
-        // wand-armed monster's attack is a weapon projectile (SkillCatalog.WeaponProjectile: the Vaal archers' elemental
-        // arrows), which the server flies itself: a predictive client draws no arrow of its own.
-        var projectile = rangedAttack ? MavenNucleus.Shot(catalog, effect, variety.RangedWeapon) : null;
+        // monster_projectile_spell rows (not mortars): MavenNucleus.Shot names their Projectiles.dat art.
+        var projectile = rangedAttack ? MavenNucleus.Shot(catalog, effect) : null;
         if (friendly && owned is not null && rangedAttack) projectile ??= catalog.MonsterProjectile(effect, includeWeaponAttacks: true);
-        // The shared "Melee" row carries the ranged types too (every rig has that plain attack), so read as a ranged skill
-        // without a projectile it left the monster standing at the far reach "shooting" a swing the client never played: the
-        // Act 5 boss never attacked in either form (live 2026-11-10). With no projectile art it is a melee swing.
-        if (rangedAttack && projectile is null && catalog.IsMelee(effect)) rangedAttack = false;
         // A summoning skill (the Immolator's) brings its monsters whenever the player is within its aggro range, at its
         // own cast time; it deals no hit.
         var summon = variety.GrantedEffects is [int summonEffect, ..] ? MonsterSummonOf(catalog, summonEffect, level) : null;
@@ -407,9 +399,7 @@ public static partial class Game
         if (summon is { Effect: >= 0 } && BossKits.BodyAttack(player, Monsters.Find(summon.Variety.ToString()), level, summon.Effect, 0x4000) is null) summon = null;
         // A monster whose effect is a spell (the King's Death Effigy, fetish hazards) needs cast-time stats,
         // not the melee attack duration; the client crashed in its cast-duration path when the actor record carried only
-        // attack stats (0xc0000005, live 2026-10-31). An ActiveSkillType Spell effect needs them whether or not its stat
-        // set says casting_spell: the Vaal Oversoul's IncaBossRocks carries none, and with attack stats only its cast
-        // duration had no value, so the boss played no animation through every 0x1ab (MonsterAttack.CastTime).
+        // attack stats (0xc0000005, live 2026-10-31).
         bool spell = effect >= 0 && catalog.EffectStats(effect, level)
             .Any(s => s.Item1 == Stat.CastingSpell && s.Item2 != 0);
         // Level-scaled native stats for ordinary monster skills (spell elemental base damage, cast/attack speed
@@ -432,19 +422,8 @@ public static partial class Game
             : rangedAttack && !kingActor && spell ? MonsterSpellReach(catalog, variety, effect, NativeMonsterStat(nativeStats, Stat.SpellMaximumActionDistancePlusPct))
             : rangedAttack && !kingActor ? RangedAttackReach()
             : variety.AttackRange;
-        // 只有**真的走不动**的怪（MovementSpeed 0 / Immobile）才把射程补到仇恨范围：它够不到把自己唤醒的玩家，
-        // 不补就永远站在那儿不出手 (live 2026-11-13：沸水湖泊的蛇怪 The Basilisk，仇恨 135、攻击读数 9，玩家在 145 格外)。
-        // 会走路的远程/施法怪**不能**这样补：MonsterSurround 的站定距离就是攻击距离（上游 2026-11-21 的 StandsOff，
-        // 第一个环取 Reach-1），射程一抬到 105 格，它们就退到 10 米外才肯打 —— 玩家看到「一靠近/一放技能怪就全跑了」，
-        // 而且 104 格正好撞上 ChaseRange(105) 的脱战判定，退到位就立刻放弃目标、站着不动
-        // (live 2026-11-22 上层神权之塔：彩羽龙蜥 / 不死贵族 / 鸣蛙，7 分钟里 106 次 gives up 都在 105 格)。
-        // 会走路的怪用数据自己的 MaximumAttackDistance 就够了，够不着它会走过来。
-        if ((variety.MovementSpeed == 0 || variety.Immobile) && variety.AggroRange > variety.AttackRange)
-            reach = Math.Max(reach, variety.AggroRange);
         double swing = !kingActor && effect >= 0 && catalog.IsSpell(effect) && catalog.CastTimeMs(effect) > 0
             ? catalog.CastTimeMs(effect) / 1000.0 : variety.AttackMs / 1000.0;
-        // A spell's swing is its cast time, not the variety's attack time (the Shrieker's BatScreech casts in 1 s while
-        // its variety attacks in 1.5 s); that time drives the cast/attack-speed scaling below.
         double attackSeconds = summon is { CastSeconds: > 0 } ? summon.CastSeconds
             : spell && !kingActor && !brine && !atlas
                 ? mods.Effects.CastSeconds(swing,
@@ -485,13 +464,6 @@ public static partial class Game
         var skill = effect >= 0
             ? catalog.FindByRow(attack.SkillId, effect, level,
                 MonsterActionSkillStats(player, effect, level, attack, mods.Effects)) : null;
-        // A boss is worth a line: which effect it picked, how far it thinks it reaches and whether it has a skill the client
-        // can play at all — the Act 5 boss stood through the whole fight and this is what says why (live 2026-11-10).
-        if (variety.BossHealthBar || rarity == MonsterRarity.Unique && variety.GrantedEffects is [_, ..]
-            || variety.MovementSpeed == 0 && variety.GrantedEffects is [_, ..])
-            Console.WriteLine($"[gateway] {player.Connection.Remote} boss {variety}@{level}: effect {effect} ({catalog.EffectId(effect) ?? "none"}), "
-                + $"skill 0x{skillId:x4} {(skill is null ? "not built" : "built")}, reach {reach:0.#}, ranged {rangedAttack}, "
-                + $"projectile {(projectile is null ? "none" : projectile.Metadata)}, swing {attack.Seconds:0.###} s");
         // A boss with stages also has the skill that changes them (Hillock's sword extract, BossFights). A scripted
         // encounter drives its own phases: the built-in stage would heal it and fight the controller for its actions.
         var stage = scripted || atlas ? null : BossFights.For(variety.Id);
@@ -523,6 +495,13 @@ public static partial class Game
         if (ownedSkills is not null) skills = ownedSkills;
         if (skills is not null) skills = Yugul.AddSkills(player, variety, level, skills);
         if (skills is not null) skills = SolarisLunaris.AddSkills(player, variety, level, skills);
+        // The effect behind each actor skill id, so a mod's command can play one of the monster's own skills by the
+        // GrantedEffects Id the client shows (AtlasBosses.ActorAction). Derived from the actor's actual skills list so
+        // scripted bosses (kingSkills), kit skills, stage skills, ownedSkills and added boss skills all match what the
+        // client received on the actor.
+        IReadOnlyList<(int Effect, ushort Id)> skillIds = skills is null ? []
+            : [.. skills.Select(s => catalog.EffectsPerLevel((int)s.EffectsPerLevelRow) is { } ge
+                ? (ge.Effect, s.Id) : (-1, (ushort)0)).Where(x => x.Item1 >= 0)];
         List<(uint, int)>? stats = skill is null ? null : [.. attack.Stats()];
         // The final maximum too: the client applies no modifier of its own (as for the player's maximum_life), so without it
         // the life bars kept the base maximum and a unique showed full until its life fell below it (live 2026-10-21).
@@ -541,12 +520,15 @@ public static partial class Game
         uint initialLife = Math.Min(damagedLife ?? life, life);
         bool initialDeath = ownedInitialDeath || (owned is not null && initialLife == 0);
         uint wireLife = Math.Max(1u, owned is null ? life : initialLife);
+        ushort animationSeed = (ushort)(((id * 2654435761u) ^ ((uint)variety.Hash16 << 16)) >> 16);
+        if (animationSeed == 0) animationSeed = 1;
         var monster = new MonsterObject(x, y, wireLife, variety.ComponentsOrBase, ao, rarity, name, states, BossKits.StartState(variety, SolarisLunaris.StartState(player, variety, MonsterEmerge.CreateState(variety, emerge, waits))), team,
             skills, stats)
         {
             Mods = mods.Mods, NameWords = mods.NameWords, LifeData = variety.LifeData, Rotation = rotation, Equipped = ownedLooks ?? variety.Weapons,
             EnergyShield = energyShieldValue,
             ActorStance = Arakaali.Stance(player, variety),
+            AnimationSeed = animationSeed,
             HasDialogue = waitingForBanditChoice,
             Blocking = !nonBlocking && variety.PositionedBlocking,
             Parent = attachTo?.Parent ?? 0, Bone = attachTo?.Bone ?? "<root>",
@@ -605,11 +587,7 @@ public static partial class Game
             // long before a buried monster rises at MonsterEmerge.Range (24 cells). Woken at creation far away, the
             // client put its far copy to sleep on its own while the server still had it awake, and a 0x2bc update for
             // it crashed the client at 0x1401297ca (an Actor lookup on an object without components, live 2026-11-05).
-            // A scripted fight plays its own animations from its own code, and an object created asleep can stay in its
-            // sleep pose on the client: A10 Kitava was created at 1003 cells, woke at 161, and then stood through the
-            // whole fight while the server played its skills (live 2026-11-14 18:36). Its controller wakes it when the
-            // player reaches the arena, and its bar only comes after the fight begins.
-            bool farBoss = (variety.BossHealthBar || waits) && !KitavaActTen.IsActor(variety) && FarFromPlayers(player, (x, y));
+            bool farBoss = (variety.BossHealthBar || waits) && FarFromPlayers(player, (x, y));
             // Bulk (an area's population): the create carries its wake and its rarity glow, so the client reads them in the
             // same admission and the producer waits for neither — each waited for a birth otherwise, a frame per object on
             // a lockstep client (746 monsters, 3.2 s). A far boss still wakes when the player comes near.
@@ -647,8 +625,7 @@ public static partial class Game
                 PresentationChanged = () => { foreach (var p in player.Frames.Players()) MonsterDebuffsChanged(p, id); },
                 Asleep = asleep,
                 Attack = skill is null && kit.Count == 0 ? null : kit.Count > 0 ? kit[0].Attack : attack,
-                DefaultAttack = attack,
-                Kit = kit, Hostile = !friendly, Variety = variety, Level = level, Rarity = rarity, Movement = movement,
+                Kit = kit, SkillIds = skillIds, Hostile = !friendly, Variety = variety, Level = level, Rarity = rarity, Movement = movement,
                 Scripted = scripted || !friendly && atlas,
                 NonBlocking = nonBlocking,
                 Life = initialLife, Stage = stageSkill is null ? null : stage, States = states,
@@ -1049,36 +1026,6 @@ public static partial class Game
                     { plan.MinionSwings.Add(pendingMinion); continue; }
                     player.Minions.Attacks.Remove(id);
                 }
-                // 不动的 boss 要能自己说明原因：唯一怪每 2 秒一行，含卡在哪一个判定上
-                // （没有 aggro / AI 节奏没到 / 攻击还没结束 / 走不动 / 选中了原地技能）。
-                if (m.Rarity == MonsterRarity.Unique && d <= 220 && now >= m.NextAiTrace)
-                {
-                    m.NextAiTrace = now + 2;
-                    var traced = m.Attack;
-                    Console.WriteLine($"[gateway] ai 0x{id:x} ({m.Label}) d={d:0.0} aggro={m.Aggro} due={MonsterAiCadence.Due(now, m.BusyUntil)} "
-                        + $"busy={m.BusyUntil - now:0.00} pending={cadence.SwingPending(m)} speed={m.Walk.Speed:0.0} moving={m.Walk.Moving(now)} "
-                        + $"still={(m.Variety is { MovementSpeed: 0 } or { Immobile: true })} scripted={m.Scripted} kit={m.Kit.Count} "
-                        + $"attack={(traced is null ? "none" : $"inPlace={traced.InPlace} range={traced.Range:0.0} ranged={traced.Ranged} spell={traced.Spell} scripted={traced.Scripted}")}");
-                }
-                // A lockstep client's monster swings on its own walk-up and its swing cannot be called off (07 §5). Should
-                // the client neither begin that swing nor report a hit — a refused order, or a monster that could not walk
-                // there — the pending flag then skips every later decision and the monster stands for good: Avarius,
-                // Reassembled stood at 12 cells from the player with busy climbing, live 2026-11-14 07:58. Give a swing
-                // SwingWaitSeconds, then let the AI plan again (a chase, a walk-up, or the next kit skill).
-                if (player.Connection.LockstepClient && cadence.SwingPending(m))
-                {
-                    if (m.SwingOrderedAt <= 0) m.SwingOrderedAt = now;
-                    else if (now - m.SwingOrderedAt > SwingWaitSeconds)
-                    {
-                        cadence.CompleteSwing(m, m.ActionGeneration);
-                        m.BusyUntil = now;
-                        m.SwingOrderedAt = now;
-                        m.SwingGeneration = null;
-                        m.LastTarget = null;
-                        if (m.Rarity == MonsterRarity.Unique && d <= 220)
-                            Console.WriteLine($"[gateway] 0x{id:x} ({m.Label}) swing ordered {now - SwingWaitSeconds:0.00} s ago never came back; planning again");
-                    }
-                }
                 if (!m.Aggro || !MonsterAiCadence.Due(now, m.BusyUntil) || cadence.SwingPending(m)) continue;
                 // Totems, statues, vines and the like (MovementSpeed 0) never walk: the estimate's minimum speed must not
                 // move them, so they get no chase. Neither does a type the client never walks (Pathfinding immobile),
@@ -1392,7 +1339,7 @@ public static partial class Game
         await MonsterMarkersTick(player);
         await HostileGroundsTick(player);
         await PlayerDebuffsTick(player);
-        if (DamageTriggers.TryGetValue(player, out _))
+        if (IncomingHitTriggersPending(player))
             ReleaseDamageTakenTriggers(player, ProjectilesFor(player));
         // Advance the projectile runtime first: decisions and committed projectile contacts share one game time and pose.
         using (ProjectileMutation(player, phase: "ai")) plan = PlanMonsterAi(player, cadence, Math.Max(ProjectileWorldTime(player), AreaTime(player)));
@@ -2050,7 +1997,7 @@ public static partial class Game
         double? begunAt = null) =>
         MonsterSwingCore(player, id, m, action, use, area, areaRadius, sequence, begunAt, cadence: null);
 
-    static async Task<bool> MonsterSwingCore(Player player, uint id,
+    internal static async Task<bool> MonsterSwingCore(Player player, uint id,
         SpawnedMonster m, int action, MonsterAttack? use = null, bool area = false, double areaRadius = 0, ushort? sequence = null,
         double? begunAt = null, MonsterAiCadence? cadence = null)
     {
@@ -2150,6 +2097,9 @@ public static partial class Game
             ? (a.Summon is not null ? $"0x01d1 monster 0x{id:x} ({m.Label}) summons, cast time {seconds:0.00} s"
                 : $"0x01ab monster 0x{id:x} ({m.Label}) attacks the player, attack time {seconds:0.00} s")
             : null)) return false;
+        // A clip-only action (a dev command's NoContact) lands nothing: its hit or area belongs to the caller, which
+        // sends it on its own clock. A zero-damage contact here would only play the clip's hit effect.
+        if (a.NoContact) return true;
         if (m.Variety?.Id == EssenceExplosiveInsect)
         {
             if (await WaitMonsterActionTime(player, id, m, action, startedAt + seconds))
@@ -2575,14 +2525,7 @@ public static partial class Game
         // with this hit's one armour decision.
         var gambler = GamblerFor(stats);
         // The King's Mystic Fetishes leave Portent Vapors: 10% increased damage taken per stack from his hits only.
-        var attackDamage = a.Damage;
-        // A shot's damage: the client's own numbers (level-shared Damage x the variety's DamageMultiplier x its attack
-        // time) put a 45-50 archer at 200-400 a shot against a character of that act's ~1,600 life, and a spell cannot be
-        // evaded at all, so the shots alone decide the fight (live 2026-11-11). Melee keeps its damage; the scale is a
-        // system setting (monster_ranged_damage_multiplier), 1 when it is absent.
-        if (a.Ranged || a.Projectile is not null)
-            attackDamage = attackDamage.Scale(SystemSettings.Default.MonsterRangedDamageMultiplier);
-        var hitDamage = attackDamage;
+        var hitDamage = a.Damage;
         if (m.EncounterStats is { } encounter) hitDamage = MonsterModEffects.AddedTo(hitDamage, encounter);
         foreach (var temporary in m.TemporaryStats.Values) hitDamage = MonsterModEffects.AddedTo(hitDamage, temporary);
         if (KingInMists.IsBoss(m.Variety) && player.KingPortentStacks > 0 && now < player.KingPortentUntil)
@@ -2707,7 +2650,7 @@ public static partial class Game
             InflictMonsterBlind(player, id, m, now, (blindAttackerChance, StatOf(Stat.BlindEffectPlusPct), BlindSeconds(StatOf)),
                 AreaRng(player));
         ReservationWhenHitLocked(player, id, m, blocked, now);
-        if (player.PlayerLife == 0) { DamageTriggers.Remove(player); player.InvalidateIncomingHits(); ClearAntiquarianOnDeath(player); }
+        if (player.PlayerLife == 0) { ClearIncomingHitTriggers(player); player.InvalidateIncomingHits(); ClearAntiquarianOnDeath(player); }
         RecordHardcoreDeath(player);
         bool spirit = m.Rarity == MonsterRarity.Unique
             && SpiritChieftainsWhenHitLocked(player, stats, blocked, monsterCritical, Math.Max(0, lifeBefore - player.PlayerLife));

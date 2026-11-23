@@ -4,23 +4,23 @@ using League = GameServer.Core.Accounts.League;
 
 namespace GameServer.Gateway.Tests;
 
-/// <summary>A trigger support that links an attack (Manaforged Arrows, Cast on Crit) must not take the attack out of the
-/// player's hands: only the triggered copy waits for an executor (Skills.GemSkillInstanceDisabled). Reported live on
-/// 2026-11-10: a bow character with Manaforged Arrows could fire neither Lightning Arrow nor Tornado Shot.</summary>
+/// <summary>A trigger support that links an attack only takes the attack out of the player's hands when the support's
+/// own rule says so. Manaforged Arrows is trigger-only until Mana has been spent on another bow attack (upstream
+/// 2026-11-23); the ordinary Added(36) trigger check stays spell-only so a linked attack is not swallowed by it.</summary>
 public class TriggeredAttackTests
 {
     [Theory]
     [InlineData("SkillGemLightningArrow")]
     [InlineData("SkillGemTornadoShot")]
-    public void An_attack_linked_to_a_trigger_support_is_still_used_by_hand(string attack)
+    public void An_attack_linked_to_Manaforged_Arrows_is_trigger_only(string attack)
     {
         WithCharacter(conn =>
         {
             EquipBow(conn, attack, "SupportGemManaforgedArrows");
             var gem = Game.GemSkillEffects(conn).Single(g => g.Name is "Lightning Arrow" or "Tornado Shot");
             Assert.Contains("Manaforged", string.Join(",", Game.SupportedSkill(conn, gem.Id).Supports.Select(s => s.Effect.Id)));
-            // The trigger the support carries is still refused by name, but the manual payload is not.
-            Assert.Null(Game.GemSkillInstanceDisabled(conn, gem.Effect, gem.Id));
+            // Manaforged's own rule keeps the linked attack trigger-only until Mana is spent on another bow attack.
+            Assert.Contains("spending Mana", Game.GemSkillInstanceDisabled(conn, gem.Effect, gem.Id) ?? "");
         });
     }
 

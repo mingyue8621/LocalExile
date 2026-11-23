@@ -315,6 +315,12 @@
 - Lockstep is served whenever the client picks it (no server setting; the log notes Predictive is preferred). It
   handles pickup/attack recovery, corpse collision and ground melee/chest approach;
   crowd and predictive gaps remain ([07](../docs/protocol/07-latency-visibility-movement.md) §6).
+- Variable-length C→S 0x0130, 0x0138, 0x0279, 0x027f, 0x02a5 and the length-prefixed 0xF7E0 mod envelope are framed
+  without dropping trailing messages; C→S 0x0E verifies its SipHash-2-4 digest against per-ticket `Data8`, and C→S 0x7d
+  compares client tile hashes against server-generated `TileHash` (not yet checked live).
+  Docs: [02](../docs/protocol/02-instance-connection.md), [03](../docs/protocol/03-area-and-world.md).
+- HUD mission timers (S→C 0x163) and countdown timers (S→C 0x162): protocol encoders implemented and wired into
+  Allflame lantern collapse (`Deepwater`) and Survivors stage countdowns (`Generic`); not yet checked live.
 - Shrines from generated room lines share their claim state and object IDs for the instance's lifetime, including
   re-entry. Each player owns their timed buff and its effects; replacement, death, leaving and module unload clean up
   the effect. Buff shrines also grant their effect to nearby party members. Monster auras use independent sources,

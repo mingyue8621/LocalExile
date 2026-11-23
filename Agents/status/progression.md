@@ -73,7 +73,8 @@
   Code: `Progression.cs`, Gateway (`GainExperience`, `ApplyLevel`).
 - Experience and levels from kills, with the level penalty and party share.
   Docs: [15](../docs/protocol/15-progression.md) §1.
-- Passive Skill Tree: allocation, refunds, Orbs of Regret, Books of Skill and Regrets.
+- Passive Skill Tree: allocation, refunds, Orbs of Regret, Books of Skill, Regrets and one-off free resets (0x33 bit 0
+  and C→S 0x38).
   Docs: [15](../docs/protocol/15-progression.md) §2.
 - Passive masteries: S→C 0x33 carries selected effects (`node | effect << 16`) and C→S 0x35 selects the effect HASH16;
   a mastery node can be allocated normally and its effect selected/changed without spending another point.
@@ -661,6 +662,8 @@
   Automated configuration tests cover valid live edits and retaining the last valid snapshot after invalid input.
   Native passive alternatives and the compounding level formula have automated coverage.
   See [league modes](../docs/game/league-modes.md).
+- Permanent Achievements (S→C 0x124–0x127, C→S 0x123): tracks permanent achievement items (`SetId == 2`), persists
+  progress account-wide, syncs packed bitsets on entry and panel open, and emits completion toasts (not yet checked live).
 - Dual Wielding Mastery's different-weapon-types damage. Docs: [20](../docs/protocol/20-damage.md) §2b.
 - Armour Mastery grants +1 to all maximum elemental resistances when all four armour pieces provide Armour.
 - Hierophant, except the Brand nodes. Docs: [Hierophant](../docs/game/hierophant.md).
@@ -675,6 +678,8 @@
   Docs: [Phrecia modules](../docs/game/phrecia-modules.md), [Harbinger](../docs/game/harbinger.md),
   [ascendancies](../docs/game/ascendancies.md).
 - Ruthless experience and passive alternatives. Docs: [league modes](../docs/game/league-modes.md).
+- Standard death experience penalty: 5% after Act 5 Kitava and 10% after Act 10 Kitava, clamped to the current level's
+  floor (0% in Hardcore, towns, hideouts, and PvP areas; not checked live). Docs: [15](../docs/protocol/15-progression.md) §1.
 
 ## 尚未实现
 
