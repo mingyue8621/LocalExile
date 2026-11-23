@@ -24,7 +24,13 @@ public static partial class Game
     // swing comes with u8 3, and is served like any other.
     public static void OnLockstepRequest(Player player, ushort id, byte[] bytes)
     {
-        var here = LockstepClientCell(player, AreaTime(player));
+        double at = AreaTime(player);
+        var here = LockstepClientCell(player, at);
+        // A walk's target is the cursor: the client's cell plus the click's offset. The cell it came from is the
+        // walker's own, not the rewound estimate — the estimate is for an aim, and a stalled latency sample put it half
+        // a second back, which sent the player to a point behind itself (it turned around and paced on the spot). The
+        // 0x1ab's from cell is the walker's too, so the two copies keep one reference.
+        var walker = player.Walk.Position(at);
         if (id == InstanceProtocol.LockstepMoveStartId)
         {
             var click = InstanceProtocol.ReadLockstepMoveStart(bytes);
@@ -34,7 +40,7 @@ public static partial class Game
             if (SkillsFor(player).ActionName(click.SkillId) == "Move")
             {
                 player.LockstepSkill.Clear(finishChannel: true);
-                player.LockstepHold.Press(aim, click.SkillId, click.Flags);
+                player.LockstepHold.Press((walker.X + click.Dx, walker.Y + click.Dy), click.SkillId, click.Flags);
             }
             else
             {
@@ -74,7 +80,7 @@ public static partial class Game
                     + $" walking={player.Walk.Moving(AreaTime(player))} dest=({player.Walk.Destination.X},{player.Walk.Destination.Y})"
                     + $" frame={player.Connection.LockstepFrame?.Start:0.000}");
             }
-            player.LockstepHold.Update((here.X + dx, here.Y + dy));
+            player.LockstepHold.Update((walker.X + dx, walker.Y + dy));
             // The held channel's newest aim: this is the lockstep stand-in for a predictive client's 0x197, so the
             // channel walks toward it and the client is told where it now points (ReaimLockstepChannel).
             player.LockstepSkill.Update((here.X + dx, here.Y + dy));

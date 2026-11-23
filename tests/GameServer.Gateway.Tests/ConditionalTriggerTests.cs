@@ -73,7 +73,8 @@ public sealed class ConditionalTriggerTests
             var from = player.Walk.Position(clock.At);
             var aim = (from.X + 60, from.Y);
 
-            Assert.False(await Game.CastGemSkill(player, payload.Id, from, aim));
+            // The linked attack is not trigger-only: Manaforged Arrows covers the triggered copy, the manual use stays
+            // the player's (live 2026-11-23). What fires the payload is still the driver's spending, below.
             ProjectileOffense? triggered = null;
             for (int i = 1; i <= uses; i++)
             {

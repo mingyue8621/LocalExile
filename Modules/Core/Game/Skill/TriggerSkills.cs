@@ -43,14 +43,22 @@ public static partial class Game
             return "this skill can only trigger when damage is taken";
         if (gem.Supports.Any(s => SupportHas(s, Stat.CastOnStunnedPct)))
             return "this skill can only trigger when stunned";
-        if (gem.Stats.GetValueOrDefault(Stat.SupportManaforgedArrowsManaCostPctThreshold) > 0)
+        // An attack stays in the player's hands whatever trigger support it carries: Manaforged Arrows, Cast on Crit,
+        // Cast on Melee Kill, Cast while Channelling and Snipe only drive a triggered copy, and this server runs that
+        // copy itself (live 2026-11-10). Gating the manual use as well took the player's own bow skill away — Lightning
+        // Arrow refused every click with "can only trigger" (live 2026-11-23). A spell a trigger carries is the
+        // trigger's alone; that is the case TriggeredSpell below keeps.
+        bool attack = SkillsFor(player).IsAttack(gem.Effect);
+        if (gem.Stats.GetValueOrDefault(Stat.SupportManaforgedArrowsManaCostPctThreshold) > 0 && !attack)
             return "this skill can only trigger after spending Mana on another bow attack";
-        if (GolemStat(gem.Stats, Stat.CastSpellOnLinkedAttackCrit) != 0)
+        if (GolemStat(gem.Stats, Stat.CastSpellOnLinkedAttackCrit) != 0 && !attack)
             return "this skill can only trigger on a linked attack critical strike";
-        if (GolemStat(gem.Stats, Stat.CastSpellOnLinkedMeleeKill) != 0)
+        if (GolemStat(gem.Stats, Stat.CastSpellOnLinkedMeleeKill) != 0 && !attack)
             return "this skill can only trigger on a linked melee attack's kill";
-        if (GolemStat(gem.Stats, Stat.CastSpellWhileLinkedSkillChannelling) != 0)
+        if (GolemStat(gem.Stats, Stat.CastSpellWhileLinkedSkillChannelling) != 0 && !attack)
             return "this skill can only trigger while a linked skill is channelled";
+        // Snipe is the one that does take a linked bow skill out of the player's hands: its stages are the only way that
+        // skill fires (upstream Snipe, 2026-11-21).
         if (GolemStat(gem.Stats, Stat.SkillTriggeredBySnipe) != 0)
             return "this skill can only be triggered by Snipe";
         if (GolemStat(gem.Stats, Stat.TriggerOnSkillUsePctIfYouHaveASpiritCharge) > 0)

@@ -7,6 +7,9 @@ using GameServer.Core.Protocol.Login;
 // follows GGG; 07 §6 lists these.
 public static partial class Game
 {
+    // The farthest back LockstepClientCell rewinds for an aim: a round trip past this is a stalled sample (a slow
+    // client, a backed-up message), not the link, and rewinding that far aimed the click behind the player.
+    const double MaxLatencyMs = 120;
     // The server frames themselves (their pacing on the clock, and 0x2b8), where they differ from GGG's, are the
     // framework's: Program.RunWorldFrames. What the rules do at each frame end is here.
     public static async Task LockstepFrameEnded(Player player, double nextFrameStart)
@@ -69,7 +72,13 @@ public static partial class Game
     public static (int X, int Y) LockstepClientCell(Player player, double now)
     {
         double lowest = player.Connection.LockstepLatency.Lowest;
-        double when = now - ((double.IsNaN(lowest) ? 0 : lowest / 1000) + 2d * FrameMs / 1000);
+        // A probe's round trip is read as latency, but it also carries whatever the client and the server were busy
+        // with: a 290 ms message and a stalled client turned it into half a second on loopback (live 2026-11-23), and
+        // that far back puts the click's target behind the player, who then turns around and walks back. Loopback is
+        // tens of milliseconds; cap the window so a stalled sample cannot rewind the estimate by more than a fraction
+        // of a second. The client's own update is one frame, so this stays well past what a real link needs.
+        lowest = double.IsNaN(lowest) ? 0 : Math.Min(lowest, MaxLatencyMs);
+        double when = now - (lowest / 1000 + 2d * FrameMs / 1000);
         (int X, int Y)? cell = null;
         foreach (var (at, past) in player.Connection.LockstepTrail)
         {
