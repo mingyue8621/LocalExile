@@ -62,6 +62,18 @@ public static partial class Game
         else if (id == InstanceProtocol.LockstepMoveUpdateId)
         {
             var (dx, dy) = InstanceProtocol.ReadLockstepMoveUpdate(bytes);
+            // Temporary diagnosis (remove with the investigation): the client's cell the offset is added to, against the
+            // server's own estimate. A gap between them is a gap the 0x1ab's from cell then puts the client back by.
+            if (AreaTime(player) >= player.LockstepMoveLogAt)
+            {
+                player.LockstepMoveLogAt = AreaTime(player) + .5;
+                var server = player.Walk.Position(AreaTime(player));
+                Console.WriteLine($"[move-diag] {player.Connection.Remote} 0x192 client=({here.X},{here.Y})"
+                    + $" server=({server.X},{server.Y}) gap=({here.X - server.X},{here.Y - server.Y})"
+                    + $" offset=({dx},{dy}) target=({here.X + dx},{here.Y + dy})"
+                    + $" walking={player.Walk.Moving(AreaTime(player))} dest=({player.Walk.Destination.X},{player.Walk.Destination.Y})"
+                    + $" frame={player.Connection.LockstepFrame?.Start:0.000}");
+            }
             player.LockstepHold.Update((here.X + dx, here.Y + dy));
             // The held channel's newest aim: this is the lockstep stand-in for a predictive client's 0x197, so the
             // channel walks toward it and the client is told where it now points (ReaimLockstepChannel).
@@ -173,6 +185,15 @@ public static partial class Game
     // A Move can cancel at either end of a spell. A different spell can replace it only early; a held repeat waits.
     public static bool LockstepPlayerFree(Player player, double at)
     {
+        // A busy time that is not a number, or one further out than any action lasts, compares false against every
+        // frame and shuts every skill down for the rest of the session while the 0x190 instant skills still work
+        // (live 2026-11-23: no 0x18e use would start, and no log said why). Reset it and say so.
+        if (!double.IsFinite(player.LockstepBusyUntil) || player.LockstepBusyUntil - at > 60)
+        {
+            Console.WriteLine($"[gateway] {player.Connection.Remote} lockstep busy until {player.LockstepBusyUntil:0.000}"
+                + $" (now {at:0.000}): reset, no action is held that long");
+            player.LockstepBusyUntil = 0;
+        }
         if (!MeleeRepeatAllowsMove(player, at)) return false;
         if (at >= player.LockstepBusyUntil) return true;
         if (!player.Connection.LockstepClient || player.LockstepCastWindow is not { } cast) return false;
@@ -267,7 +288,20 @@ public static partial class Game
             // Readiness belongs to the client's frame. Projectile time may already be ahead of it; using that
             // clock can start a Move before pickup completion, whose cleanup then discards the new path.
             bool free = LockstepPlayerFree(player, frameStart);
-            if (!PlayerActionBlocked(player, at, at) && free)
+            bool actionBlocked = PlayerActionBlocked(player, at, at);
+            // Temporary diagnosis (remove with the investigation): a use the client asked for that this frame cannot
+            // start has no other trace, so say once a second what is holding it.
+            if (player.LockstepSkill.Pending && (!free || actionBlocked) && at >= player.LockstepUseLogAt)
+            {
+                player.LockstepUseLogAt = at + 1;
+                Console.WriteLine($"[gateway] {player.Connection.Remote} lockstep use 0x{player.LockstepSkill.Skill:x4} waiting:"
+                    + $" free={free} blocked={actionBlocked}"
+                    + $" recovery={player.HitRecovery.BlocksInput(at, at)} ailment={player.ElementalAilments.ActionFactor(at):0.000}"
+                    + $" busyUntil={player.LockstepBusyUntil:0.000} now={at:0.000}"
+                    + $" castWindow={player.LockstepCastWindow is not null} hold={player.LockstepHold.Active}"
+                    + $" held={player.LockstepSkill.Held} flags=0x{player.LockstepSkill.Flags:x4}");
+            }
+            if (!actionBlocked && free)
             {
                 if (player.LockstepSkill.Target is { } aimedAt && aimedAt != player.Id
                     && !(player.Area.Monsters.TryGetValue(aimedAt, out var m) && !m.Dead && m.Life > 0))
@@ -279,7 +313,17 @@ public static partial class Game
                 // walk-up, as over a walk, and its action ends that walk-up (PlayerWalkUpOpen); only a swing holds it.
                 bool attack = LockstepAttackSkill(player, player.LockstepSkill.Skill);
                 bool canStartSkill = LockstepSkillCanStart(player, player.LockstepSkill.Skill);
-                if (!canStartSkill && player.LockstepSkill.Pending) player.LockstepSkill.ClearPending();
+                if (!canStartSkill && player.LockstepSkill.Pending)
+                {
+                    // Temporary diagnosis (remove with the investigation): the pending use is dropped here with no
+                    // other trace, so print the reason the skill cannot start.
+                    var waitingGem = GemSkillEffects(player).FirstOrDefault(g => g.Id == player.LockstepSkill.Skill);
+                    Console.WriteLine($"[gateway] {player.Connection.Remote} lockstep skill 0x{player.LockstepSkill.Skill:x4}"
+                        + $" {(waitingGem.Name ?? "(not a gem skill)")}: cannot start (disabled:"
+                        + $" {GemSkillInstanceDisabled(player, waitingGem.Effect, player.LockstepSkill.Skill) ?? "no"}"
+                        + $", mana {player.PlayerMana})");
+                    player.LockstepSkill.ClearPending();
+                }
                 // Pinned (a spike trap's risen spikes: Pins.cs): no walk starts, and a use waits, as it walks up.
                 bool pinned = Pinned(player, at);
                 if (!pinned && player.LockstepUse is { } object_)
@@ -382,7 +426,19 @@ public static partial class Game
     public static (int X, int Y)? PlaceLockstepPlayerMove(Player player, (int X, int Y) target, double at)
     {
         var here = player.Walk.Position(at);
-        return LockstepTakesMove(here, target) ? player.Walk.Order(target.X, target.Y, at) : null;
+        bool takes = LockstepTakesMove(here, target);
+        var placed = takes ? player.Walk.Order(target.X, target.Y, at) : ((int X, int Y)?)null;
+        // Temporary diagnosis (remove with the investigation): the cell the 0x1ab reports as from — the client is put on
+        // it whatever the distance — and where the server's own walk was told to go.
+        if (at >= player.LockstepMoveLogAt)
+        {
+            player.LockstepMoveLogAt = at + .5;
+            var dest = player.Walk.Destination;
+            Console.WriteLine($"[move-diag] {player.Connection.Remote} 0x1ab from=({here.X},{here.Y})"
+                + $" target=({target.X},{target.Y}) took={takes} dest=({dest.X},{dest.Y})"
+                + $" walking={player.Walk.Moving(at)} busyUntil={player.LockstepBusyUntil:0.000} at={at:0.000}");
+        }
+        return placed;
     }
 
     // A skill asked on a monster: GGG answers the request with the action's start in the next frame, from the player's

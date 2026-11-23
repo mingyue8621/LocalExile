@@ -1606,6 +1606,10 @@ public sealed partial class Player(AreaLayout layout, uint ticket, uint seed) : 
     // A skill on a monster whose walk-up or swing is still to come on a lockstep client, null for none
     // (Game.LockstepAttackStart): the next use of a held skill waits for it, and the step pass runs its walk-up.
     public LockstepAttack? LockstepAttack;
+    // Temporary diagnosis (remove with the investigation): the next time a waiting lockstep use may be logged.
+    public double LockstepUseLogAt;
+    // Temporary diagnosis (remove with the investigation): the next time a lockstep Move may be logged.
+    public double LockstepMoveLogAt;
     public bool ArriveAtWaypoint;
 
     /// <summary>A walk estimate for a server object on this area's walk map.</summary>
