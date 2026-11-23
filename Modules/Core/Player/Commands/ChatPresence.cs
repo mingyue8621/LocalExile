@@ -25,14 +25,20 @@ static class ChatPresence
     public static ChatAvailability? Get(Player player) =>
         Table.TryGetValue(CharacterName(player), out var status) ? status : null;
 
-    public static string ToggleAfk(Player player, string? arg)
+    /// <summary>A lockstep client answers S→C 0x194 with C→S 0x16 carrying the current AFK text every couple of
+    /// seconds. That is a keep-alive, not a second /afk: repeating the same message leaves the state alone and owes
+    /// the client no chat line (live 2026-11-23: the reply spammed the chat window every two seconds).</summary>
+    public static string? ToggleAfk(Player player, string? arg)
     {
         string name = CharacterName(player);
         string trimmed = Sanitize(arg);
+        string message = trimmed.Length > 0 ? trimmed : DefaultAfkMessage;
+        if (trimmed.Length > 0 && Table.TryGetValue(name, out var before) && before.Afk && before.AfkMessage == message)
+            return null;
         var updated = Table.AddOrUpdate(name,
-            _ => new ChatAvailability(true, trimmed.Length > 0 ? trimmed : DefaultAfkMessage, false, DefaultDndMessage),
+            _ => new ChatAvailability(true, message, false, DefaultDndMessage),
             (_, cur) => !cur.Afk || trimmed.Length > 0
-                ? cur with { Afk = true, AfkMessage = trimmed.Length > 0 ? trimmed : DefaultAfkMessage }
+                ? cur with { Afk = true, AfkMessage = message }
                 : cur with { Afk = false });
         return updated.Afk ? $"AFK mode is now ON. Autoreply \"{updated.AfkMessage}\"" : "AFK mode is now OFF.";
     }

@@ -60,7 +60,8 @@ public sealed class CommandsModule : IModule
                     // response that Messages.cs handles via AnswerLockstepProbe when a probe is in flight.
                     if (player.Connection.LockstepClient && command.Argument.Length == 0
                         && Volatile.Read(ref player.Connection.LockstepProbeSentAt) != 0) return false;
-                    await player.Commands!.Reply(ChatPresence.ToggleAfk(player, command.Argument));
+                    if (ChatPresence.ToggleAfk(player, command.Argument) is { } reply)
+                        await player.Commands!.Reply(reply);
                     return true;
                 case InstanceItems.DndCommand or InstanceItems.DoNotDisturbCommand:
                     await player.Commands!.Reply(ChatPresence.ToggleDnd(player, command.Argument));

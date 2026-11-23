@@ -34,7 +34,10 @@ public static class CommandsFeature
         .Add("invite", "/invite <name> (invite an online player to your party)", async args =>
             await InviteAsync(player, string.Join(' ', args)))
         .Add("afk", "/afk [message] (toggle AFK mode and whisper autoreply)", async args =>
-            await player.Commands!.Reply(ChatPresence.ToggleAfk(player, string.Join(' ', args))))
+        {
+            if (ChatPresence.ToggleAfk(player, string.Join(' ', args)) is { } reply)
+                await player.Commands!.Reply(reply);
+        })
         .Add("autoreply", "/autoreply [message] (set or clear whisper autoreply)", async args =>
             await player.Commands!.Reply(ChatPresence.SetAutoReply(player, string.Join(' ', args))))
         .Add("dnd", "/dnd [message] (toggle Do Not Disturb mode and block incoming whispers)", async args =>
