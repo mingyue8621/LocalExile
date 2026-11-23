@@ -212,7 +212,9 @@ public static partial class Game
             }
         }
 
-        public void Schedule(long at, Func<bool> valid, Func<ProjectileUse> release)
+        public void Schedule(long at, Func<bool> valid, Func<ProjectileUse> release) => Schedule(at, valid, release, null);
+
+        internal void Schedule(long at, Func<bool> valid, Func<ProjectileUse> release, Action? released)
         {
             if (Active)
                 Runtime.Schedule(Math.Max(Runtime.Now, at), () =>
@@ -220,7 +222,11 @@ public static partial class Game
                     if (!Active || !valid()) return;
                     try { ReleaseNow(release()); }
                     catch (InvalidOperationException ex)
-                    { Console.WriteLine($"[gateway] {Player.Connection.Remote} projectile path unavailable: {ex.Message}"); }
+                    {
+                        Console.WriteLine($"[gateway] {Player.Connection.Remote} projectile path unavailable: {ex.Message}");
+                        return;
+                    }
+                    released?.Invoke();
                 });
         }
 
@@ -451,6 +457,9 @@ public static partial class Game
                 }
                 if (create)
                 {
+                    // One object's id can already be held by the world: that refused record must not take the session
+                    // down (RunOutput's catch closes the connection, live 2026-11-11). Drop its visual and stop this
+                    // send loop spinning on a record that can never be admitted.
                     try
                     {
                         await SendWorldCreate(Player, id, () => Project() is { } records ? records.Single() : null,
@@ -458,32 +467,15 @@ public static partial class Game
                     }
                     catch (InvalidOperationException ex)
                     {
-                        // One object's id was already held by the world: this record cannot be sent, but it must not take
-                        // the session down with it — RunOutput's catch closes the connection on any exception, and every
-                        // fight was ending in a disconnect (live 2026-11-11). Log what was refused, drop the record, let
-                        // the flight carry on without its visual. Marking it completed also stops this send loop spinning
-                        // on a record that can never be admitted.
                         Console.WriteLine($"[gateway] {Player.Connection.Remote} projectile create 0x{id:x} refused ({ex.Message});"
                             + $" tracked={Player.ProjectileObjects.Contains(id)} kind={(log ?? "?")}");
                         completed = true;
                     }
                 }
-                else if (!Player.Connection.LockstepClient || !remove)
-                    await SendWorldRecords(Player, id, Project, log);
+                else if (remove)
+                    await SendWorldRecordsEndingInRemoval(Player, id, Project, log);
                 else
-                {
-                    var target = Player.Connection.WorldOutput.PublishedObject(id);
-                    await SendWorldBatch(Player, [target], _ =>
-                    {
-                        if (Project() is not { Length: > 0 } records) return null;
-                        List<OutputRecord> batch = [];
-                        foreach (var bytes in records[..^1]) batch.Add(PresentedRecord(target, bytes, log));
-                        var removal = records[^1].ToArray();
-                        System.Buffers.Binary.BinaryPrimitives.WriteUInt32BigEndian(removal.AsSpan(6), uint.MaxValue);
-                        batch.Add(OutputRecord.Remove(target, WorldOrder.Last, removal, log));
-                        return new([.. batch]);
-                    });
-                }
+                    await SendWorldRecords(Player, id, Project, log);
                 if (completed || Player.Connection.WorldOutput.Closed) return;
                 await AreaDelay(Player, 0.016);
             }
