@@ -17,7 +17,7 @@ public static partial class Game
             .Concat(Named(Items.All.Where(t => t.Supported && !t.Name.StartsWith('[') && Items.Gem(t) is null), t => t.Name, t => t.Id)),
         "gem" => Items.GemNames().Order(StringComparer.OrdinalIgnoreCase).Select(n => (n, "")),
         "stat" => Stats.Names.Select((n, i) => (n, $"key {i + 1}")),
-        "npc" => Named(Npcs.Value.Rows.Where(n => n.Supported), n => n.Name, n => n.Id),
+        "npc" => Named(Npcs.Rows.Where(n => n.Supported), n => n.Name, n => n.Id),
         "quest_flag" => Quests.FlagRows(ClientTables.TableOrNull("QuestFlags")).Keys.Select(id => (id, "")),
         "bosses" => BossAudit(),
         _ => null,
@@ -54,7 +54,7 @@ public static partial class Game
                 bool ranged = MonsterAttackIsRanged(skills, v, effect);
                 var shot = ranged ? MavenNucleus.Shot(skills, effect, v.RangedWeapon) : null;
                 if (ranged && shot is null && skills.IsMelee(effect)) ranged = false;
-                bool spell = effect >= 0 && skills.EffectStats(effect, packs.AreaLevel).Any(s => s.Item1 == StatKeys.CastingSpell && s.Item2 != 0);
+                bool spell = effect >= 0 && skills.EffectStats(effect, packs.AreaLevel).Any(s => s.Item1 == Stat.CastingSpell && s.Item2 != 0);
                 bool castTime = spell || effect >= 0 && skills.IsSpell(effect);
                 double swing = effect >= 0 && skills.IsSpell(effect) && skills.CastTimeMs(effect) > 0
                     ? skills.CastTimeMs(effect) / 1000.0 : v.AttackMs / 1000.0;

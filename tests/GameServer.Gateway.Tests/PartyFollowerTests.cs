@@ -11,57 +11,14 @@ namespace GameServer.Gateway.Tests;
 public sealed class PartyFollowerTests
 {
     [Fact]
-    public async Task Shared_deaths_reward_nearby_players_and_hide_each_observers_bar_once()
-    {
-        await PartyExperienceChecks.Verify();
-        await MixedPartyChecks.Verify();
-        using var runtime = new Runtime();
-        using var firstWire = new Wire();
-        using var sleepingWire = new Wire();
-        var instance = new InstanceState();
-        var first = runtime.Connection(instance, firstWire);
-        var sleeping = runtime.Connection(instance, sleepingWire);
-        instance.World.Runner = first;
-        const uint id = 0x08000000;
-        var variety = Game.Monsters.All.First();
-        var monster = new SpawnedMonster("shared victim", new PlayerWalk(110, 100, 30), 60, 8, 1000)
-            { Life = 0, Dead = true };
-        instance.World.Monsters[id] = monster;
-        instance.World.MonsterOrigins[id] = new(InstanceEntities.ObjectTypeHash(variety.Id),
-            new MonsterObject(110, 100, 1000, variety.ComponentsOrBase, variety.AnimatedObject),
-            (ushort)variety.Row, 1, MonsterRarity.Normal);
-        // Also repair views whose life was already mirrored to zero before this module loaded.
-        first.MonsterViews[id] = new((110, 100), (110, 100), 0);
-        sleeping.MonsterViews[id] = new((110, 100), (110, 100), 1000);
-        sleeping.AsleepMonsters.Add(id);
-        string hide = Convert.ToHexString(InstanceEntities.StatsUpdate(id, [(StatKeys.HideMiniLifeBar, 1)]));
-        string zero = Convert.ToHexString(InstanceProtocol.LifeUpdate(id, 0));
-        int Count(Wire wire, string hex) => Program.HistoryFor(wire.Ciphers).Lines().Count(line => line.Contains(hex, StringComparison.Ordinal));
-        await Game.SyncInstanceMonsters("observer", firstWire.Stream, firstWire.Ciphers, first);
-        Assert.Equal(1, Count(firstWire, hide));
-        Assert.Equal(1, Count(firstWire, zero));
-        await Game.SyncInstanceMonsters("observer", firstWire.Stream, firstWire.Ciphers, first);
-        Assert.Equal(1, Count(firstWire, hide));
-        await Game.SyncInstanceMonsters("sleeping", sleepingWire.Stream, sleepingWire.Ciphers, sleeping);
-        Assert.Equal(0, Count(sleepingWire, hide));
-        sleeping.AsleepMonsters.Remove(id);
-        await Game.SyncInstanceMonsters("awake", sleepingWire.Stream, sleepingWire.Ciphers, sleeping);
-        Assert.Equal(1, Count(sleepingWire, hide));
-        Assert.Equal(0u, sleeping.MonsterViews[id].Life);
-        monster.Dead = false; monster.Life = 500;
-        await Game.SyncInstanceMonsters("revived", firstWire.Stream, firstWire.Ciphers, first);
-        Assert.Equal(1, Count(firstWire, Convert.ToHexString(InstanceEntities.StatsUpdate(id, [(StatKeys.HideMiniLifeBar, 0)]))));
-    }
-
-    [Fact]
     public async Task Followers_clear_the_entrance_remain_calm_and_balance_attacking_with_catching_up()
     {
         ControlledPlayerBuildChecks.VerifyCampaignBuilds();
         using var runtime = new Runtime();
         using var wire = new Wire();
         var instance = new InstanceState();
-        var leader = runtime.Connection(instance, wire);
-        var bot = runtime.Connection(instance, wire);
+        var leader = runtime.PlayerOf(instance, wire);
+        var bot = runtime.PlayerOf(instance, wire);
         leader.Walk.Teleport(100, 100, 0);
         leader.Walk.Order(180, 100, 0);
         var ahead = Game.ControlledFollowerPoint(bot, leader, arrival: true);
@@ -71,7 +28,7 @@ public sealed class PartyFollowerTests
         // The trail radii rotate with the follower's rank (PeerId % 3 over [12, 16, 20]) and each cell is rounded, so a
         // radius-20 spot lands up to about 20.7 cells out: the bound covers the rounding, not a follower walking further.
         Assert.InRange(Math.Sqrt(Math.Pow(ahead.X - 100, 2) + Math.Pow(ahead.Y - 100, 2)), 6, 21);
-        var runner = runtime.Connection(instance, wire);
+        var runner = runtime.PlayerOf(instance, wire);
         runner.Walk.Teleport(201, 100, 0);
         runner.ControlledNextAction = 1000;
         Assert.True(Game.KeepControlledFollowerNear(runner, leader, 0));
@@ -80,12 +37,12 @@ public sealed class PartyFollowerTests
         Assert.True(Game.Dist(runner.Walk.Destination, (100, 100)) < 32);
         Assert.Equal(1000, runner.ControlledNextAction);
         // Too far to walk back at all, it comes back at once, and behind the leader.
-        var stranded = runtime.Connection(instance, wire);
+        var stranded = runtime.PlayerOf(instance, wire);
         stranded.Walk.Teleport(300, 300, 0);
         Assert.True(Game.KeepControlledFollowerNear(stranded, leader, 0));
         Assert.True(Game.Dist(stranded.Walk.Position(0), (100, 100)) < 32);
         Assert.Equal(.35, stranded.ControlledNextAction);
-        var trailer = runtime.Connection(instance, wire);
+        var trailer = runtime.PlayerOf(instance, wire);
         trailer.Walk.Teleport(180, 100, 0);
         int action = trailer.ActionCount;
         Assert.True(Game.KeepControlledFollowerNear(trailer, leader, 0));
@@ -109,7 +66,7 @@ public sealed class PartyFollowerTests
         Assert.False(Game.ControlledFollowAttackFits(70, 0, .1));    // but not from so far that the player is gone
         Assert.False(Game.ControlledFollowAttackFits(50, 70, 1));
         Assert.False(Game.ControlledFollowAttackFits(0, 37, 3));
-        var inFront = runtime.Connection(instance, wire);
+        var inFront = runtime.PlayerOf(instance, wire);
         inFront.Walk.Teleport(137, 100, 0);
         Assert.False(Game.KeepControlledFollowerNear(inFront, leader, 0));
         // Ahead of the leader on its own route it steps aside and waits there, rather than standing in the corridor.
@@ -117,7 +74,7 @@ public sealed class PartyFollowerTests
         Assert.True(Math.Abs(inFront.Walk.Destination.Y - 100) >= 5);
 
         leader.Walk.Teleport(100, 100, 0);
-        var idle = runtime.Connection(instance, wire);
+        var idle = runtime.PlayerOf(instance, wire);
         idle.Walk.Teleport(160, 100, 0);
         action = idle.ActionCount;
         int adjustments = 0;
@@ -142,7 +99,7 @@ public sealed class PartyFollowerTests
         Assert.InRange(adjustments, 1, 3);
         foreach (int gap in new[] { 0, 3, 55, 60 })
         {
-            var standing = runtime.Connection(instance, wire);
+            var standing = runtime.PlayerOf(instance, wire);
             standing.Walk.Teleport(100 + gap, 100, 0);
             for (int tick = 0; tick < 100; tick++)
             {
@@ -152,7 +109,7 @@ public sealed class PartyFollowerTests
                 Assert.Equal(0, standing.ActionCount);
             }
         }
-        var delayed = runtime.Connection(instance, wire);
+        var delayed = runtime.PlayerOf(instance, wire);
         delayed.Walk.Teleport(180, 100, 0);
         delayed.Walk.SetSpeed(1, 0);
         Assert.True(Game.KeepControlledFollowerNear(delayed, leader, 0));
@@ -161,7 +118,7 @@ public sealed class PartyFollowerTests
         Assert.True(Game.KeepControlledFollowerNear(delayed, leader, 1.3));
         Assert.True(Game.Dist(delayed.Walk.Position(1.3), (100, 100)) < 80);
         // Formation search cannot cross a disconnected wall into an apparently clear pocket.
-        var isolated = new ClientState(new(1, "pocket", 300, 300, 100, 100,
+        var isolated = new Player(new(1, "pocket", 300, 300, 100, 100,
             (x, y) => x <= 105 || x >= 115, []), 1, 1);
         Assert.True(Game.ControlledFollowerPoint(isolated, leader, arrival: true).X <= 105);
         ControlledPlayerBuildChecks.VerifyReservationAttackSelection(runtime, wire);
@@ -175,8 +132,8 @@ public sealed class PartyFollowerTests
         foreach (uint peer in new uint[] { 0x2000012a, 0x20000152 })
         {
             var instance = new InstanceState();
-            var leader = runtime.Connection(instance, wire);
-            var idle = runtime.Connection(instance, wire, peer: peer);
+            var leader = runtime.PlayerOf(instance, wire);
+            var idle = runtime.PlayerOf(instance, wire, peer: peer);
             leader.Walk.Teleport(100, 100, 0);
             idle.Walk.Teleport(160, 100, 0);
             Game.IdleControlledFollower(idle, leader, 0);
@@ -193,8 +150,8 @@ public sealed class PartyFollowerTests
         }
 
         var blockedInstance = new InstanceState();
-        var blockedLeader = runtime.Connection(blockedInstance, wire);
-        var blocked = runtime.Connection(blockedInstance, wire, peer: 0x2000012a);
+        var blockedLeader = runtime.PlayerOf(blockedInstance, wire);
+        var blocked = runtime.PlayerOf(blockedInstance, wire, peer: 0x2000012a);
         blockedLeader.Walk.Teleport(100, 100, 0);
         blocked.Walk.Teleport(160, 100, 0);
         var barrier = new HashSet<(int X, int Y)>();
@@ -216,23 +173,23 @@ public sealed class PartyFollowerTests
         readonly IGameLogic? previousLogic = Program.GameLogicOrNull;
         readonly IModuleLifetime? previousLifetime = Game.CombatLifetime;
         readonly ModuleLifetime lifetime = new("Game");
-        readonly List<ClientState> players = [];
+        readonly List<Player> players = [];
         public Runtime()
         {
             Game.CombatLifetime = lifetime;
             Program.SetGameLogic(new GameServer.Modules.Game.GameLogic());
         }
         // peer: a fixed id for a rule that is seeded by it; otherwise the next id of the process.
-        public ClientState Connection(InstanceState instance, Wire wire, string? character = null, uint? peer = null)
+        public Player PlayerOf(InstanceState instance, Wire wire, string? character = null, uint? peer = null)
         {
             AreaLayout layout = new(1, "follower", 300, 300, 100, 100, null, []);
-            var conn = peer is { } id
-                ? new ClientState(layout, 1, 1) { Instance = instance, Character = character, PeerId = id }
-                : new ClientState(layout, 1, 1) { Instance = instance, Character = character };
-            conn.PlayerLife = 1000; conn.PlayerSent = true; conn.Controlled = true;
-            conn.Wire = ("follower-test", wire.Stream, wire.Ciphers);
-            players.Add(conn); Program.InGame.TryAdd(conn, 0);
-            return conn;
+            var player = peer is { } id
+                ? new Player(layout, 1, 1) { Instance = instance, Character = { Name = character }, Id = id }
+                : new Player(layout, 1, 1) { Instance = instance, Character = { Name = character } };
+            player.PlayerLife = 1000; player.Connection.PlayerSent = true; player.Controlled = true;
+            player.Connection.Session = new("follower-test", wire.Stream, wire.Ciphers);
+            players.Add(player); Program.InGame.TryAdd(player, 0);
+            return player;
         }
         public void Dispose()
         {

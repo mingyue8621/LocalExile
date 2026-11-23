@@ -5,7 +5,7 @@ namespace GameServer.Gateway.Tests;
 /// not refuse the attack.</summary>
 public sealed class MonsterLineOfFireTests
 {
-    static ClientState Conn(Func<int, int, int>? sight) =>
+    static Player Conn(Func<int, int, int>? sight) =>
         new(new AreaLayout(0, "test", 128, 128, 32, 32, (_, _) => true, []) { Sight = sight }, 1, 1);
 
     [Fact]

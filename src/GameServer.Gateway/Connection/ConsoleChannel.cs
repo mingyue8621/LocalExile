@@ -24,7 +24,7 @@ static class ConsoleChannel
 
     /// <summary>One request at a time per character: a command's replies are told apart by <see cref="ChatCommands.Echo"/>,
     /// which two requests on one connection would share.</summary>
-    static readonly ConcurrentDictionary<ClientState, SemaphoreSlim> Gates = new();
+    static readonly ConcurrentDictionary<Player, SemaphoreSlim> Gates = new();
 
     /// <summary>Starts listening; anything that keeps it from listening is a line in the log, never a stopped Gateway, since
     /// the game itself does not need the console.</summary>
@@ -112,7 +112,7 @@ static class ConsoleChannel
     {
         var players = new JsonArray();
         foreach (var conn in Players())
-            players.Add(new JsonObject { ["character"] = conn.Character ?? "", ["area"] = $"0x{conn.Layout.Hash:x4}" });
+            players.Add(new JsonObject { ["character"] = conn.Character.Name ?? "", ["area"] = $"0x{conn.Layout.Hash:x4}" });
         return new JsonObject { ["ok"] = true, ["players"] = players };
     }
 
@@ -123,7 +123,7 @@ static class ConsoleChannel
         line = line.Trim();
         if (!line.StartsWith('/')) return Err("not_a_command");
         var target = Players().FirstOrDefault(c => string.IsNullOrEmpty(character)
-            || string.Equals(c.Character, character, StringComparison.OrdinalIgnoreCase));
+            || string.Equals(c.Character.Name, character, StringComparison.OrdinalIgnoreCase));
         if (target?.Commands is not { } commands) return Err("no_player");
 
         var lines = new List<string>();
@@ -139,11 +139,11 @@ static class ConsoleChannel
             commands.Echo = null;
             gate.Release();
         }
-        return new JsonObject { ["ok"] = true, ["character"] = target.Character ?? "", ["lines"] = new JsonArray([.. lines.Select(l => (JsonNode?)l)]) };
+        return new JsonObject { ["ok"] = true, ["character"] = target.Character.Name ?? "", ["lines"] = new JsonArray([.. lines.Select(l => (JsonNode?)l)]) };
     }
 
     /// <summary>The connections commands can act on: in an area, with their command set built, not leaving.</summary>
-    static IEnumerable<ClientState> Players()
+    static IEnumerable<Player> Players()
     {
         foreach (var conn in Program.InGame.Keys)
             if (conn is { Commands: not null, Closed: false, LeavingArea: false }) yield return conn;

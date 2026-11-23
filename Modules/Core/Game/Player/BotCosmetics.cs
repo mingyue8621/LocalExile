@@ -73,7 +73,7 @@ static partial class Game
 
     /// <summary>Dresses a controlled player (a party bot) in the skins its equipment takes, into the worn table the client's
     /// model is built from (Equipment.Looks: SkinVisual + the hash, as a player's own picks arrive).</summary>
-    internal static void WearBotCosmetics(ClientState conn)
+    internal static void WearBotCosmetics(Player conn)
     {
         string name = CharacterName(conn);
         var items = ItemsOf(conn);
@@ -91,7 +91,7 @@ static partial class Game
             worn.Add(new InstanceMicrotransactions.Equipped(slot, record.Id, record.MtxTypeHash, record.Qword, 0));
         }
         if (worn.Count == 0) return;
-        conn.WornCosmetics = worn;
+        conn.Character.WornCosmetics = worn;
         Console.WriteLine($"[bots] {name} wears {worn.Count} cosmetic(s)");
     }
 }

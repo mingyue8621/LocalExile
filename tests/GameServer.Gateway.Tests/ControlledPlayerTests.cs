@@ -9,14 +9,14 @@ internal static class ControlledPlayerBuildChecks
     internal static void VerifyReservationAttackSelection(PartyFollowerTests.Runtime runtime, PartyFollowerTests.Wire wire)
     {
         var instance = new InstanceState();
-        var leader = runtime.Connection(instance, wire);
-        var bot = runtime.Connection(instance, wire, "HeraldFollower" + Guid.NewGuid().ToString("N"));
+        var leader = runtime.PlayerOf(instance, wire);
+        var bot = runtime.PlayerOf(instance, wire, "HeraldFollower" + Guid.NewGuid().ToString("N"));
         bot.Pools = new(25, 1000, 1000, 0, 0, Strength: 1000, Dexterity: 1000, Intelligence: 1000);
-        bot.Passives = [.. Game.BuildControlledPlayer(CharacterClass.Witch, 25).Passives!];
+        bot.Character.Passives = [.. Game.BuildControlledPlayer(CharacterClass.Witch, 25).Passives!];
         bot.LeagueModule = new(new League("test", "Standard", false, false), new HashSet<string>(["Game"]));
         // Inspect the AI's own auto-attack scan without starting background player updates or a cast timer: a flask or a
         // walk there would persist this character's items, and these are only ever held in memory here.
-        bot.PlayerSent = false;
+        bot.Connection.PlayerSent = false;
         try
         {
             var items = Game.ItemsOf(bot);
@@ -38,8 +38,8 @@ internal static class ControlledPlayerBuildChecks
         }
         finally
         {
-            PlayerInventories.Forget(bot.Character!);
-            CharacterEquipmentState.Replaced(bot.Character!);
+            PlayerInventories.Forget(bot.Character.Name!);
+            CharacterEquipmentState.Replaced(bot.Character.Name!);
         }
     }
 
@@ -56,42 +56,44 @@ internal static class ControlledPlayerBuildChecks
                 {
                     string name = $"BotBuild{(int)characterClass}L{level}";
                     names.Add(name);
-                    var record = new Character(Guid.NewGuid(), Guid.NewGuid(), name, characterClass, level,
+                    var record = new GameServer.Core.Accounts.Character(Guid.NewGuid(), Guid.NewGuid(), name, characterClass, level,
                         "Standard", "1_1_town", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
                     accounts.AddCharacter(record);
                     var build = Game.BuildControlledPlayer(characterClass, level);
                     Assert.Equal(level - 1, build.Passives!.Count);
                     CharacterSaves.Write(name, build);
                     int row = Program.Skills.RowOfClass((int)characterClass);
-                    var conn = new ClientState(new(1, "controlled-build-test", 1000, 1000, 100, 100, null, []), 1, 1)
-                    { Character = name, CharacterId = record.Id, League = "Standard", ClassRow = row,
-                        Pools = CharacterStats.For(Program.Skills.ClassFor(row), level) };
-                    Assert.Equal(level, Game.PrepareCharacterForArea("test", conn, level));
-                    Game.CharacterStatSources(conn);
+                    var player = new Player(new(1, "controlled-build-test", 1000, 1000, 100, 100, null, []), 1, 1)
+                    {
+                      Character = { Name = name, Id = record.Id, League = "Standard", ClassRow = row },
+                      Pools = CharacterStats.For(Program.Skills.ClassFor(row), level)
+                  };
+                    Assert.Equal(level, Game.PrepareCharacterForArea(player, level));
+                    Game.CharacterStatSources(player);
                     Assert.Empty(CharacterEquipmentState.Inactive[name]);
-                    var gems = Game.GemSkillEffects(conn).ToArray();
+                    var gems = Game.GemSkillEffects(player).ToArray();
                     var active = Assert.Single(gems);
-                    var supported = Game.SupportedSkill(conn, active.Id);
+                    var supported = Game.SupportedSkill(player, active.Id);
                     Assert.True(supported.RequirementsMet, $"{name}: {active.Name} requirements");
-                    Assert.True(Game.SupportedHitFor(conn, active.Id, suppress: false).MinTotal > 0, name);
+                    Assert.True(Game.SupportedHitFor(player, active.Id, suppress: false).MinTotal > 0, name);
                     // The link is as long as the weapon's sockets (ControlledBuilds.SocketsFor): six gems on a two-hander, a
                     // bow or a staff, three on a one-hander. Some supports do not resolve for a given active gem, so the
                     // count is a range — but a build that links two supports where six sockets stand is a quarter of its
                     // damage (2026-11-10).
                     if (level >= 25)
                     {
-                        var weapon = Program.Items.ByHash(Game.ItemsOf(conn).Items(PlayerInventories.Weapon1).First().Item.TypeHash)!;
+                        var weapon = Program.Items.ByHash(Game.ItemsOf(player).Items(PlayerInventories.Weapon1).First().Item.TypeHash)!;
                         int most = Game.SocketsFor(weapon) - 1;
                         Assert.True(supported.Supports.Count >= 2 && supported.Supports.Count <= most,
                             $"{name}: {active.Name} on {weapon.Class} ({most} supports at most), supports: " +
                             $"{string.Join(", ", supported.Supports.Select(s => s.Effect.Id))}");
                     }
-                    var native = Game.PlayerForCreation(conn);
+                    var native = Game.PlayerForCreation(player);
                     Assert.Contains(native.Skills!, s => s.Id == active.Id);
                     // The gear pass replaces every worn item. The weapon's gems have to survive it, and a weapon that lost
                     // them (an older pass stripped them) gets the class's set back: a follower with no gem has no skill at
                     // all and stood in every fight doing nothing (live 2026-11-09: "the party bots do not attack").
-                    var worn = Game.ItemsOf(conn);
+                    var worn = Game.ItemsOf(player);
                     var pieces = new[]
                         {
                             PlayerInventories.Weapon1, PlayerInventories.Offhand1, PlayerInventories.BodyArmour,
@@ -102,16 +104,16 @@ internal static class ControlledPlayerBuildChecks
                     ControlledPlayers.Gear = _ => pieces;
                     try
                     {
-                        Game.EquipControlledGear(conn, level);
-                        Assert.Single(Game.GemSkillEffects(conn));
+                        Game.EquipControlledGear(player, level);
+                        Assert.Single(Game.GemSkillEffects(player));
                         foreach (var held in worn.Items(PlayerInventories.Weapon1).ToList())
                         {
                             worn.Remove(PlayerInventories.Weapon1, held.Id);
                             worn.Add(PlayerInventories.Weapon1, 0, 0, held.Item with { Sockets = [], Links = null });
                         }
-                        Assert.Empty(Game.GemSkillEffects(conn));
-                        Game.EquipControlledGear(conn, level);
-                        Assert.Single(Game.GemSkillEffects(conn));
+                        Assert.Empty(Game.GemSkillEffects(player));
+                        Game.EquipControlledGear(player, level);
+                        Assert.Single(Game.GemSkillEffects(player));
                     }
                     finally { ControlledPlayers.Gear = gear; }
                 }

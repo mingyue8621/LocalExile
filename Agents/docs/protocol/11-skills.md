@@ -577,23 +577,6 @@ the 0..387 ms view of `doublestrike_sword`, with a 0.5 s budget.
 Falling back to `attack1_maul` releases the server's next Move while the client still queues it;
 the attack completion then discards that queued walk's path (`0x141e95f10` → `0x141e9b860`).
 
-An attack gem plays the class ACT's own action for the skill, which is not named after the skill: `HeavyStrike` is
-`bash1_mace`, `GlacialHammer` is `attack_maul_01a` (0.6 s) then `attack_maul_01b` (0.8) then `bash1_mace`, `Cyclone`
-`whirl_sword`/`whirl_maul`, `Sweep` `bladestorm_sword_01`/`sweep_greataxe` (`animation_skill_actions`,
-`scripts/re/skill_actions.py`; the action is the GrantedEffects' ActiveSkills ActionType Id). The hit is the *first*
-segment that strikes — GlacialHammer's wind-up segment, not the end of the chain — and a segment plays over its
-`attack_time` budget, the sequence compressing into a shorter attack time. Stances inherit their parent block's actions
-(`OneHandSwordShield` inside `OneHandSword`); a skill the ACT sends to `@Melee` plays the default attack pool above. Only
-five actions carry an ACT `effect` (GlacialHammer's `icehammer_geo`, `PowerShot`'s soul siphon, `DodgeBack`, `ThrowOff`):
-every other skill's visual is the client's own skill data, not an ACT attachment, so the server sends no effect for it.
-
-A skill whose ActionType Id names a variant of the ACT's action plays that action: `CycloneChannelled` → `Cyclone`,
-`SweepAltX` → `Sweep`, `VaalGlacialHammer` → `GlacialHammer`. The server strips the `Vaal`/`New` prefixes and the
-`Channelled`/`AltX`/`AltY`/`New`/`_` suffixes one at a time and takes the first name the ACT declares
-(`ActorAnimations.BaseActionNames`); an action it never declares still falls back to the default attack pool, so the
-lookup never invents an animation the client does not play. 8 of the 364 attack gems resolve this way (the rest name
-actions no ACT block declares: Frenzy, Reave, Ice Shot, Lightning Arrow …).
-
 Burning Arrow's muzzle flash is `Projectiles.MiscAnimatedFlash` (row 3657), which `DefaultArrow` does not have. The client
 creates an effect object at the clip's contact, without a server message: in the same trace at about 375 ms after the
 action starts (contact 399 ms at speed 1.045 is 382 ms), and the server's arrow arrived at about 450 ms. That the object
@@ -629,7 +612,7 @@ No generator output changes are needed: the multiplier is already extracted.
    `TargetAccuracy.AgainstTarget` at the target's own rarity and position at that moment (§4). Ordinary attacks now
    use the defender's entropy and independent critical confirmation ([20 §2h](20-damage.md#2h-ordinary-attack-evasion-and-critical-confirmation)). A miss is logged and
    sends no life update; spells do not roll accuracy and always hit.
-4. Any later player action (0x25 move, another 0x24) cancels pending contact/release (`ClientState.ActionCount`).
+4. Any later player action (0x25 move, another 0x24) cancels pending contact/release (`Player.ActionCount`).
    A ranged projectile already created keeps its own area lifetime and can still collide after the player moves.
 5. Pacing: one swing per attack time. While the button is held the client sends one 0x24 per swing; a swing may
    arrive up to a quarter of an attack early (jitter) and the schedule stays on the client's cadence. When the server
@@ -969,11 +952,8 @@ Live 2026-10-17: Hungry Corpses walk up, swing (animated) and lower the player's
   (0x2aa) and `casting_spell` (0x1b6); only attacks send `main_hand_attack_duration_ms`. The client's cast-duration
   path reads the virtual base when the action starts. (The King crash first put down to this, `0xc0000005` at
   `0x19e37bf`, is `GeometryChannelBase::StartChannelling` reading a missing GeometryChannel row:
-  [king-in-the-mists](../game/king-in-the-mists.md).) It reads a **missing** one as 0 and plays nothing: the Vaal
-  Oversoul's IncaBossRocks has no `casting_spell` in its stat set, and with attack stats only it stood through every 0x1ab
-  with no animation (reported live 2026-11-08), so the cast-time stats follow ActiveSkillType Spell as well
-  (`MonsterAttack.CastTime`) while `Spell` keeps the damage pipeline's meaning.
-- **AI** (`RunMonsterAi`, `MonsterAiCadence`): decisions run at 50 ms intervals of elapsed game time.
+  [king-in-the-mists](../game/king-in-the-mists.md).)
+- **AI** (`StartMonsterAi`, `MonsterAiCadence`): decisions run at 50 ms intervals of elapsed game time.
   A late wake runs one decision and schedules the next from the current time; it never replays missed steps.
   Pause freezes game time, and disabled AI or a dead player does not accumulate work to replay afterward.
   Hostile monsters neither chase nor swing while the entry grace period still protects the player.
@@ -1129,7 +1109,7 @@ Live 2026-10-17: Hungry Corpses walk up, swing (animated) and lower the player's
   Whether the client's swing animation follows them is unverified: the swing time is read through the action's stat
   provider (`FUN_141c09560`: 0x221a over 1 + 0x126 / 100, via `FUN_141940aa0`), which may be the skill's own stats in
   the Actor component; those keep the unslowed time.
-- **Player life** (`ClientState.PlayerLife`, from the level/class/passive pools). At 0 the client plays the death
+- **Player life** (`Player.PlayerLife`, from the level/class/passive pools). At 0 the client plays the death
   animation and blocks moving. `/heal` sends full life: 0x1b1 from 0 runs the client's revive. The overhead life bar is
   hidden at 0 (`hide_mini_life_bar`, as for monsters) and shown again on revive.
 
@@ -1665,7 +1645,7 @@ Live 2026-10-18 with the Witch's Fireball. Code: `SkillCatalog.EffectStats`, `Ge
   which the client divides by 60 — so the panel shows the regeneration the tick applies. An **attack** also waits for
   the shared attack timer (`AttackTiming`): the client re-aims a held attack every 50 ms, so before 2026-10-25 every
   use was a swing (Holy Strike: twelve a second, 6 mana each). Attack gem skills and the default attack share
-  `ClientState.NextAttackAt`, a use may arrive a quarter of an attack early, and a use that arrives sooner is ignored:
+  `Player.NextAttackAt`, a use may arrive a quarter of an attack early, and a use that arrives sooner is ignored:
   no cost, no swing, no 0x1b1. The client does not deduct the cost itself (a live trace of its Life pool showed the
   mana change at the server's 0x1b1), so no "cost back" update is needed.
 - **Ground attack in dual wield crashes the client: the off hand's weapon stats were missing (issue #167, fixed
@@ -1873,12 +1853,12 @@ the channel one second in); both forms refresh the channel's liveness. 0x197's c
 after the start, is already at the 0x1ab target 45–60 cells away, then it drifts as the cursor and camera move
 (live 2026-11-08). Taken as the player's cell it put Cyclone's sweeps around the cursor. Cyclone's player walks toward
 it, an order re-aimed on each update, at the movement speed with the gem's `cyclone_movement_speed_+%_final`
-(`ChannelAimedAt`, `ClientState.ChannelMovement`); a channel that stands ignores it. 0x197 does not come at the attack rate.
+(`ChannelAimedAt`, `Player.ChannelMovement`); a channel that stands ignores it. 0x197 does not come at the attack rate.
 The hits run on the server's own timer (`RunChannel`, started with the channel): the first sweep lands as the channel
 starts, then one sweep around the player's current cell every `SupportedAttackSeconds` (the skill's own speed, its
 supports and the player's attack speed, as the tooltip shows), paying the cost each time, until 0x199, any other action,
 running out of mana, death or travel, or when the client's 0x197 updates stop for a second
-(`LastChannelUpdateAt`, `ClientState.ChannelSkill`, `NextChannelHitAt`). One sweep resolves its damage
+(`LastChannelUpdateAt`, `Player.ChannelSkill`, `NextChannelHitAt`). One sweep resolves its damage
 and multiplier once and rolls them per monster; every monster gets its hit, life update and death packet before the
 sweep's deaths run their loot, experience and quest work (`AreaSkillHit`). Before, a sweep recalculated the whole skill
 per monster and handled each death inline, spreading one sweep over up to 1.4 s in a crowd.
@@ -1915,10 +1895,7 @@ blast). The gem resolves to GrantedEffects `GroundSlam`; the +40% final radius a
 `ExileGroundSlam` row, which no GemEffects row grants. No player stat set or 3.29 Mod holds the four `ground_slam_*`
 shape stats, so the wave uses estimates to calibrate live: 60 cells long at the generic 12-cell radius, shifted by the
 skill's own radius; half angle 30 deg (half `ground_slam_cone_angle_override`'s cone), grown by `ground_slam_angle_+%`;
-60 cells a second. Both the wave and the Vaal blast apply `groundslam_damage_to_close_targets_+%_final`
-(40 at gem level 1, 49 at 20, 56 at 39: full at the slam, nothing at the reach), and a wave also hits everything
-inside the skill's own area radius around the player whichever way it faces — the 30° half angle is barely half a
-cell wide at one cell out, so monsters standing on the player were missed (live 2026-11-15).
+60 cells a second. Only the Vaal executor applies `groundslam_damage_to_close_targets_+%_final`.
 The client queues a Move clicked during a swing instead of cancelling the swing (live 2026-11-07), so a gem melee swing
 (`holdsItsSwing`: Melee, not channelled) keeps its hit over a moved action counter; only death, area change, pause,
 freeze or hit recovery ends it. Its contact comes from its own rig clip (`GemAttackContactDelay`: groundslam_maul at
@@ -2748,7 +2725,7 @@ The totem base type (`Metadata/Monsters/Totems/Totem`) reads only components the
 Its .ot files make it immobile with `set_is_totem_object`, play `Emerge` as its basic action, block movement and give
 it `monster_inherent_damage_taken_+%_final` -80.
 
-The server (`Totems.Rules.cs`) keeps the player's totems in `ClientState.Totems`, never in `Monsters`: area hits,
+The server (`Totems.Rules.cs`) keeps the player's totems in `Player.Totems`, never in `Monsters`: area hits,
 monster AI, loot, experience and the instance save read only `Monsters`, so none of them sees a totem.
 - Placement: the gem's use pays its mana, then waits the GrantedEffects CastTime (0.6 s) over
   `1 + summon_totem_cast_speed_+% / 100` and the action speed (the wiki's Totem page: cast speed does not apply).
@@ -2797,29 +2774,12 @@ Ranged placement is 0.5 s since 3.28, despite older Totem references listing 0.3
 Unimplemented payloads, including Artillery's mortar sequence and Focused Ballista's owner-attack gate, are refused
 before action/cost admission. Enemy targeting of totems, placement range and the aura buff's totem source remain open.
 
-**Native totem gems** (Holy Flame Totem, Shockwave Totem, Decoy Totem, Devouring Totem, Searing Bond, Ancestral
-Protector, Ancestral Blademaster, Ancestral Warchief) place their own totem, resolved the same way: their
-`ActiveSkills.SkillTotemId` → `SkillTotemVariations` skin 0 → variety 2329/2277/2297/2307/2341/4925/4927. Before
-2026-11-15 `TotemVariety` asked `SpellTotemEffect` first, which excludes any skill of totem type 47, so none of them
-resolved: the cast fell through to a self-cast and no totem object was ever created ("no totem model").
-
-A dedicated totem skill (ActiveSkillType `SummonsTotem`; `SkillTotemId` is on every row) carries the spell totems'
-proxy `0x4000` plus its radius and `skill_is_non_pathing`; with the gem's own `is_totem` the client plays no action.
-Shockwave Totem is a `Nova`: it casts while a hostile is within `base_totem_range` (80) and hits within its radius (24)
-of itself at the end of each cast, as the Arc totem's hit. Devouring Totem eats the nearest corpse in range once a cast
-while the player misses Life or Mana; the corpse is the totem's, not the player's, so it meets no "consumed a corpse"
-condition of his. Decoy Totem taunts the monsters in its range (`DecoyTauntLocked`) and they hit it instead of the
-player. Still refused before cost, because this module does not run them yet: the ancestral melee totems
-(`ancestor_totem_parent_activiation_range`, owner buffs) and Searing Bond's burning beam.
-
-**Ancestral totems' gifts** (2026-11-15): while one stands its owner reads the totem's own per-level value —
-`melee_ancestor_totem_grant_owner_attack_speed_+%_final` (Protector, 10 → 20) as `attack_speed_+%`,
-`slam_ancestor_totem_grant_owner_melee_damage_+%_final` (Warchief, 8 → 18) as `melee_damage_+%`, and
-`slash_ancestor_totem_grant_owner_physical_damage_added_as_fire_+%` (Blademaster, 12 → 22) as
-`physical_damage_%_to_add_as_fire`. `Hierophant` sums them over the living totems each tick and resends the character's
-stats when the sum changes.
-`KnockbackOnHitLocked` had no caller at all until then; the area hit now runs it after the damage, so Shockwave Totem's
-own 25% `base_global_chance_to_knockback_%` (and Knockback Support, and every other source of the stat) shoves.
+Dedicated totem skills (ActiveSkillType `SummonsTotem`; `SkillTotemId` is on every row) carry the spell totems'
+proxy `0x4000` plus their radius and `skill_is_non_pathing`; with the gem's own `is_totem` the client plays no action. Shockwave Totem is a `Nova`: it casts while a hostile is
+within `base_totem_range` (80) and hits within its radius (24) of itself at the end of each cast, as the Arc totem's hit.
+Devouring Totem eats the nearest corpse in range once a cast while the player misses Life or Mana; the corpse is the
+totem's, not the player's. Decoy Totem (its taunt is the separate `totem_taunt_triggerable`), the ancestral melee
+totems (`ancestor_totem_parent_activiation_range`, owner buffs) and Searing Bond are still refused before cost.
 
 ## 10h. Player minions that fight
 
@@ -2837,7 +2797,7 @@ The module publishes a paired normal-skill proxy with that id and a parent refer
 GE `SkillID` supplies `skill_behaviour_variation`: zero selects Absolution and one selects Dominance in this action.
 Native verification covered Absolution and Dominance upgrades and full-cap refreshes with no ordinary sentinel remaining.
 
-A player minion is a monster on the player's team kept in `ClientState.Monsters` and listed in `ClientState.Minions`
+A player minion is a monster on the player's team kept in `Player.Monsters` and listed in `Player.Minions`
 (`PlayerMinions.cs`).
 The Spirit chieftains are the first (section 10f).
 - Spawn: `SpawnMonster` with `friendly: true` (Positioned team 0) and the stats `is_player_minion` and
@@ -2847,7 +2807,7 @@ The Spirit chieftains are the first (section 10f).
   and `minion_movement_speed_+%` become its own damage, attack speed and movement mods at the summon.
 - Kept apart: the instance save (`InstanceMonsters`), the player's area hits and default attack, and the on-kill
   charges skip it; an area change or logout drops it with the connection.
-- AI (`RunMonsterAi`): the monster AI walks a friendly monster with the player and never lets an owned one give up.
+- AI (`StartMonsterAi`): the monster AI walks a friendly monster with the player and never lets an owned one give up.
   A fighting one goes for the nearest living hostile monster within its aggro range of both itself and the player,
   not one lurking unrisen.
   In reach (its `MaximumAttackDistance` plus the target's body) it stops and swings; otherwise it walks to the
@@ -2927,7 +2887,7 @@ hostiles' power; which code consumes the list was not traced, so the server's re
   radius explodes once.
   A corpse is a dead monster at zero Life whose Life type allows corpse use (`MonsterLifeData.IsUsableAsCorpse`) and
   that no explosion has consumed (`SpawnedMonster.CorpseConsumed`).
-  The corpse is removed (S→C 0x2bd) and leaves `ClientState.Monsters`, so no later removal sends it again.
+  The corpse is removed (S→C 0x2bd) and leaves `Player.Monsters`, so no later removal sends it again.
   The explosion hits living hostile monsters within 22 cells of it (PoB `EnemyExplode`, grown by area of effect) for
   the percentage of the corpse's maximum Life as physical damage, scaled by the player's `damage_+%`,
   `physical_damage_+%`, `area_damage_+%` and Frenzy Charge more damage (poewiki Explode).
@@ -3223,7 +3183,7 @@ failed I/O, allocation limits, actual official values and every skill's successf
   (`GrantedEffectsPerLevelHardmode` in Ruthless; for Devout of Abberath both name the same row) is a
   GrantedEffectsPerLevel row, which names the GrantedEffects row and its level. Only effects whose trigger runs on the server act; the others do nothing, and none
   joins the client's skill list. `RepeatingShockwave` (Abberath's Fury, Devout of Abberath's 45556: level 20, no cost,
-  no cooldown) is triggered by footsteps: `RunFootstepSkills` (a 50 ms poll per connection, stopped while paused) runs
+  no cooldown) is triggered by footsteps: `WakeFootsteps` (a 50 ms poll per connection, stopped while paused) runs
   a run-animation clock while the walk lasts (`Walk.ArrivesAt`), at `Walk.Speed` over the base walking speed, and
   restarts it when the walk ends. The Templar rig's 18 run clips loop in 800 ms with footstepright at 233 ms and
   footstepleft at 633 ms, so each passed event is one trigger. A movement skill teleports the walk, so it takes no
@@ -3543,8 +3503,8 @@ Tests replace `PlayerMinions.Random`.
 **Owned minions** (`PlayerMinions`, `PlayerMinions.cs`). A minion is a monster made by `SpawnMonster` with
 `friendly: true` (Positioned team 0) and the stats `is_player_minion` and `is_semantic_minion` 1 on its Stats component.
 The client reads these two to know the player's minion (the link-target filter 0x141bfaf20).
-`ClientState.Minions` keeps each one's skill, kind, end time, aura on the owner and death explosion, under the Monsters
-lock. `RunPlayerMinions` runs `PlayerMinionsTick` every 100 ms of game time:
+`Player.Minions` keeps each one's skill, kind, end time, aura on the owner and death explosion, under the Monsters
+lock. `StartPlayerMinions` runs `PlayerMinionsTick` every 100 ms of game time:
 
 - A minion whose time is up dies (hide its life bar, 0x1b1 life 0) and explodes; its body goes (0x2bd) a second later.
 - The owner's death or the loss of the granting passive kills it without an explosion; with the passive lost, the

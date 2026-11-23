@@ -10,10 +10,10 @@ public sealed class FortificationState
     public const int BaseMaximum = 20;
     public const double BaseDurationSeconds = 6;
     public const double HitGainIntervalSeconds = .1;
-    public const string MaximumStat = "base_max_fortification";
-    public const string DurationStat = "fortify_duration_+%";
-    public const string LifeRegenPerStack = "life_regeneration_per_minute_%_per_fortification";
-    public const string AttackSpeedPerStack = "attack_speed_+%_per_fortification";
+    public const uint MaximumStat = Stat.BaseMaxFortification;
+    public const uint DurationStat = Stat.FortifyDurationPlusPct;
+    public const uint LifeRegenPerStack = Stat.LifeRegenerationPerMinutePctPerFortification;
+    public const uint AttackSpeedPerStack = Stat.AttackSpeedPlusPctPerFortification;
 
     readonly List<Grant> grants = [];
     public double ExpiryRate { get; private set; } = 1;
@@ -123,10 +123,12 @@ public sealed class FortificationState
     void Advance(double now)
     {
         if (!double.IsFinite(now) || now < 0) throw new ArgumentOutOfRangeException(nameof(now));
-        // The clock is the area's (ClientState.Clock is that instance's stopwatch), so entering another area starts it
+        // The clock is the area's (the connection's Clock is that instance's stopwatch), so entering another area starts it
         // again from zero. A session kept on the connection then still holds deadlines from the old time base, and its
         // first advance would see time run backwards (a boss room, 2026-11-13: every hit on The Depraved Trinity threw
         // out of the whole frame). A new time base is not a caller error: start over on it.
+        // This subsumes the upstream "an earlier read is no time passing" clamp: both avoid a negative delta, but a new
+        // area's time base must clear the old grants rather than freeze them until the old deadlines finally elapse.
         if (now < lastTime)
         {
             grants.Clear();

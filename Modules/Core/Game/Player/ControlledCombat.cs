@@ -22,7 +22,7 @@ static partial class Game
     const double ControlledPackRange = 15;
     const int ControlledPackSize = 3;
 
-    internal static List<ControlledSkill> ControlledSkills(ClientState conn)
+    internal static List<ControlledSkill> ControlledSkills(Player conn)
     {
         var list = new List<ControlledSkill>();
         foreach (var gem in GemSkillEffects(conn))
@@ -38,7 +38,7 @@ static partial class Game
             bool area = SkillRadius(conn, supported.Stats, SkillsFor(conn).IsSpell(gem.Effect), gem.Effect) >= 12;
             // What a use costs: a bot with 3 mana cannot pay a 12-mana Cleave, and stood there instead (ControlledPlayers
             // falls back on the weapon's own attack then).
-            int mana = Stats.Key("mana_cost") is uint cost ? supported.Stats.GetValueOrDefault(cost) : 0;
+            int mana = supported.Stats.GetValueOrDefault(Stat.ManaCost);
             list.Add(new(gem.Id, gem.Effect, gem.Level, gem.Quality,
                 ControlledInPlaceReach(conn, gem.Id, gem.Effect), area, seconds, mana));
         }
@@ -49,18 +49,17 @@ static partial class Game
     /// or its own), then the nearest. Null when nothing hostile stands inside its sight and inside how far it will go from
     /// the leader (<see cref="ControlledLeaderRange"/>). It keeps off an enemy another bot is already fighting where it can,
     /// so a party spreads over a pack instead of piling onto one skeleton.</summary>
-    internal static (uint Id, SpawnedMonster Monster)? ControlledTarget(ClientState conn, ClientState leader, (int X, int Y) here, double now)
+    internal static (uint Id, SpawnedMonster Monster)? ControlledTarget(Player conn, Player leader, (int X, int Y) here, double now)
     {
         var leaderAt = leader.Walk.Position(now);
         double leaderRange = ControlledLeaderRange(conn);
         // Read the other bots' targets before taking the monster list's lock: the party list has a lock of its own, and the
         // two must never be held in both orders.
         var claimed = ControlledClaimedIds(conn, now);
-        lock (conn.Monsters)
+        lock (conn.Area.Monsters)
         {
-            var seen = conn.Monsters
+            var seen = conn.Area.Monsters
                 .Where(p => p.Value is { Hostile: true, Dead: false, Life: > 0, Invulnerable: false, Asleep: false }
-                    && !conn.AsleepMonsters.Contains(p.Key)
                     && Dist(p.Value.Walk.Position(now), here) <= ControlledSight
                     && Dist(p.Value.Walk.Position(now), leaderAt) <= leaderRange)
                 .Select(p => (Id: p.Key, Monster: p.Value, At: p.Value.Walk.Position(now)))
@@ -77,11 +76,11 @@ static partial class Game
     }
 
     /// <summary>Whether several monsters stand around this one: an area gem hits them all.</summary>
-    internal static bool ControlledPacked(ClientState conn, SpawnedMonster target, double now)
+    internal static bool ControlledPacked(Player conn, SpawnedMonster target, double now)
     {
         var at = target.Walk.Position(now);
-        lock (conn.Monsters)
-            return conn.Monsters.Count(p => p.Value is { Hostile: true, Dead: false, Life: > 0, Asleep: false }
+        lock (conn.Area.Monsters)
+            return conn.Area.Monsters.Count(p => p.Value is { Hostile: true, Dead: false, Life: > 0, Asleep: false }
                 && Dist(p.Value.Walk.Position(now), at) <= ControlledPackRange) >= ControlledPackSize;
     }
 
@@ -102,7 +101,7 @@ static partial class Game
     /// stand on a cooling skill doing nothing. Reading the state also refreshes it, so it happens inside the same short
     /// critical section the game's own cooldown path takes (<see cref="ProjectileMutation"/>) rather than under the
     /// monster list's lock, which guards a different table.</summary>
-    internal static bool ControlledSkillReady(ClientState conn, ControlledSkill skill, double now)
+    internal static bool ControlledSkillReady(Player conn, ControlledSkill skill, double now)
     {
         if (CooldownFor(conn, skill.Effect, skill.Level, skill.Quality) is not { } plan) return true;
         using (ProjectileMutation(conn, advance: false))
@@ -112,7 +111,7 @@ static partial class Game
     /// <summary>Walk to just inside the reach of that enemy. <see cref="ControlledMoveFits"/> keeps the destination inside
     /// the leader's leash and on walkable ground, so chasing never leaves the party or walks through a wall. The leash is the
     /// engage one: closing on a target at the edge of the bot's sight would otherwise be refused as too far from the player.</summary>
-    internal static bool ApproachControlledTarget(ClientState conn, ClientState leader, (int X, int Y) monster, double reach, double now)
+    internal static bool ApproachControlledTarget(Player conn, Player leader, (int X, int Y) monster, double reach, double now)
     {
         var plan = FollowerPlans.GetOrCreateValue(conn);
         if (now < plan.ApproachAt) return plan.Approaching;
@@ -132,7 +131,7 @@ static partial class Game
     /// <summary>Drink the first flask of the bar that still has charges: a life one under this bot's own line (a cautious
     /// one drinks at 40% of its life, a bold one at 20%), a mana one when casting ran it dry. False when there is nothing to
     /// drink, the bar is empty or it drank a moment ago.</summary>
-    internal static async Task<bool> DrinkControlledFlask(ClientState conn, double now)
+    internal static async Task<bool> DrinkControlledFlask(Player conn, double now)
     {        if (conn.PlayerLife == 0 || conn.PlayerMaxLife == 0) return false;
         double below = .2 + .2 * MindOf(conn).Caution;
         bool life = conn.PlayerLife / (double)conn.PlayerMaxLife <= below;
@@ -148,7 +147,7 @@ static partial class Game
             if (held.Item.Charges < use.ChargesPerUse) continue;
             if (life ? use.LifePerUse <= 0 : use.ManaPerUse <= 0) continue;
             plan.FlaskAt = now + 1.2;
-            await UseFlask(conn.Wire.Remote, conn.Wire.Stream, conn.Wire.Ciphers, conn, held.X);
+            await UseFlask(conn, held.X);
             Console.WriteLine($"[bots] {CharacterName(conn)} drinks a {(life ? "life" : "mana")} flask: " +
                 $"{conn.PlayerLife}/{conn.PlayerMaxLife} life, {conn.PlayerMana}/{mana} mana");
             return true;

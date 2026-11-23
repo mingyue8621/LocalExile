@@ -27,9 +27,9 @@ static partial class Game
         public uint Warned;
     }
 
-    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<ClientState, ControlledMind> ControlledMinds = new();
+    static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Player, ControlledMind> ControlledMinds = new();
 
-    internal static ControlledMind MindOf(ClientState conn)
+    internal static ControlledMind MindOf(Player conn)
     {
         if (ControlledMinds.TryGetValue(conn, out var known)) return known;
         uint seed = ControlledSeed(conn);
@@ -45,7 +45,7 @@ static partial class Game
     }
 
     /// <summary>FNV-1a of the character's name: the same bot is the same person in every area, login and reload.</summary>
-    internal static uint ControlledSeed(ClientState conn)
+    internal static uint ControlledSeed(Player conn)
     {
         uint hash = 2166136261;
         foreach (char c in CharacterName(conn)) { hash ^= c; hash *= 16777619; }
@@ -54,12 +54,12 @@ static partial class Game
 
     /// <summary>How far from the player this bot will go after an enemy: the cautious keep to its side, the bold range the
     /// whole sight. Never past the engage leash (ControlledFollowing), which is what the follower recovers from.</summary>
-    internal static double ControlledLeaderRange(ClientState conn) => 55 + 32 * MindOf(conn).Charge;
+    internal static double ControlledLeaderRange(Player conn) => 55 + 32 * MindOf(conn).Charge;
 
     /// <summary>The enemies the other bots here are already fighting: plain monsters are divided between them, rares and
     /// bosses are not (a party does pile onto those). A bot is not in Social's party list, so its companions are the other
     /// controlled players in the same area. Read outside the monster list's lock.</summary>
-    internal static HashSet<uint> ControlledClaimedIds(ClientState conn, double now)
+    internal static HashSet<uint> ControlledClaimedIds(Player conn, double now)
     {
         var claimed = new HashSet<uint>();
         foreach (var other in Program.InGame.Keys)
@@ -74,7 +74,7 @@ static partial class Game
 
     /// <summary>What an enemy is worth to this bot: the rarity first, then whether it is on the player's back (a loyal bot
     /// turns on those) or on the bot's own. The caller breaks ties by distance.</summary>
-    internal static int ControlledWorth(ClientState conn, SpawnedMonster monster, ClientState leader)
+    internal static int ControlledWorth(Player conn, SpawnedMonster monster, Player leader)
     {
         var mind = MindOf(conn);
         int worth = (int)monster.Rarity * 20;
@@ -85,7 +85,7 @@ static partial class Game
 
     /// <summary>Give ground, as a player kites: a ranged bot steps out of a crowd that got inside its reach, more readily the
     /// more cautious it is. Stays inside the party (the engage leash) and off the walls. A melee bot stands and drinks.</summary>
-    internal static bool ControlledBackOff(ClientState conn, ClientState leader, (int X, int Y) enemy, double gap, double reach, double now)
+    internal static bool ControlledBackOff(Player conn, Player leader, (int X, int Y) enemy, double gap, double reach, double now)
     {
         var plan = FollowerPlans.GetOrCreateValue(conn);
         var mind = MindOf(conn);
@@ -115,7 +115,7 @@ static partial class Game
     /// <summary>One line from the bot in the area's local chat. Rate-limited per bot: five followers talking at every pack
     /// is worse than silence, so a bot speaks at most once a minute and an event that keeps happening waits longer. The line
     /// goes to the people in the area, as a player's local chat does (a bot is not in Social's party list).</summary>
-    internal static void ControlledSay(ClientState conn, double now, string text, double gap = 75)
+    internal static void ControlledSay(Player conn, double now, string text, double gap = 75)
     {
         var mind = MindOf(conn);
         if (now < mind.SayAt || conn.Closed) return;
@@ -123,7 +123,7 @@ static partial class Game
         bool told = false;
         foreach (var other in Program.InGame.Keys)
         {
-            if (other is not { Controlled: false, Closed: false, Outbox: { } outbox }) continue;
+            if (other is not { Controlled: false, Closed: false, Connection.Outbox: { } outbox }) continue;
             if (!ReferenceEquals(other.Instance.Presence, conn.Instance.Presence)) continue;
             // A send encrypts in place, so each client gets its own bytes (ChatModule.SayLocally). A client that has gone
             // leaves a faulted send behind, which is dropped rather than raised on the bots' loop.
@@ -137,7 +137,7 @@ static partial class Game
     }
 
     /// <summary>Calls an enemy out once, and only by a bot that talks at all: "a rare!" from five followers is noise.</summary>
-    internal static void ControlledWarn(ClientState conn, double now, uint id, string text, double gap = 90)
+    internal static void ControlledWarn(Player conn, double now, uint id, string text, double gap = 90)
     {
         var mind = MindOf(conn);
         if (mind.Talk < .6 || mind.Warned == id) return;
@@ -157,7 +157,7 @@ static partial class Game
     ];
 
     /// <summary>Something to say while nothing is happening: only a talkative bot does, and rarely.</summary>
-    internal static void ControlledSmallTalkAt(ClientState conn, double now)
+    internal static void ControlledSmallTalkAt(Player conn, double now)
     {
         var mind = MindOf(conn);
         if (mind.Talk < .35 || now < mind.AmbientAt) return;

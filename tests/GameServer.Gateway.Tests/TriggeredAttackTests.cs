@@ -36,7 +36,7 @@ public class TriggeredAttackTests
     }
 
     /// <summary>A bow with the attack and the support in one link group, so the support applies to it.</summary>
-    static void EquipBow(ClientState conn, string active, string support, bool bow = true)
+    static void EquipBow(Player conn, string active, string support, bool bow = true)
     {
         var attack = ItemCatalog.Create(Program.Items.Find("Metadata/Items/Gems/" + active)!);
         var trigger = ItemCatalog.Create(Program.Items.Find("Metadata/Items/Gems/" + support)!);
@@ -48,7 +48,7 @@ public class TriggeredAttackTests
         Game.ItemsOf(conn).Add(PlayerInventories.Weapon1, 0, 0, weapon);
     }
 
-    static void WithCharacter(Action<ClientState> run)
+    static void WithCharacter(Action<Player> run)
     {
         string path = Path.Combine(Path.GetTempPath(), $"triggered-attack-{Guid.NewGuid():N}.db");
         var old = Program.GameLogicOrNull;
@@ -57,20 +57,19 @@ public class TriggeredAttackTests
         Game.CombatLifetime = lifetime;
         Saves.Open(path);
         Program.SetGameLogic(new GameServer.Modules.Game.GameLogic());
-        var conn = new ClientState(new(1, "trigger", 1000, 1000, 100, 100, null, []), 1, 1)
+        var conn = new Player(new(1, "trigger", 1000, 1000, 100, 100, null, []), 1, 1)
         {
-            CriticalRandom = new ZeroRandom(), Character = "Trigger" + Guid.NewGuid().ToString("N"), PlayerLife = 1000, PlayerMana = 1000,
+            CriticalRandom = new ZeroRandom(), Character = { Name = "Trigger" + Guid.NewGuid().ToString("N") }, PlayerLife = 1000, PlayerMana = 1000,
             Instance = new(),
             Pools = new(100, 1000, 1000, int.MaxValue, 0, Strength: 1000, Dexterity: 1000, Intelligence: 1000),
             LeagueModule = new(new League("test", "Standard", false, false), new HashSet<string>(["Game"])),
         };
         conn.Clock.Stop();
-        foreach (string name in new[] { "virtual_strength_for_requirements", "virtual_dexterity_for_requirements", "virtual_intelligence_for_requirements" })
-            conn.PlayerStats[Program.Stats.Key(name)!.Value] = 1000;
+        using var requirements = TestRequirements.Waive(conn);
         try { run(conn); }
         finally
         {
-            PlayerInventories.Forget(conn.Character!);
+            PlayerInventories.Forget(conn.Character.Name!);
             lifetime.Stop(_ => { });
             Game.CombatLifetime = oldLifetime;
             Program.SetGameLogic(old!);

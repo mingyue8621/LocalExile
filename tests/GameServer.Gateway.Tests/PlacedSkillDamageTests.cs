@@ -25,7 +25,7 @@ public sealed class PlacedSkillDamageTests
             ("SkillGemFireTrap", "SupportGemTrapAndMineDamage"),
             ("SkillGemStormblastMine", "SupportGemTrapAndMineDamage") })
         {
-            var conn = SpellTotemExecutionTests.Connection("PlacedDamage");
+            var conn = SpellTotemExecutionTests.PlayerOf("PlacedDamage");
             var items = Game.ItemsOf(conn);
             foreach (var old in items.EquipmentSnapshot().Where(e => e.Row == PlayerInventories.Weapon1))
                 items.Remove(PlayerInventories.Weapon1, old.Item.Id);

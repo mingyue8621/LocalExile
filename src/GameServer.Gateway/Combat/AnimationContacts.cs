@@ -53,16 +53,20 @@ public sealed class AnimationContacts
         Dictionary<string, Dictionary<string, DefaultAttackClip[]>> SkillActions,
         Dictionary<(string Stance, string Skill), string> SkillClips);
 
-    private readonly Lazy<Dictionary<string, ActorAnimations>> _byAo;
+    private readonly Dictionary<string, ActorAnimations> _byAo;
 
     /// <summary>The rigs in client.db.</summary>
     public AnimationContacts() : this(ClientTables.TableOrNull) { }
 
     /// <summary>The rigs in the animation_* tables <paramref name="tables"/> gives by name (null: none), for a test.</summary>
-    public AnimationContacts(Func<string, ClientTable?> tables) => _byAo = new(() => Load(tables));
+    public AnimationContacts(Func<string, ClientTable?> tables) => _byAo = Load(tables);
 
     /// <summary>When in a spell cast its projectile leaves, as a fraction of the cast: the class's spell_projectile
     /// animation (wand, unarmed, then any), else any spell animation's contact.</summary>
+    /// <summary>A clip's length in ms (its rig's), null when the rig or the clip is missing.</summary>
+    public int? ClipLengthMs(string animatedObject, string clip) =>
+        _byAo.TryGetValue(animatedObject, out var actor) && actor.AllClips.TryGetValue(clip, out var found) ? found.Length : null;
+
     public double SpellRelease(string animatedObject) =>
         SpellContact(animatedObject, ["spell_projectile_wand", "spell_projectile_unarmed"], ["spell_projectile", "spell_"])
         ?? DefaultSpellRelease;
@@ -78,7 +82,7 @@ public sealed class AnimationContacts
         CastAnimationKind kind, double start, double duration, bool cannotCancelBeforeContact)
     {
         if (CastClip(animatedObject, weapon, kind) is not { } selected
-            || !_byAo.Value.TryGetValue(animatedObject, out var actor)
+            || !_byAo.TryGetValue(animatedObject, out var actor)
             || !actor.Clips.TryGetValue(selected.Name, out var clip) || !clip.CancellationKnown) return null;
         double? early = cannotCancelBeforeContact ? null
             : duration * Math.Max(.2, (double)clip.Contact / clip.Length - .3);
@@ -87,7 +91,7 @@ public sealed class AnimationContacts
 
     double? SpellContact(string animatedObject, string[] names, string[] prefixes)
     {
-        if (!_byAo.Value.TryGetValue(animatedObject, out var actor)) return null;
+        if (!_byAo.TryGetValue(animatedObject, out var actor)) return null;
         var anims = actor.Clips;
         foreach (string name in names)
             if (anims.TryGetValue(name, out var a) && a.Length > 0) return (double)a.Contact / a.Length;
@@ -118,6 +122,15 @@ public sealed class AnimationContacts
     public (string Name, double Contact)? SkillAttackContact(string animatedObject, WeaponProfile weapon, string? skillClip) =>
         SkillAttackClip(animatedObject, weapon, skillClip) is { } found
             ? (found.Name, (double)found.Clip.Contact / found.Clip.Length) : null;
+
+    /// <summary>When an attack gem's clip lets a Move cut the swing short, as a fraction of the attack: the skill's own
+    /// clip when the rig has one (or the weapon's attack1 clip), using its lock_cancelling keyframe where listed, else
+    /// its contact keyframe (0x141942b50).</summary>
+    public double AttackCutIn(string animatedObject, WeaponProfile weapon, string? skillClip = null)
+    {
+        return (SkillAttackClip(animatedObject, weapon, skillClip) ?? AttackClip(animatedObject, weapon)) is { Clip.Length: > 0 } found
+            ? (double)(found.Clip.Cancel ?? found.Clip.Contact) / found.Clip.Length : DefaultAttackContact;
+    }
 
     /// <summary>
     /// When a melee attack skill's <paramref name="index"/>-th strike lands, as a fraction of its clip, and the clip's
@@ -150,7 +163,7 @@ public sealed class AnimationContacts
         double attackSeconds)
     {
         if (string.IsNullOrEmpty(actionName) || StanceFor(weapon) is not { } stance
-            || !_byAo.Value.TryGetValue(animatedObject, out var actor)
+            || !_byAo.TryGetValue(animatedObject, out var actor)
             || !actor.SkillActions.TryGetValue(stance, out var actions)
             || SkillActionSegments(actions, actionName) is not { Length: > 0 } segments) return null;
         // The first segment that strikes: a chained action (GlacialHammer's wind-up then the ice hammer) reports its
@@ -207,7 +220,7 @@ public sealed class AnimationContacts
 
     /// <summary>The ACT actions the class rig plays in a stance (the skill's own animations), for a test or a log.</summary>
     public IReadOnlyCollection<string> SkillActionNames(string animatedObject, WeaponProfile weapon) =>
-        StanceFor(weapon) is { } stance && _byAo.Value.TryGetValue(animatedObject, out var actor)
+        StanceFor(weapon) is { } stance && _byAo.TryGetValue(animatedObject, out var actor)
             && actor.SkillActions.TryGetValue(stance, out var actions) ? [.. actions.Keys] : [];
 
     /// <summary>
@@ -230,7 +243,7 @@ public sealed class AnimationContacts
     /// <summary>The exact single clip selected by a supported skill's ACT stance, if the data resolves it.</summary>
     public (string Name, double Contact)? ActAttackContact(string animatedObject, WeaponProfile weapon, string skill)
     {
-        if (weapon.DualWield || !_byAo.Value.TryGetValue(animatedObject, out var actor)
+        if (weapon.DualWield || !_byAo.TryGetValue(animatedObject, out var actor)
             || StanceFor(weapon) is not { } stance || !actor.SkillClips.TryGetValue((stance, skill), out string? name)
             || !actor.Clips.TryGetValue(name, out var clip) || clip.Length <= 0) return null;
         return (name, (double)clip.Contact / clip.Length);
@@ -239,7 +252,7 @@ public sealed class AnimationContacts
     private (string Name, AnimationClip Clip)? SkillAttackClip(string animatedObject, WeaponProfile weapon, string? skillClip,
         bool includeWithoutContact = false)
     {
-        if (string.IsNullOrEmpty(skillClip) || !_byAo.Value.TryGetValue(animatedObject, out var actor)) return null;
+        if (string.IsNullOrEmpty(skillClip) || !_byAo.TryGetValue(animatedObject, out var actor)) return null;
         var anims = includeWithoutContact ? actor.AllClips : actor.Clips;
         // GemAttackContactDelay returns the clip whose first contact drives this use. Accept that exact name so a second
         // strike reads the same weapon-combination variant (for example doublestrike_sword_claw), not merely the main-hand
@@ -260,7 +273,7 @@ public sealed class AnimationContacts
     /// </summary>
     public CastAnimationClip? CastClip(string animatedObject, WeaponProfile weapon, CastAnimationKind kind)
     {
-        if (!_byAo.Value.TryGetValue(animatedObject, out var actor)) return null;
+        if (!_byAo.TryGetValue(animatedObject, out var actor)) return null;
         if (kind == CastAnimationKind.Attack)
             return AttackClip(animatedObject, weapon) is { } found && found.Clip.Index != uint.MaxValue
                 ? new(found.Name, found.Clip.Index, found.Clip.Length) : null;
@@ -301,7 +314,7 @@ public sealed class AnimationContacts
 
     private (string Name, AnimationClip Clip)? AttackClip(string animatedObject, WeaponProfile weapon)
     {
-        if (!_byAo.Value.TryGetValue(animatedObject, out var actor)) return null;
+        if (!_byAo.TryGetValue(animatedObject, out var actor)) return null;
         var anims = actor.Clips;
         string? main = weapon.Unarmed ? "unarmed" : weapon.Bow ? "bow" : weapon.Staff ? "staff"
             : weapon.Sword && weapon.TwoHandMelee ? "2hsword" : weapon.Mace ? "maul"
@@ -342,7 +355,7 @@ public sealed class AnimationContacts
         out DefaultAttackClip selection)
     {
         selection = default;
-        if (StanceFor(weapon) is not { } stance || !_byAo.Value.TryGetValue(animatedObject, out var actor)
+        if (StanceFor(weapon) is not { } stance || !_byAo.TryGetValue(animatedObject, out var actor)
             || !actor.AttackPools.TryGetValue(stance, out var pool)) return false;
         selection = pool.Any(a => a.Pair)
             ? pool.MaxBy(a => a.ContactSeconds(attackSeconds))
@@ -356,7 +369,7 @@ public sealed class AnimationContacts
         string animatedObject, WeaponProfile weapon, ushort sequence, double attackSeconds)
     {
         if (!TryDefaultAttackClip(animatedObject, weapon, sequence, attackSeconds, out var latest)) return null;
-        var pool = _byAo.Value[animatedObject].AttackPools[StanceFor(weapon)!];
+        var pool = _byAo[animatedObject].AttackPools[StanceFor(weapon)!];
         double earliest = pool.Any(a => a.Pair)
             ? pool.Min(a => a.ContactSeconds(attackSeconds))
             : latest.ContactSeconds(attackSeconds);

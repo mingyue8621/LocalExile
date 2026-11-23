@@ -9,7 +9,7 @@ static partial class Game
     /// <summary>True when the straight line between <paramref name="from"/> and <paramref name="to"/> crosses a cell the
     /// client's projectile grid blocks. Both ends are excluded: an attacker standing on a door frame and a player
     /// standing on one are not "behind a wall" from each other.</summary>
-    public static bool LineOfFireBlocked(ClientState conn, (int X, int Y) from, (int X, int Y) to)
+    public static bool LineOfFireBlocked(Player conn, (int X, int Y) from, (int X, int Y) to)
     {
         if (conn.Layout.Sight is not { } sight) return false;
         int dx = to.X - from.X, dy = to.Y - from.Y;

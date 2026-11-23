@@ -19,8 +19,8 @@ public sealed class WorldOutputToleranceTests
     [Fact]
     public void A_presentation_without_a_birth_is_dropped_and_the_batch_still_belongs_to_its_own_objects()
     {
-        var conn = new ClientState(new(1, "world-tolerance", 300, 300, 100, 100, null, []), 1, 1) { LockstepClient = true };
-        var output = conn.WorldOutput;
+        var conn = new Player(new(1, "world-tolerance", 300, 300, 100, 100, null, []), 1, 1) { Connection = { LockstepClient = true } };
+        var output = conn.Connection.WorldOutput;
         output.Begin(3);
         // A birth another producer reserved and never admitted (its producer dropped the batch).
         var orphan = output.NewObject(40);
@@ -50,8 +50,8 @@ public sealed class WorldOutputToleranceTests
     [Fact]
     public void Contains_reports_the_incarnations_a_producer_already_created()
     {
-        var conn = new ClientState(new(1, "world-contains", 300, 300, 100, 100, null, []), 1, 1) { LockstepClient = true };
-        var output = conn.WorldOutput;
+        var conn = new Player(new(1, "world-contains", 300, 300, 100, 100, null, []), 1, 1) { Connection = { LockstepClient = true } };
+        var output = conn.Connection.WorldOutput;
         Assert.False(output.Contains(0x100000));
         output.NewObject(0x100000);
         Assert.True(output.Contains(0x100000));

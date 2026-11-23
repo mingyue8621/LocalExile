@@ -10,7 +10,7 @@ static partial class Game
 
     /// <summary>Wears the gear <see cref="ControlledPlayers.Gear"/> names for this character, at the given level. Replaces
     /// whatever is in those slots, so a bot that came back at another level is dressed for that level.</summary>
-    internal static void EquipControlledGear(ClientState conn, int level)
+    internal static void EquipControlledGear(Player conn, int level)
     {
         if (ControlledPlayers.Gear?.Invoke(CharacterName(conn)) is not { Count: > 0 } ids) return;
         var items = ItemsOf(conn);
@@ -31,7 +31,7 @@ static partial class Game
             var gems = items.Items(row).SelectMany(old => old.Item.Sockets).Where(s => s.Gem is not null).ToList();
             if (gems.Count == 0 && row == PlayerInventories.Weapon1)
                 gems = [.. SocketedGems(ControlledGems(
-                    (GameServer.Core.Accounts.CharacterClass)SkillsFor(conn).ClassFor(conn.ClassRow).IntegerId, level, type))];
+                    (GameServer.Core.Accounts.CharacterClass)SkillsFor(conn).ClassFor(conn.Character.ClassRow).IntegerId, level, type))];
             foreach (var old in items.Items(row).ToList()) items.Remove(row, old.Id);
             var fresh = ItemCatalog.Create(type) with
             {
@@ -57,7 +57,7 @@ static partial class Game
     /// modifier fits (the roll then stays ordinary).</summary>
     internal static ModCatalog.Mod? DamageAffix(ItemCatalog.BaseType type, int level, bool spell)
     {
-        string stat = spell ? "spell_damage_+%" : "local_physical_damage_+%";
+        uint stat = spell ? Stat.SpellDamagePlusPct : Stat.LocalPhysicalDamagePlusPct;
         return Program.Items.Mods.All
             .Where(m => m.Domain == 1 && m.GenerationType == ItemRolls.Prefix && m.Level <= level && !m.EssenceOnly
                 && m.WeightFor(type.Tags) > 0 && m.Stats.Any(s => s.Id == stat))
