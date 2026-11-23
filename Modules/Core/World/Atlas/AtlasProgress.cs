@@ -76,6 +76,22 @@ public static class AtlasProgress
         };
     }
 
+    /// <summary>What the map still lacks for its bonus objective: empty when it has it. <see cref="MeetsBonusObjective"/>
+    /// judges the map; this says why it earned no point, so a completion without a point is not silent.</summary>
+    public static string BonusRequirement(MapDevice.Run map)
+    {
+        var mods = map.Mods;
+        if (mods.MapRarity == ItemRarity.Unique) return "";
+        return map.Area.Tier switch
+        {
+            >= 1 and <= 5 => mods.MapRarity >= ItemRarity.Magic ? "" : "a Magic or better map",
+            >= 6 and <= 10 => mods.MapRarity >= ItemRarity.Rare ? "" : "a Rare map",
+            >= 11 and <= 16 => mods.MapRarity < ItemRarity.Rare ? "a Rare map corrupted with a Vaal Orb"
+                : mods.Corrupted ? "" : "corrupted with a Vaal Orb",
+            _ => $"Tier 1–16 (this one is Tier {map.Area.Tier})",
+        };
+    }
+
     /// <summary>Saves the nodes as completed; false when they all were.</summary>
     public static bool Complete(ISavedData data, IEnumerable<Node> nodes)
     {

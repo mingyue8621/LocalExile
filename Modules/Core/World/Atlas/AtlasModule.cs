@@ -60,12 +60,24 @@ public sealed class AtlasModule : IModule
         });
         GameEvents.MonsterKilled.Add(module.Manifest.Id, async kill =>
         {
-            if (AtlasProgress.OfArea(kill.ModPlayer.AreaId) is not { } node || !AtlasProgress.CompletesMap(node, kill.Monster)) return;
+            string areaId = kill.ModPlayer.AreaId;
+            if (AtlasProgress.OfArea(areaId) is not { } node)
+            {
+                if (kill.Monster.Rarity == MonsterRarity.Unique)
+                    Console.WriteLine($"[atlas] {kill.Monster.Name} ({kill.Monster.VarietyId}) died in {areaId}: the Atlas has no node for that area");
+                return;
+            }
+            if (!AtlasProgress.CompletesMap(node, kill.Monster))
+            {
+                if (kill.Monster.Rarity == MonsterRarity.Unique)
+                    Console.WriteLine($"[atlas] {kill.Monster.Name} ({kill.Monster.VarietyId}) died in {areaId}: not the final boss of {node.Name} ({node.Id}), which is {string.Join(", ", node.FinalBosses)}");
+                return;
+            }
             var player = kill.Player;
             var data = WorldOf(kill.ModPlayer).CharacterData;
             bool completed = AtlasProgress.Complete(data, [node]);
-            bool bonus = global::Game.MapRunOf(player) is { Atlas: true } run && AtlasProgress.MeetsBonusObjective(run)
-                && AtlasProgress.CompleteBonus(data, [node]);
+            var run = global::Game.MapRunOf(player);
+            bool bonus = run is { Atlas: true } && AtlasProgress.MeetsBonusObjective(run) && AtlasProgress.CompleteBonus(data, [node]);
             int earned = bonus ? ApplyBonusPoints(player, data) : 0;
             if (completed)
             {
@@ -73,6 +85,12 @@ public sealed class AtlasModule : IModule
                     $"0x01a4 Atlas map completed: {node.Name} ({node.Id}) by {kill.Monster.Name}");
                 await AtlasFeature.Refresh(player);
                 await kill.ModPlayer.Tell($"Atlas: {node.Name} completed.");
+                // A map that earns no point says what it still lacks (a T11+ bonus needs a Vaal Orb): a finished map
+                // with no Atlas point is never silent.
+                if (!bonus)
+                    await kill.ModPlayer.Tell(run is { Atlas: true }
+                        ? $"Atlas: no bonus point — this map needs to be {AtlasProgress.BonusRequirement(run)}."
+                        : "Atlas: no bonus point — the map was not opened from the Map Device.");
             }
             else if (bonus)
                 await AtlasFeature.Refresh(player);
