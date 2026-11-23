@@ -365,13 +365,14 @@ public static partial class Game
             : summon is not null ? Math.Max(variety.AttackRange, variety.AggroRange)
             : rangedAttack && !kingActor && spell ? MonsterSpellReach(catalog, variety, effect, NativeMonsterStat(nativeStats, "spell_maximum_action_distance_+%"))
             : variety.AttackRange;
-        // 不追人的怪（远程投射、施法、召唤）站在原地打：它的攻击范围必须覆盖到能注意到玩家的地方。
-        // 原来取仇恨范围的一半，玩家在更远处把它唤醒，它就永远够不到 —— 站着不动、也不出手
-        // (live 2026-11-13：沸水湖泊的蛇怪 The Basilisk，仇恨 135、攻击读数 9，玩家在 145 格外)。
-        bool standsAndShoots = summon is not null || rangedAttack && !kingActor || castTime && !kingActor;
-        if (movement.Reach is null && standsAndShoots) reach = Math.Max(reach, variety.AggroRange);
-        // 不会走的怪（MovementSpeed 0）够不到自己仇恨范围时同样永远不动手，一并提到仇恨范围。
-        if (variety.MovementSpeed == 0 && variety.AggroRange > variety.AttackRange)
+        // 只有**真的走不动**的怪（MovementSpeed 0 / Immobile）才把射程补到仇恨范围：它够不到把自己唤醒的玩家，
+        // 不补就永远站在那儿不出手 (live 2026-11-13：沸水湖泊的蛇怪 The Basilisk，仇恨 135、攻击读数 9，玩家在 145 格外)。
+        // 会走路的远程/施法怪**不能**这样补：MonsterSurround 的站定距离就是攻击距离（上游 2026-11-21 的 StandsOff，
+        // 第一个环取 Reach-1），射程一抬到 105 格，它们就退到 10 米外才肯打 —— 玩家看到「一靠近/一放技能怪就全跑了」，
+        // 而且 104 格正好撞上 ChaseRange(105) 的脱战判定，退到位就立刻放弃目标、站着不动
+        // (live 2026-11-22 上层神权之塔：彩羽龙蜥 / 不死贵族 / 鸣蛙，7 分钟里 106 次 gives up 都在 105 格)。
+        // 会走路的怪用数据自己的 MaximumAttackDistance 就够了，够不着它会走过来。
+        if ((variety.MovementSpeed == 0 || variety.Immobile) && variety.AggroRange > variety.AttackRange)
             reach = Math.Max(reach, variety.AggroRange);
         double swing = !kingActor && effect >= 0 && catalog.IsSpell(effect) && catalog.CastTimeMs(effect) > 0
             ? catalog.CastTimeMs(effect) / 1000.0 : variety.AttackMs / 1000.0;

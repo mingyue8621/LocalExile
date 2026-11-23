@@ -352,13 +352,18 @@ public static partial class Game
                 conn.IncomingAilments.ApplyPoison(now, poisonDps, poisonSeconds, reflected: true, victim: Player);
         }
         // Fleeing (MonsterFlee): its own draws (Random.Shared), so a projectile's reaction draws stay in order.
-        if (!m.Fleeing && MonsterFlee.Rolls(MonsterFlee.Chance(spell, Player, Skill),
-                m.Effects["monster_chance_to_not_flee_%"], Random.Shared))
+        int fleeChance = MonsterFlee.Chance(spell, Player, Skill);
+        if (!m.Fleeing && MonsterFlee.Rolls(fleeChance, m.Effects["monster_chance_to_not_flee_%"], Random.Shared))
         {
             int size = Math.Max(0, LivingCollision.Size(m));
             m.FleeTo = MonsterFlee.Point(m.Walk.Position(now), conn.Walk.Position(now),
                 (x, y) => conn.Layout.WalkableFor(x, y, size) && !conn.Barrier.Contains((x, y)), Random.Shared);
             m.Fleeing = m.FleeTo is not null;
+            // 逃跑是玩家自己带「几率使怪物逃跑」才该出现的：打一行日志，免得把 AI 的站位后退误当成逃跑
+            // (live 2026-11-22：远程怪退到 10 米，看着像「打一下就跑」)。
+            if (m.Fleeing)
+                Console.WriteLine($"[gateway] monster 0x{targetId:x} ({m.Label}) flees: chance {fleeChance}%, "
+                    + $"not-flee {m.Effects["monster_chance_to_not_flee_%"]}%, spell={spell}, to {m.FleeTo}");
         }
         if (added.Count + alternate.Count == 0 || conn.PlayerLife == 0
             || !RandomRolls.Chance(m.Effects["reflect_non_damaging_ailments_%_chance"], 100, random)) return;
