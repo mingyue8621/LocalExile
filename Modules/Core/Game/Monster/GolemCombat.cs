@@ -558,7 +558,7 @@ public static partial class Game
         var strike = new HitResistances.Strike(Critical: critical, Attack: !a.Attack.Spell);
         var mitigated = DamageModel.Mitigate(rolled,
             type => HitResistances.Effective(type, MonsterHitResistance(target, type, default, now), strike, resistanceMods));
-        int damage = MonsterTakesMitigated(target, mitigated, a.Attack.Spell, now);
+        int damage = MonsterTakesMitigated(target, mitigated, a.Attack.Spell, now, random: AreaRng(player));
         var from = g.Monster.Walk.Position(now);
         var to = target.Walk.Position(now);
         if (ApplyMonsterHitLocked(player, target, damage, allyAt: from) is not { } hit) return false;
@@ -575,7 +575,7 @@ public static partial class Game
         var stun = new StunHit(HitReaction.StunningDamage(damage, physicalShare, melee),
             g.Monster.Mods.Effects[Stat.BaseStunThresholdReductionPlusPct], g.Monster.Mods.Effects[Stat.BaseStunDurationPlusPct],
             Melee: melee, BaseSeconds: GolemStat(a.Stats, Stat.SupportRuthlessBigHitStunBaseDurationOverrideMs) / 1000d);
-        CommitMinionHitLocked(player, id, target, hit, damage, now, $"golem {g.Id:x} {a.Id}", stun);
+        CommitMinionHitLocked(player, id, target, hit, damage, now, $"golem {g.Id:x} {a.Id}", stun, g.Monster, g.Own);
         if (!target.Dead)
         {
             int Golem(uint name) => g.Monster.Mods.Effects[name] + GolemStat(a.Stats, name);
@@ -695,7 +695,8 @@ public static partial class Game
                 int damage = (int)Math.Floor(total); hazard.DamageCarry[id] = total - damage;
                 if (damage <= 0 || ApplyMonsterHitLocked(player, m, damage, allyAt: centre) is not { } hit) continue;
                 if (hit.StageStarts) { CommitBossStage(player, id, m, now); hit = hit with { StageStarts = false }; }
-                CommitMinionHitLocked(player, id, m, hit, damage, now, $"golem {g.Id:x} ground damage");
+                CommitMinionHitLocked(player, id, m, hit, damage, now, $"golem {g.Id:x} ground damage",
+                    source: g.Monster, skill: g.Own);
             }
             if (now >= hazard.Until)
             {

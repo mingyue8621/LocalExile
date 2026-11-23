@@ -168,7 +168,7 @@ public static partial class Game
         var lifetime = CombatLifetime;
         var source = SupportedSkill(player, skillId);
         bool SourceCurrent() => SupportedSkill(player, skillId) is var live && live.Host == source.Host
-            && SameSocketedSkillSource(source, live) && IsTotemSkill(player, skillId);
+            && SameLinkedSkillSource(source, live) && IsTotemSkill(player, skillId);
         // A quick tap ends the client's action as soon as it is released; the totem's windup still has to finish.
         // Requiring current() for the whole delay dropped every tap and only worked while the key was held.
         // Once the cast has been paid the placement follows the skill source, not the client's button state.
@@ -584,7 +584,7 @@ public static partial class Game
                 SupportedCriticalChanceVsBlinded(player, totem.SkillId, false), SupportedCriticalChanceVsGround(player, totem.SkillId, false));
             bool crit = RollCriticalStrike(player, chance, skill.Stats, attack: false, skillRoll: criticalRoll, playerStats: caster);
             var (damage, _, mitigated) = MonsterHitDamage(m, rolled, crit, false, now, resistance, penetration,
-                GamblerFor(caster).InvertsResistance(AreaRng(player)));
+                GamblerFor(caster).InvertsResistance(AreaRng(player)), AreaRng(player));
             if (crit) damage = DamageModel.CriticalDamage(damage, CriticalMultiplierOn(m, SupportedCriticalMultiplier(player, totem.SkillId)));
             if (ApplyMonsterHitLocked(player, m, damage, allyAt: totem.At) is not { } accepted) continue;
             if (accepted.StageStarts) { CommitProjectileBossStage(session, id, m, session.Runtime.Now); accepted = accepted with { StageStarts = false }; }

@@ -315,15 +315,15 @@ public sealed class ItemDrops
 
     /// <param name="mods">The map's stats, for its scarab-type weights (<see cref="Scarab(Random, int, MapMods?)"/>).</param>
     public IReadOnlyList<Drop> Roll(int monsterLevel, MonsterRarity rarity, Random rng, int increasedRarity,
-        double quantityMultiplier, double rarityMultiplier, int mapTier, MapMods? mods) =>
-        Roll(monsterLevel, rarity, rng, increasedRarity, quantityMultiplier, rarityMultiplier, mapTier, mods, 1, 1, 1);
+        double quantityMultiplier, double rarityMultiplier, int mapTier, MapMods? mods, double scarabQuantity = 1) =>
+        Roll(monsterLevel, rarity, rng, increasedRarity, quantityMultiplier, rarityMultiplier, mapTier, mods, 1, 1, 1, scarabQuantity);
 
     /// <param name="magicMultiplier">This branch's per-rarity multipliers from a drop mod (<c>modded.MagicRarity</c> and
     /// the two beside it; 1 when no mod decides), applied to the magic, rare and unique chances beside the rarity
     /// multiplier.</param>
     public IReadOnlyList<Drop> Roll(int monsterLevel, MonsterRarity rarity, Random rng, int increasedRarity,
         double quantityMultiplier, double rarityMultiplier, int mapTier, MapMods? mods,
-        double magicMultiplier, double rareMultiplier, double uniqueMultiplier)
+        double magicMultiplier, double rareMultiplier, double uniqueMultiplier, double scarabQuantity = 1)
     {
         double quantity = double.IsFinite(quantityMultiplier) ? Math.Max(0, quantityMultiplier) : 1;
         int whole = (int)Math.Min(Math.Floor(quantity), int.MaxValue);
@@ -348,7 +348,8 @@ public sealed class ItemDrops
         }
         if (mapTier > 0)
         {
-            if (MapExtra("drop_scarab_chance_pct", quantity, rng) && Scarab(rng, monsterLevel, mods) is { } scarab)
+            if (scarabQuantity > 0 && MapExtra("drop_scarab_chance_pct", quantity * scarabQuantity, rng)
+                && Scarab(rng, monsterLevel, mods) is { } scarab)
                 drops.Add(scarab with { Item = scarab.Item with { ItemLevel = (byte)Math.Clamp(monsterLevel, 1, 100) } });
             if (MapExtra("drop_card_chance_pct", quantity, rng) && Card(rng, monsterLevel) is { } card)
                 drops.Add(card);
