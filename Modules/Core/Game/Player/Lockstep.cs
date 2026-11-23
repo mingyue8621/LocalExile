@@ -68,18 +68,6 @@ public static partial class Game
         else if (id == InstanceProtocol.LockstepMoveUpdateId)
         {
             var (dx, dy) = InstanceProtocol.ReadLockstepMoveUpdate(bytes);
-            // Temporary diagnosis (remove with the investigation): the client's cell the offset is added to, against the
-            // server's own estimate. A gap between them is a gap the 0x1ab's from cell then puts the client back by.
-            if (AreaTime(player) >= player.LockstepMoveLogAt)
-            {
-                player.LockstepMoveLogAt = AreaTime(player) + .5;
-                var server = player.Walk.Position(AreaTime(player));
-                Console.WriteLine($"[move-diag] {player.Connection.Remote} 0x192 client=({here.X},{here.Y})"
-                    + $" server=({server.X},{server.Y}) gap=({here.X - server.X},{here.Y - server.Y})"
-                    + $" offset=({dx},{dy}) target=({here.X + dx},{here.Y + dy})"
-                    + $" walking={player.Walk.Moving(AreaTime(player))} dest=({player.Walk.Destination.X},{player.Walk.Destination.Y})"
-                    + $" frame={player.Connection.LockstepFrame?.Start:0.000}");
-            }
             player.LockstepHold.Update((walker.X + dx, walker.Y + dy));
             // The held channel's newest aim: this is the lockstep stand-in for a predictive client's 0x197, so the
             // channel walks toward it and the client is told where it now points (ReaimLockstepChannel).
@@ -434,16 +422,6 @@ public static partial class Game
         var here = player.Walk.Position(at);
         bool takes = LockstepTakesMove(here, target);
         var placed = takes ? player.Walk.Order(target.X, target.Y, at) : ((int X, int Y)?)null;
-        // Temporary diagnosis (remove with the investigation): the cell the 0x1ab reports as from — the client is put on
-        // it whatever the distance — and where the server's own walk was told to go.
-        if (at >= player.LockstepMoveLogAt)
-        {
-            player.LockstepMoveLogAt = at + .5;
-            var dest = player.Walk.Destination;
-            Console.WriteLine($"[move-diag] {player.Connection.Remote} 0x1ab from=({here.X},{here.Y})"
-                + $" target=({target.X},{target.Y}) took={takes} dest=({dest.X},{dest.Y})"
-                + $" walking={player.Walk.Moving(at)} busyUntil={player.LockstepBusyUntil:0.000} at={at:0.000}");
-        }
         return placed;
     }
 

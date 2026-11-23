@@ -1608,8 +1608,6 @@ public sealed partial class Player(AreaLayout layout, uint ticket, uint seed) : 
     public LockstepAttack? LockstepAttack;
     // Temporary diagnosis (remove with the investigation): the next time a waiting lockstep use may be logged.
     public double LockstepUseLogAt;
-    // Temporary diagnosis (remove with the investigation): the next time a lockstep Move may be logged.
-    public double LockstepMoveLogAt;
     public bool ArriveAtWaypoint;
 
     /// <summary>A walk estimate for a server object on this area's walk map.</summary>
