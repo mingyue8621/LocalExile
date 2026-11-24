@@ -5,16 +5,46 @@ using static Program;
 
 namespace GameServer.Modules.M_commands;
 
-/// <summary>Per-character AFK and Do Not Disturb status exposed to other modules through league-scoped
+/// <summary>Per-character AFK, Do Not Disturb and whisper autoreply status exposed to other modules through league-scoped
 /// <see cref="GameEvents.ChatAvailabilityQuery"/> and <see cref="GameEvents.ChatActivity"/>.</summary>
 static class ChatPresence
 {
     public const string DefaultAfkMessage = "This player is AFK.";
-    public const string DefaultDndMessage = "This player is in DND mode.";
+    public const string DefaultDndMessage = "This player has DND mode enabled.";
     const int MaxMessageLength = 200;
     static readonly TimeSpan TransferGrace = TimeSpan.FromSeconds(60);
 
-    static readonly ConcurrentDictionary<string, ChatAvailability> Table = new(StringComparer.OrdinalIgnoreCase);
+    static readonly HashSet<ushort> ActionPackets =
+    [
+        InstanceProtocol.UseSkillAtLocationId,
+        InstanceTransfer.UseSkillOnObjectId,
+        InstanceProtocol.UseInstantSkillAtLocationId,
+        InstanceProtocol.UseInstantSkillId,
+        InstanceProtocol.LockstepMoveStartId,
+        InstanceProtocol.LockstepMoveUpdateId,
+        InstanceProtocol.LockstepUseOnObjectId,
+        InstanceProtocol.ChannelUpdateId,
+        InstanceProtocol.ChannelUpdateAltId,
+        InstanceProtocol.SwapWeaponsId,
+        InstanceProtocol.ResurrectId,
+        InstanceItems.PickUpItemId,
+        InstanceItems.PlaceItemId,
+        InstanceItems.DropItemId,
+        InstanceItems.ItemActionId,
+        InstanceItems.UseFlaskId,
+        InstanceItems.UseItemId,
+        InstanceItems.UseItemOnId,
+        InstanceItems.UseItemTypeOnId,
+        InstanceWaypoints.TravelId,
+        InstanceEntities.AllocatePassiveId,
+        InstanceEntities.RefundPassiveId,
+    ];
+
+    readonly record struct State(bool Afk, string AfkMessage, bool Dnd, string DndMessage, string? AutoReply);
+
+    static readonly ConcurrentDictionary<string, State> Table = new(StringComparer.OrdinalIgnoreCase);
+
+    public static bool IsActionPacket(ushort id) => ActionPackets.Contains(id);
 
     static string Sanitize(string? arg)
     {
@@ -22,9 +52,17 @@ static class ChatPresence
         return clean.Length > MaxMessageLength ? clean[..MaxMessageLength] : clean;
     }
 
-    public static ChatAvailability? Get(Player player) =>
-        Table.TryGetValue(CharacterName(player), out var status) ? status : null;
+    public static ChatAvailability? Get(Player player)
+    {
+        if (!Table.TryGetValue(CharacterName(player), out var state)) return null;
+        // Surface an independent /autoreply through ChatAvailability without changing the Modding ABI:
+        // chatting or acting clears only state.Afk, leaving state.AutoReply intact.
+        bool autoReply = state.Afk || state.AutoReply is not null;
+        string replyMessage = state.Afk ? state.AfkMessage : (state.AutoReply ?? DefaultAfkMessage);
+        return new ChatAvailability(autoReply, replyMessage, state.Dnd, state.DndMessage);
+    }
 
+    // BackendErrors AFKModeEnabled (365) / AFKModeDisabled (366).
     /// <summary>A lockstep client answers S→C 0x194 with C→S 0x16 carrying the current AFK text every couple of
     /// seconds. That is a keep-alive, not a second /afk: repeating the same message leaves the state alone and owes
     /// the client no chat line (live 2026-11-23: the reply spammed the chat window every two seconds).</summary>
@@ -36,25 +74,27 @@ static class ChatPresence
         if (trimmed.Length > 0 && Table.TryGetValue(name, out var before) && before.Afk && before.AfkMessage == message)
             return null;
         var updated = Table.AddOrUpdate(name,
-            _ => new ChatAvailability(true, message, false, DefaultDndMessage),
+            _ => new State(true, trimmed.Length > 0 ? trimmed : DefaultAfkMessage, false, DefaultDndMessage, null),
             (_, cur) => !cur.Afk || trimmed.Length > 0
                 ? cur with { Afk = true, AfkMessage = message }
                 : cur with { Afk = false });
         return updated.Afk ? $"AFK mode is now ON. Autoreply \"{updated.AfkMessage}\"" : "AFK mode is now OFF.";
     }
 
+    // BackendErrors DNDModeEnabled (367) / DNDModeDisabled (368).
     public static string ToggleDnd(Player player, string? arg)
     {
         string name = CharacterName(player);
         string trimmed = Sanitize(arg);
         var updated = Table.AddOrUpdate(name,
-            _ => new ChatAvailability(false, DefaultAfkMessage, true, trimmed.Length > 0 ? trimmed : DefaultDndMessage),
+            _ => new State(false, DefaultAfkMessage, true, trimmed.Length > 0 ? trimmed : DefaultDndMessage, null),
             (_, cur) => !cur.Dnd || trimmed.Length > 0
                 ? cur with { Dnd = true, DndMessage = trimmed.Length > 0 ? trimmed : DefaultDndMessage }
                 : cur with { Dnd = false });
-        return updated.Dnd ? $"Do Not Disturb mode is now ON. Autoreply \"{updated.DndMessage}\"" : "Do Not Disturb mode is now OFF.";
+        return updated.Dnd ? $"DND mode is now ON. Autoreply \"{updated.DndMessage}\"" : "DND mode is now OFF.";
     }
 
+    // BackendErrors AutoReplyEnabled (369).
     public static string SetAutoReply(Player player, string? arg)
     {
         string name = CharacterName(player);
@@ -62,14 +102,14 @@ static class ChatPresence
         if (trimmed.Length == 0)
         {
             Table.AddOrUpdate(name,
-                _ => new ChatAvailability(false, DefaultAfkMessage, false, DefaultDndMessage),
-                (_, cur) => cur with { Afk = false, AfkMessage = DefaultAfkMessage });
+                _ => new State(false, DefaultAfkMessage, false, DefaultDndMessage, null),
+                (_, cur) => cur with { AutoReply = null });
             return "Autoreply cleared.";
         }
         Table.AddOrUpdate(name,
-            _ => new ChatAvailability(true, trimmed, false, DefaultDndMessage),
-            (_, cur) => cur with { Afk = true, AfkMessage = trimmed });
-        return $"Autoreply set to \"{trimmed}\"";
+            _ => new State(false, DefaultAfkMessage, false, DefaultDndMessage, trimmed),
+            (_, cur) => cur with { AutoReply = trimmed });
+        return $"Autoreply set \"{trimmed}\"";
     }
 
     public static async Task ClearAfkOnActivity(Player player)
@@ -83,7 +123,7 @@ static class ChatPresence
             {
                 if (player is { Closed: false, Connection.Outbox: { } outbox })
                 {
-                    try { await outbox(InstanceChat.ChatLine("AFK mode is now OFF."), "0x0017 AFK cleared on chat"); }
+                    try { await outbox(InstanceChat.ChatLine("AFK mode is now OFF."), "0x0017 AFK cleared on activity"); }
                     catch (Exception e) when (e is IOException or ObjectDisposedException) { }
                 }
                 return;

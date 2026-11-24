@@ -157,7 +157,8 @@ sealed class ChatSession(ChatService chat, string name, Player player) : IDispos
         return frame.Type switch
         {
             ChatFrame.Line when named && frame.Kind is ChatChannelKind.Global or ChatChannelKind.Trade && text.Length > 0 =>
-                Heard(frame, text),
+                ChatService.IsIgnored(Player, frame.Name) || GameEvents.GetChatAvailability(Player).Dnd ? Task.CompletedTask
+                    : Heard(frame, text),
             ChatFrame.Whisper when named && text.Length > 0 =>
                 ReceiveWhisper(frame.Name!, text, frame.Items),
             ChatFrame.Whispered when named && text.Length > 0 =>

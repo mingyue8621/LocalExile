@@ -109,6 +109,7 @@ public static class CosmeticsFeature
         // Active reservation skills (Tempest Shield, auras, heralds, Arctic Armour) likewise re-emit their buffs with
         // the new art variation / hide flag so the pick applies immediately.
         await RefreshReservationCosmetics(player, slot.GemHash);
+        global::Game.RefreshSpectreCosmetics(player, slot.GemHash);
     }
 
     // C→S 0x1f9: a pick in the Cosmetics tab's slot flyout (record 0 empties the slot). Saved per character, then the whole
@@ -145,6 +146,7 @@ public static class CosmeticsFeature
         await SendEquipment(player, ItemsOf(player));
         // A skin that turns the character into another creature in towns and hideouts (the Goblin Shaman Skin).
         await SendMorph(player, morph);
+        RefreshFlaskEffectCosmetic(player, pick.Slot);
         if (pick.Slot is 18 or 19) await SpawnPets(player);
         if (pick.Slot == PortraitSlot)
         {

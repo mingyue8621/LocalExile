@@ -72,9 +72,10 @@
   experience is saved per character; `/add_xp`.
   Code: `Progression.cs`, Gateway (`GainExperience`, `ApplyLevel`).
 - Experience and levels from kills, with the level penalty and party share.
+- Experience and levels from kills, with the level penalty, party share and unpenalised 10% socketed gem XP carry.
   Docs: [15](../docs/protocol/15-progression.md) §1.
-- Passive Skill Tree: allocation, refunds, Orbs of Regret, Books of Skill, Regrets and one-off free resets (0x33 bit 0
-  and C→S 0x38).
+- Passive Skill Tree: allocation, refunds, Orbs of Regret, Books of Skill, Regrets, Books of Reform (bandit respec)
+  and one-off free resets (0x33 bit 0 and C→S 0x38).
   Docs: [15](../docs/protocol/15-progression.md) §2.
 - Passive masteries: S→C 0x33 carries selected effects (`node | effect << 16`) and C→S 0x35 selects the effect HASH16;
   a mastery node can be allocated normally and its effect selected/changed without spending another point.
@@ -419,7 +420,9 @@
 - Cluster jewels: a new one has its theme, passive count and sockets, its small passives grant the theme and its
   notables roll for it; the single-keystone smalls' keystone stats, nesting (including smaller clusters in larger
   sockets), unidentified/empty-jewel refusal, block bases, refund-point sync and the client's layout; keystones,
-  radius rules and the vendor recipe are missing. Docs: [cluster jewels](../docs/game/cluster-jewels.md).
+  radius rules and the vendor recipe are missing.
+  Small-passive stats and notable IDs with punctuation are recognized.
+  Docs: [cluster jewels](../docs/game/cluster-jewels.md).
 - Timeless jewels: the alternate tree in radius and Militant Faith's Devotion mods; conqueror keystone mechanics are
   missing. Docs: [timeless jewels](../docs/game/timeless-jewels.md).
 - Radius unique jewels: 42 implemented and the 33 threshold jewels; skill-specific consumers are partial.
@@ -665,7 +668,11 @@
 - Permanent Achievements (S→C 0x124–0x127, C→S 0x123): tracks permanent achievement items (`SetId == 2`), persists
   progress account-wide, syncs packed bitsets on entry and panel open, and emits completion toasts (not yet checked live).
 - Dual Wielding Mastery's different-weapon-types damage. Docs: [20](../docs/protocol/20-damage.md) §2b.
-- Armour Mastery grants +1 to all maximum elemental resistances when all four armour pieces provide Armour.
+- Passive mastery effects on defences, attributes and equipment: slot increases (helmet ES, gloves and boots armour,
+  body evasion), the all-equipment and socket conditions, per-mastery attributes, six Life masteries, the full-life
+  threshold, per-dagger suppression and the shield, claw and dual-wield effects.
+  Staff Mastery can recover life from blocked attacks while wielding the staff.
+  Not checked live: the socket, ring and amulet conditions, Claw2, Leech2 and Reservation2.
 - Hierophant, except the Brand nodes. Docs: [Hierophant](../docs/game/hierophant.md).
 - Behemoth through the optional Phrecia module. Docs: [Behemoth](../docs/game/behemoth.md).
 - Whisperer through the optional module. Docs: [Whisperer](../docs/game/whisperer.md).

@@ -538,7 +538,8 @@ public sealed class DeepwaterLeagueTests
         rollConvert.ApplyTransforms(convertDrops);
         Assert.Equal(ItemDrops.GoldId, convertDrops[0].Type.Id);
         Assert.Equal(DeepwaterChartStats.StackedDeckId, convertDrops[1].Type.Id);
-        Assert.Equal((ushort)20, convertDrops[1].Item.StackSize);
+        // A deck stack stops at the deck's own MaxStack (999 in this server, 20 in retail).
+        Assert.Equal((ushort)Math.Min(45, (int)catalog.Find(DeepwaterChartStats.StackedDeckId)!.MaxStack), convertDrops[1].Item.StackSize);
         Assert.Equal(DeepwaterDucats.Changeling, convertDrops[2].Type.Id);
         Assert.Equal(ItemDrops.GoldId, convertDrops[3].Type.Id);
         Assert.Equal(45, convertDrops.Where(d => d.Type.Id == DeepwaterChartStats.StackedDeckId).Sum(d => (int)d.Item.StackSize));

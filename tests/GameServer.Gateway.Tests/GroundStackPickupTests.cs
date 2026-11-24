@@ -29,8 +29,11 @@ public sealed class GroundStackPickupTests
         Assert.Equal(before + 3, CharacterSaves.Load(f.Player.Character.Name!)!.Inventories[PlayerInventories.MainInventory]
             .Where(i => i.Item.Type == chaos.Hash).Sum(i => i.Item.StackSize));
 
+        // Every cell of the main inventory at the data's own stack cap: this server ships 999 for currency, so a fixed
+        // 30000 would leave cells free and the pickup below would succeed.
+        int perCell = Math.Max(1, (int)chaos.MaxStack);
         Game.ItemsOf(f.Player).AddStacked(PlayerInventories.MainInventory,
-            ItemCatalog.Create(chaos) with { StackSize = 30000 }, Game.ShapeOf);
+            ItemCatalog.Create(chaos) with { StackSize = (ushort)Math.Min(ushort.MaxValue, perCell * 60) }, Game.ShapeOf);
         uint full = f.Player.Instance.Ground.Add(item);
         Assert.Null(Game.TakeGroundStack(f.Player, full, item));
         Assert.Same(item, f.Player.Instance.Ground.Get(full));

@@ -35,8 +35,14 @@ public static partial class Game
         gem.Supports.FirstOrDefault(s => stunned ? SupportHas(s, Stat.CastOnStunnedPct)
             : s.Effect.Id == "SupportCastWhenDamageTaken");
 
-    public static string? TriggerOnlyReason(Player player, SupportedGem gem)
+    /// <summary>Without a player to ask, an attack cannot be told from a spell: every trigger reads as "only triggers".
+    /// Callers that have the player pass it (the manual-use gate does).</summary>
+    public static string? TriggerOnlyReason(SupportedGem gem) => TriggerOnlyReason(null, gem);
+
+    public static string? TriggerOnlyReason(Player? player, SupportedGem gem)
     {
+        if (gem.WornGrant is { EffectId: GuardianWeaponEffect })
+            return "Animate Guardian's Weapon triggers from a qualifying minion kill";
         if (GolemStat(gem.Stats, Stat.CastOnLoseCatsStealth) != 0)
             return "this skill can only trigger when Cat's Stealth is lost";
         if (gem.Supports.Any(s => s.Effect.Id == "SupportCastWhenDamageTaken"))
@@ -48,7 +54,7 @@ public static partial class Game
         // copy itself (live 2026-11-10). Gating the manual use as well took the player's own bow skill away — Lightning
         // Arrow refused every click with "can only trigger" (live 2026-11-23). A spell a trigger carries is the
         // trigger's alone; that is the case TriggeredSpell below keeps.
-        bool attack = SkillsFor(player).IsAttack(gem.Effect);
+        bool attack = player is { } owner && SkillsFor(owner).IsAttack(gem.Effect);
         if (gem.Stats.GetValueOrDefault(Stat.SupportManaforgedArrowsManaCostPctThreshold) > 0 && !attack)
             return "this skill can only trigger after spending Mana on another bow attack";
         if (GolemStat(gem.Stats, Stat.CastSpellOnLinkedAttackCrit) != 0 && !attack)
@@ -57,6 +63,10 @@ public static partial class Game
             return "this skill can only trigger on a linked melee attack's kill";
         if (GolemStat(gem.Stats, Stat.CastSpellWhileLinkedSkillChannelling) != 0 && !attack)
             return "this skill can only trigger while a linked skill is channelled";
+        if (GolemStat(gem.Stats, Stat.TriggerOnTriggerLinkTargetHit) != 0)
+            return "this skill can only trigger on an Intuitive Link target's hit";
+        if (GolemStat(gem.Stats, Stat.UniqueCosprisMaliceColdSpellsTriggered) != 0)
+            return "this skill can only trigger on a melee critical strike with the item it is socketed in";
         // Snipe is the one that does take a linked bow skill out of the player's hands: its stages are the only way that
         // skill fires (upstream Snipe, 2026-11-21).
         if (GolemStat(gem.Stats, Stat.SkillTriggeredBySnipe) != 0)
@@ -65,7 +75,8 @@ public static partial class Game
             return "Spirit Burst triggers on skill use while a Spirit Charge is held";
         if (gem.Effect >= 0 && IsRelicSkill(Skills.EffectId(gem.Effect) ?? ""))
             return "Summon Elemental Relic triggers automatically; manual use is unavailable";
-        if (GolemStat(gem.Stats, Stat.SpellUncastableIfTriggerable) != 0 || TriggeredSpell(player, gem))
+        if (GolemStat(gem.Stats, Stat.SpellUncastableIfTriggerable) != 0
+            || (player is { } triggerOwner && TriggeredSpell(triggerOwner, gem)))
             return "this trigger has no server executor; manual use is unavailable";
         return null;
     }

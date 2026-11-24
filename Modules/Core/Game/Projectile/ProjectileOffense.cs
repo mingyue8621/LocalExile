@@ -12,10 +12,12 @@ public sealed record ProjectileOffense(DamagePacket Hit, bool Spell, int Accurac
     int CriticalMultiplier, string Label)
 {
     public bool WeaponAttack { get; init; }
+    public GameServer.Core.Protocol.Instance.Item? SkeletonWeaponContactSource { get; init; }
     /// <summary>Whether an attack hit counts as a projectile attack (false for non-projectile rains and secondary explosions).</summary>
     public bool? ProjectileAttack { get; init; }
     public Game.TinctureKillBonus? TinctureKill { get; init; }
     public bool NoExtraCriticalDamage { get; init; }
+    internal Game.TargetCriticalBonuses TargetCritical { get; init; }
     /// <summary>An optional encounter owner; expired owners cannot commit further contacts.</summary>
     public IReadOnlyDictionary<uint, int>? ActualCaster { get; init; }
     public SpawnedMonster? BrandedTarget { get; init; }
@@ -74,6 +76,7 @@ public sealed record ProjectileOffense(DamagePacket Hit, bool Spell, int Accurac
     public bool FarShot { get; init; }
     public bool PointBlank { get; init; }
     public double ReturnMultiplier { get; init; } = 1;
+    public int DamageMorePerGroundBounce { get; init; }
     public BlindHitInput Blind { get; init; }
     /// <summary>The hit, area hit and damaging ailments captured with the conditional increased damage against a
     /// Blinded target, or null when the shot has none.</summary>
@@ -107,12 +110,19 @@ public sealed record ProjectileOffense(DamagePacket Hit, bool Spell, int Accurac
     /// <summary>Selects the frozen output for the target's state before this hit's side effects, without recapturing
     /// release inputs or drawing random numbers.</summary>
     public ProjectileOffense Against(bool targetWasBlinded, int webs = 0, bool ignited = false, bool bleeding = false, bool lowLife = false)
+        => Against(targetWasBlinded, webs, ignited, bleeding, lowLife, maimed: false);
+
+    internal ProjectileOffense Against(bool targetWasBlinded, int webs, bool ignited, bool bleeding, bool lowLife, bool maimed,
+        Game.TargetContact contact = default, bool? areaContact = null)
     {
-        if (Spider is { } spider)
+        if (Spider is { } spider
+            && Game.ProjectileTargetChangesDamage(spider, targetWasBlinded, webs, ignited, bleeding, lowLife, maimed, contact))
         {
-            var profile = Game.SpiderDamageProfile(spider, webs, targetWasBlinded, ignited, bleeding, lowLife);
-            return this with { Hit = profile.Hit.Scale(HitProfileMore), AreaHit = SpiderArea is { } area
-                ? Game.SpiderDamageProfile(area, webs, targetWasBlinded, ignited, bleeding, lowLife).Hit.Scale(HitProfileMore) : AreaHit,
+            var profile = Game.SpiderDamageProfile(spider, webs, targetWasBlinded, ignited, bleeding, lowLife, maimed, contact: contact);
+            var areaHit = areaContact is not false && SpiderArea is { } area
+                ? Game.SpiderDamageProfile(area, webs, targetWasBlinded, ignited, bleeding, lowLife, maimed,
+                    contact: contact, hitOnly: true).Hit.Scale(HitProfileMore) : AreaHit;
+            return this with { Hit = profile.Hit.Scale(HitProfileMore), AreaHit = areaHit,
                 Ignite = Scale(profile.Ignite, AilmentProfileMore), Bleed = Scale(profile.Bleed, AilmentProfileMore),
                 Poison = Scale(profile.Poison, AilmentProfileMore) };
         }

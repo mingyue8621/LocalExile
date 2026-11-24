@@ -504,14 +504,18 @@ public sealed class BatchProtocolHudHarvestTests
             Assert.Null(harvest.ApplyHarvest(RecipeById(harvest, "RerollCatalysts").Hash, ItemCatalog.Create(catalog.Find("Tainted Catalyst")!), rng));
             Assert.NotNull(harvest.ApplyHarvest(RecipeById(harvest, "RerollCatalysts").Hash, ItemCatalog.Create(catalog.Find("Turbulent Catalyst")!), rng)?.Item);
             var fossilRecipe = RecipeById(harvest, "RerollFossils");
-            var dense20 = ItemCatalog.Create(catalog.Find("Dense Fossil")!) with { StackSize = 20 };
-            Assert.Null(harvest.ApplyHarvest(fossilRecipe.Hash, dense20, rng));
-            Assert.Contains("10", harvest.RefusalHint(fossilRecipe.Hash, dense20) ?? "");
-            var dense10 = dense20 with { StackSize = 10 };
-            var swappedFossil = harvest.ApplyHarvest(fossilRecipe.Hash, dense10, rng);
+            // A set's cap is the smallest MaxStack among its items; this server ships 999 for currency, so the stack that
+            // is refused is one above the fossil's own cap instead of a fixed 20.
+            int fossilCap = Math.Max(1, (int)catalog.Find("Dense Fossil")!.MaxStack);
+            var denseOver = ItemCatalog.Create(catalog.Find("Dense Fossil")!)
+                with { StackSize = (ushort)Math.Min(ushort.MaxValue, fossilCap + 1) };
+            Assert.Null(harvest.ApplyHarvest(fossilRecipe.Hash, denseOver, rng));
+            Assert.Contains(fossilCap.ToString(), harvest.RefusalHint(fossilRecipe.Hash, denseOver) ?? "");
+            var denseWithin = denseOver with { StackSize = (ushort)fossilCap };
+            var swappedFossil = harvest.ApplyHarvest(fossilRecipe.Hash, denseWithin, rng);
             Assert.NotNull(swappedFossil?.Item);
-            Assert.Equal((ushort)10, swappedFossil!.Item!.StackSize);
-            Assert.Equal(fossilRecipe.Costs[0].Amount * 10, swappedFossil.Costs[0].Amount);
+            Assert.Equal((ushort)fossilCap, swappedFossil!.Item!.StackSize);
+            Assert.Equal(fossilRecipe.Costs[0].Amount * fossilCap, swappedFossil.Costs[0].Amount);
 
             // ApplyItemCraft guards: NoInfluence rejects Eldritch-implicit items; non-equipment/jewel domains (Flasks, Maps) rejected.
             var augmentFire = harvest.All.First(r => r.Operation == HarvestCrafting.Operation.AugmentTag && r.NoInfluence);
