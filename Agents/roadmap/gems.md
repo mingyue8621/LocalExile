@@ -78,7 +78,7 @@ Nessa 所有页签上的宝石都是无限库存；在同一次实机核对里�
   Item-support records, duplicate resolution, rolled levels and Delve more damage have automated coverage.
 - **Next:** implement remaining trigger payloads beyond CWDT projectile spells, attack repeats (Multistrike), Ice Nova's
   repeated rings and Spell Echo's final-repeat stats (Greater and Awakened Spell Echo), projectile branching,
-  remaining totem payloads (Artillery/Focused Ballista, beams, channels and pulses; monsters do not attack totems;
+  remaining totem payloads (Focused Ballista, beams, channels and pulses; monsters do not attack totems;
   [11](../docs/protocol/11-skills.md) §10g), mines, minions, leech and conditional effects; verify each against
   native data and live behaviour.
   Check Barrage's client animation and per-arrow contacts against its ordered server release.

@@ -82,6 +82,8 @@ public static partial class Game
             (Stat.BaseSpellCastTimeMs, SkillsFor(player).CastTimeMs(gem.Effect)),
             (Stat.VirtualBaseSpellCastTimeMs, SkillsFor(player).CastTimeMs(gem.Effect)) })
             if (name is var key) payload[key] = value;
+        // A totem never walks. Without this the client sends a server-driven action through its own walk-into-range
+        // step, which drops it (11 §"skill_is_non_pathing"): the totem stood still and its spell drew nothing.
         payload[Stat.SkillIsNonPathing] = 1;
         if (SpellTotemNova(player, gem.Effect))
             payload[Stat.ActiveSkillAreaOfEffectRadius] = SkillRadius(player, gem.Stats, spell: true, gem.Effect);
@@ -314,7 +316,11 @@ public static partial class Game
             // gives one to a totem cast). Its release would throw "No projectile definition at release" in the
             // projectile runtime and vanish, leaving a totem that stands without ever using its skill.
             // Fall back to the totem's own area hit with the same skill stats, as melee/area totems do.
-            bool projectilePath = UsesProjectileRuntime(gem.Effect) && ResolveProjectileDefinition(gem.Effect) is not null;
+            // Only the recipe decides: a skill may reach this point with a recipe but no Projectile skill type —
+            // Artillery Ballista's arrows are one (its GroundArrow recipe, the client's DefaultArrow art) — and
+            // requiring UsesProjectileRuntime as well sent that totem down the area hit, skipping its volley
+            // (2026-11-24). A null recipe is the case this fallback exists for.
+            bool projectilePath = ResolveProjectileDefinition(gem.Effect) is not null;
             if (!projectilePath)
             {
                 Console.WriteLine($"[gateway] totem 0x{totem.Id:x} {SkillsFor(player).EffectId(gem.Effect)} uses its area hit "

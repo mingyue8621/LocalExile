@@ -142,10 +142,15 @@ public sealed class FortificationState
         if (double.IsFinite(lastTime))
         {
             double from = lastTime;
-            foreach (double boundary in grants.Select(g => g.ExpiresAt).Where(t => t > from && t < now)
+            // The deadlines are walked from a snapshot: an owner can re-enter through Changed (a stat step that reads
+            // Fortification again) or run the cast on a pool thread after an await, and the time-base reset above
+            // clears the live list — enumerating it then threw "Collection was modified" out of a whole frame
+            // (2026-11-24). The seconds are still accounted on exactly the deadlines this call could see.
+            Grant[] deadlines = [.. grants];
+            foreach (double boundary in deadlines.Select(g => g.ExpiresAt).Where(t => t > from && t < now)
                 .Distinct().Order().Append(now))
             {
-                long count = grants.Where(g => g.ExpiresAt > from).Sum(g => (long)g.Count);
+                long count = deadlines.Where(g => g.ExpiresAt > from).Sum(g => (long)g.Count);
                 StackSeconds += Math.Min(count, activeMaximum) * (boundary - from);
                 from = boundary;
             }
