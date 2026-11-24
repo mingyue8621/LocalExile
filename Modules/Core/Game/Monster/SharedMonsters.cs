@@ -101,13 +101,11 @@ public static partial class Game
         bool live = TargetLive(t, player);
         if (live && ReferenceEquals(t, player))
         {
-            if (!m.Aggro && candidate.Distance > m.AggroRange) m.Target = null; // gave up: free for whoever comes
+            if (!m.Aggro && candidate.Distance > MonsterNoticeRange(m)) m.Target = null; // gave up: free for whoever comes
             return true;
         }
-        // In its reach, or still chasing (the AI gives up beyond twice its aggro range, as before).
-        // The distance is the candidate's own, not the player's: a golem enemy at the monster's feet brings it a target
-        // while the player stands far off, and measuring the player refused the whole chase (upstream 2026-11-21).
-        double reach = Math.Max(1, m.AggroRange) * (m.Aggro && !live ? 2 : 1);
+        // In its reach, or still chasing (the AI gives up beyond its leash range).
+        double reach = Math.Max(1, !m.Aggro ? MonsterNoticeRange(m) : live ? m.AggroRange : MonsterLeashRange(m));
         if (player.PlayerLife == 0 || candidate.Distance > reach) return false;
         if (live)
         {

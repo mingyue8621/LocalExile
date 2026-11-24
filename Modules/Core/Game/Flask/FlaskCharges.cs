@@ -164,9 +164,20 @@ public static partial class Game
     public static Task GainKillCharges(Player player, MonsterRarity rarity, string why) =>
         GainKillCharges(player, rarity, why, 0);
 
-    static Task GainKillCharges(Player player, MonsterRarity rarity, string why, int grantedPct) =>
-        FlaskCharges.FullShortcut ? GainFlaskCharges(player, int.MaxValue, why)
-            : GainFlaskCharges(player, (_, _) => FlaskCharges.KillCharges(rarity, ItemsFor(player).Mods, grantedPct), why);
+    static Task GainKillCharges(Player player, MonsterRarity rarity, string why, int grantedPct)
+    {
+        if (FlaskCharges.FullShortcut) return GainFlaskCharges(player, int.MaxValue, why);
+        double? killGain = null;
+        return GainFlaskCharges(player, (_, _) =>
+        {
+            if (killGain is double computed) return computed;
+            var stats = PlayerStatValues(player);
+            long finalPct = Math.Max(0, 100L + stats.GetValueOrDefault(Stat.FlaskChargesGainedFromKillsPlusPctFinalFromUnique));
+            double gain = FlaskCharges.KillCharges(rarity, ItemsFor(player).Mods, grantedPct) * finalPct / 100d;
+            killGain = gain;
+            return gain;
+        }, why);
+    }
 
     // A critical strike the player dealt (a hit that landed): each flask with "#% chance to gain a Flask Charge when you deal
     // a Critical Strike" (local_recharge_on_crit_%) rolls for one charge, and the character's chance and sure charges
@@ -193,8 +204,19 @@ public static partial class Game
 
     // "Flasks gain # charges every 3 seconds" (FlaskCharges.PerThreeSeconds: every flask, utility, life, life on low life,
     // mana), every 3 s of the area's frames (a pause holds them) while the player's updates run.
-    static void StartFlaskChargeRegen(Player player, PlayerUpdatesState updates) =>
-        EveryAsPlayer(player, 3000, () => PlayerUpdatesCurrent(player, updates), GainPeriodicFlaskCharges);
+    static void StartFlaskChargeRegen(Player player, PlayerUpdatesState updates)
+    {
+        bool Current() => PlayerUpdatesCurrent(player, updates);
+        EveryAsPlayer(player, 3000, Current, GainPeriodicFlaskCharges);
+        EveryAsPlayer(player, 1000, Current, GainUniqueHitFlaskCharges, () => player.PlayerLife > 0
+            && player.RecentEvents.Happened(StatConditions.HitUniqueEnemy, AreaTime(player)));
+    }
+
+    static Task GainUniqueHitFlaskCharges(Player player)
+    {
+        int charges = CharacterPlayerStats(player).GetValueOrDefault(Stat.GainFlaskChargesEverySecondIfHitUniqueEnemyRecently);
+        return charges > 0 ? GainFlaskCharges(player, charges, "recent unique enemy hit") : Task.CompletedTask;
+    }
 
     internal static Task GainPeriodicFlaskCharges(Player player)
     {
@@ -203,7 +225,9 @@ public static partial class Game
         int alchemist = player.Summons.Fighters.Values.Any(f => f.Definition.Kind == "Spectre"
             && f.Monster.Variety?.Id == "Metadata/Monsters/LeagueAzmeri/SpecialCorpses/FlaskloverHigh"
             && !f.Monster.Dead && f.Monster.Life > 0 && GolemCurrent(player, f)) ? 1 : 0;
-        int Get(uint key) => character.GetValueOrDefault(key) + (key == Stat.LifeFlaskChargesRecoveredPer3Seconds ? alchemist : 0);
+        int ryslatha = !player.RecentEvents.Happened(StatConditions.UsedLifeFlask, AreaTime(player))
+            ? character.GetValueOrDefault(Stat.LifeFlasksGainXChargesEvery3SecondsIfYouHaveNotUsedALifeFlaskRecently) : 0;
+        int Get(uint key) => character.GetValueOrDefault(key) + (key == Stat.LifeFlaskChargesRecoveredPer3Seconds ? alchemist + ryslatha : 0);
         bool lowLife = FlaskRecovery.LowLife(player.PlayerLife, player.PlayerMaxLife);
         return GainFlaskCharges(player, (f, _) => ItemsFor(player).ByHash(f.Item.TypeHash) is not { } t ? 0
             : FlaskCharges.PerThreeSeconds(Get, life: ItemsFor(player).FlaskOf(t)?.LifePerUse > 0, mana: ItemsFor(player).FlaskOf(t)?.ManaPerUse > 0,

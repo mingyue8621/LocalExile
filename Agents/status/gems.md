@@ -24,6 +24,29 @@
   领取会在一个存档里把物品放进主背包并置位标记；第二次领取会被拒绝
   （`QuestRewardCatalog`；[12](../docs/protocol/12-quests.md) §1、[19](../docs/protocol/19-gems.md) §5）。
   实机：`/quest_flag a1q4-PlacedGlyphs` 之后 Tarkleigh 的「Glyph Reward」——六个女巫宝石，可领取，重复被拒。
+- Icicle Mine variants release their radial or aimed volleys and scale with the detonation chain. Pyroclast
+  variants apply armed mine Fire Exposure, then release a nova and mortars. The Icicle critical aura is open.
+- Trap and mine payloads support Arc chains, Contagion, corpse Offerings, Hexes and Marks, damage brands,
+  Storm Call, Firestorm, Frost Bomb and Vortex. Offline checks exercise the paid placement and timed effects.
+- Eye of Winter variants emit their travel and final shards. Creeping Frost and its Floes variant release
+  chilling ground that follows enemies. The timings and ground motion were checked offline.
+- Ruthless gems use native primary/companion effect alternatives, requirements and skill rows.
+  Deterministic support rewards are disabled; eligible active gems use Siosa's Uncarved Gemstone exchange.
+  Gem XP receives the configured Ruthless multiplier.
+  Ruthless availability excludes the 13 original movement gems, Venom Gyre and Item Rarity Support.
+  Drops, vendor stock and runtime use enforce those exclusions; Quickstep remains permitted.
+  An alternate Frostblink hardmode row does not make that unavailable gem playable.
+  Automated mode catalog, acquisition and runtime checks pass.
+  Ruthless Nessa, Siosa and unavailable-gem cases have automated coverage.
+  See [league modes](../docs/game/league-modes.md).
+- **Gem quest rewards (verified live 2026-10-26).** Every `QuestRewardOffers` row whose items the server can build is
+  offered by the NPC's QuestReward dialogue row, with the `Characters` class filter and the offer's taken flag;
+  unbuildable rows (level-8 magic armours, magic belts) are skipped instead of an allow list excluding whole offers.
+  This covers the act gem offers: a1q4's six class gems (offer 3), a1q5's support gem (offer 2) and each act's later
+  gem choices.
+  Claiming puts the item in the main inventory and sets the flag in one save; a second claim is refused
+  (`QuestRewardCatalog`; [12](../docs/protocol/12-quests.md) §1, [19](../docs/protocol/19-gems.md) §5).
+  Live: Tarkleigh's "Glyph Reward" after `/quest_flag a1q4-PlacedGlyphs` — six Witch gems, claim, repeat refused.
 
 - **宝石掉落（2026-10-26 实机验证）。** 怪物物品掉落中有 4% 是一颗可获得、且 `DropLevel` 满足该怪物的宝石，
   不带等级、不做稀有度掷骰（`ItemDrops`、`GemSources.DropPool`、

@@ -81,8 +81,8 @@ public static partial class Game
         var quests = QuestsOf(player);
         foreach (var p in placements)
         {
-            // A town NPC a quest stages (DiallaTown / DiallaTownWithered …) comes with the quest NPCs (World/Quest/QuestNpcs.cs).
-            if (quests.ManagesNpc(player.Layout.Id, p.Id)) continue;
+            // A town NPC a quest stages (DiallaTown / DiallaTownWithered, Lilly shipside / sitting …) comes with the quest NPCs (World/Quest/QuestNpcs.cs).
+            if (quests.ManagesNpc(player.Layout.Id, p.Id) || p.ShownBy is not null || p.GoneWith is not null) continue;
             if (Npcs.Place(p) is not { } placed) { Console.WriteLine($"[gateway] {player.Connection.Remote} npc {p.Id}: not in NPCs.dat"); continue; }
             // Several NPC types read components the server does not write (Kingsmarch's villagers: StateMachine,
             // ControlZone, Functions, Brackets). Rather than dropping them — which left the town empty — send the plain

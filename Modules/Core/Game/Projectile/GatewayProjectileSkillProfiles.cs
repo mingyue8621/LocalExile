@@ -66,6 +66,8 @@ public static class GatewayProjectileSkillProfiles
         }
         else if (IsFireball(metadata))
             p = p with { EndArea = new("fireball-explosion", 0), EndAreaReasons = TerminalStops };
+        else if (Game.IsCreepingFrost(effect))
+            p = p with { EndArea = new("creeping-frost-burst", 0), EndAreaReasons = TerminalStops };
         else if (effect == "BlazingSalvo")
             p = p with
             {
@@ -128,6 +130,15 @@ public static class GatewayProjectileSkillProfiles
                 NativeVolley = new() { FixedDegrees = 8 }
             };
 
+        // Pyroclast Mine's mortars (upstream 2026-11-24): they land and burst in an area, no direct contact.
+        else if (Game.IsPyroclastMine(effect))
+            p = p with
+            {
+                Lobbed = true, DirectDamage = false,
+                CannotPierce = true, CannotFork = true, CannotSplit = true, CannotChain = true, CannotReturn = true,
+                EndArea = new("pyroclast-mine", 0),
+                EndAreaReasons = new HashSet<ProjectileEndReason> { ProjectileEndReason.Landing },
+            };
         // Volcanic Fissure: the slam sends a crack to the aim and the molten bursts erupt along it. The client's
         // Projectiles row (VolcanicSlamMortar) is not named after the effect, so the catalog lookup finds nothing;
         // the explicit recipe in ProjectileSkills supplies it. Six lava mortars (one base plus the gem's additional
@@ -195,6 +206,8 @@ public static class GatewayProjectileSkillProfiles
             if (countFinal != 0)
                 p = p with { Count = Math.Max(1, (int)Math.Floor(p.Count * Math.Max(0, 1 + countFinal / 100.0))) };
         }
+        if (Game.IsCreepingFrost(effect) && get(Stat.ModifiersToProjectileCountDoNotApply) != 0)
+            p = p with { Count = Math.Max(1, get(Stat.BaseNumberOfProjectiles)) };
         // Its chains bounce on the ground instead of seeking another monster.
         if (effect == "RollingMagma") p = p with { GroundChains = p.Chain, Chain = 0 };
         if (effect == "HolyFlameTotemAltX")
@@ -390,6 +403,8 @@ public static class GatewayProjectileSkillProfiles
             var scaled = causticArea with { Radius = SkillArea.Radius(baseRadius, AreaStat, spell) };
             return p with { ContactArea = scaled, EndArea = scaled };
         }
+        if (Game.IsPyroclastMine(effect) && p.EndArea is { } pyroclast)
+            return p with { EndArea = pyroclast with { Radius = SkillArea.Radius(12, get, spell) } };
         if (p.EndArea is { } terminal)
             return p with { EndArea = terminal with
                 { Radius = SkillArea.Radius(SkillArea.BaseRadius(effect, get), get, spell) } };

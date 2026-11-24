@@ -634,6 +634,7 @@
 - Soul Ripper spends charges for Vaal souls when allowed, and Forbidden Taste applies its recovery and chaos damage.
 - The Wise Oak, Taste of Hate and Soul Catcher apply their qualified damage modifiers during the flask effect.
 - Map flask penalties apply to utility and recovery flask effects and to awarded charges.
+- Alchemist's Genius: flask use rolls grant (10% effect, 20% charges, 4 s from ReminderText 189), rescaling flasks.
 
 - Native skin-transfer bind/reclaim preserves complete donors across character and stash saves. Optional item-stat
   sources exclude socket/skill hosts; 3.29.3c picker binding and protocol reclaim pass, with the shift-click gesture
@@ -645,7 +646,8 @@
 - NPC divination card exchange supports all 456 active 3.29.3d card definitions and keeps the 14 client-disabled
   cards, including all Grand Spectrum bases and corruption implicits; local weights are not official probabilities.
   Docs: [17](../docs/protocol/17-npcs.md).
-- Heist enchantment magnitudes apply through Core Game. Current native tooltip comparison is pending ([13 §2c](../docs/protocol/13-items.md)).
+- Heist enchantment magnitudes and implicit-modifier magnitudes apply through Core Game.
+  Current native tooltip comparison is pending ([13 §2c](../docs/protocol/13-items.md)).
 - Optional backpack mods can enable the native 20 slots; pickup stacks span both carried grids and quest rewards can enter the enabled backpack. Stored items remain removable after disabling the mod.
 
 - Character-build imports validate native items, trees, tattoo targets and limits, preserving secondary ascendancy and module-owned progress. Runtime golem sessions are cleared.
@@ -658,7 +660,7 @@
   Not read yet: nearby-enemy auras, reflect, Unholy Might, Conflux, triggered marks, damage against ailing enemies,
   damage over time with attacks and the weapon-local ailment stats.
 - Item modifier effect and affix-cap implicits. Docs: [13](../docs/protocol/13-items.md), "Item modifier effect".
-- Utility-flask orbs: Enkindling/Instilling enchantments and incoming Bleed/Poison triggers.
+- Utility-flask orbs: Enkindling/Instilling enchantments, incoming Bleed/Poison triggers, and automatic use of full utility flasks.
   Docs: [13](../docs/protocol/13-items.md), "Enkindling Orb and Instilling Orb".
 - Tinctures (#564): flask-belt placement, drops, toggle activation/deactivation, Mana Burn / Weeping Wounds drain, live effect scaling, shared cooldown, weapon-scoped stats, unique tincture effects (except Grasping Vines), Nature's Concoction / Colloidal Mixture, and unequip/death/session cleanup; awaiting real-client verification.
 - Sacred Orb rerolls: fresh checks of the merged branch, and Ward's character calculations.
@@ -737,6 +739,9 @@
   Docs: [13](../docs/protocol/13-items.md), "Currency metamod protection".
 - Repeat currency use by type on passives (`C→S 0x78`) and world objects (`C→S 0x79`) routes to Tattoo/Scouring,
   Strongbox and Essence handlers (offline verified; live client check pending).
+- Divine Vessels capture Pantheon souls in matching Atlas maps into the Map Device and unlock upgrades at Sin
+  (not checked live).
+  Docs: [pantheon](../docs/game/campaign/pantheon.md).
 
 ## Not working yet
 

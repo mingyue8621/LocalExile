@@ -75,6 +75,7 @@ public sealed class GameModule : IModule, IDisposable
         Rules.LoadMinionSupportsData();
         Rules.LoadWornGrantedSkillsData();
         Rules.LoadPhasingData();
+        Rules.LoadAlchemistsGeniusData();
         Rules.LoadBuffCancelData();
         Rules.LoadDeathPenaltyData();
         Rules.LoadModuleWorldData();
@@ -310,6 +311,9 @@ public sealed class GameModule : IModule, IDisposable
         GameEvents.AreaTick.Add(id, GameEvents.InArea(global::KitavaActTen.Area, global::KitavaActTen.Tick));
         module.Lifetime.Own(global::KitavaActTen.CleanupOnUnload());
         GameEvents.PlayerLeaving.Add(id, (player, _) => global::KitavaActTen.Leaving(player));
+        // Act 6-10 dedicated campaign boss encounter controllers.
+        global::Act6To8Encounters.Register(module);
+        global::Act9To10Encounters.Register(module);
         module.Lifetime.Own(global::VaalOversoul.CleanupOnUnload());
         GameEvents.PlayerLeaving.Add(id, (player, _) => global::VaalOversoul.Leaving(player));
         GameEvents.PlayerStatSources.Add(module.Manifest.Id, global::BrineKing.PlayerStats);
@@ -477,6 +481,7 @@ public sealed class GameLogic(IModuleLifetime? lifetime = null) : IGameLogic, IC
     {
         Rules.ReleaseCharacter(player);
         Rules.ForgetVitalsAdmission(player);
+        Rules.ClearPyroclastAuras(player);
         Rules.ForgetSourceValues(player);
         // The instance keeps its monsters as they are now, for the next connection (#12); the player's minions go with him.
         Rules.KeepInstanceMonsters(player);
