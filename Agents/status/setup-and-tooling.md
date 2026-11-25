@@ -345,8 +345,7 @@ Arcane Might 的区域夹具从武器接触原点测量到其目标的距离。
 Gateway 的测试集合现在默认串行运行，以便让真实的 socket 时限与可回收的 mod 上下文远离无关的目录加载/GC 竞争。
 个别并发测试仍会跑自己的并发任务。
 The three suites are `tests/GameServer.Core.Tests`, `tests/GameServer.Data.Tests` and `tests/GameServer.Gateway.Tests`.
-The Gateway tests were wiped when the game moved into modules (2026-10-31) and are being rebuilt; rules for new tests:
-AGENTS.md.
+Gateway tests cover the Gateway and its module interactions; rules for new tests: AGENTS.md.
 
 ## 工具
 
