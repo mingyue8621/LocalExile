@@ -24,6 +24,7 @@
   领取会在一个存档里把物品放进主背包并置位标记；第二次领取会被拒绝
   （`QuestRewardCatalog`；[12](../docs/protocol/12-quests.md) §1、[19](../docs/protocol/19-gems.md) §5）。
   实机：`/quest_flag a1q4-PlacedGlyphs` 之后 Tarkleigh 的「Glyph Reward」——六个女巫宝石，可领取，重复被拒。
+- Socketed gem kills emit incremental `0x00c3` XP when exact client math matches, falling back to `0x00bf` otherwise.
 - Icicle Mine variants release their radial or aimed volleys and scale with the detonation chain. Pyroclast
   variants apply armed mine Fire Exposure, then release a nova and mortars. The Icicle critical aura is open.
 - Trap and mine payloads support Arc chains, Contagion, corpse Offerings, Hexes and Marks, damage brands,

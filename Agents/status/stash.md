@@ -165,6 +165,8 @@
 - **制作格。** 夺宝制作格接受装备、支持宝石交换，重载后保留内容。
   狮眼守望现在会在个人仓库旁边生成公会仓库。
   持久化检查通过；真实客户端打开过城镇公会仓库并加载了它的公会页签。
+- Stash affinity results (`0x00d5`), personal tab ids (`0x00d6`), and quick-moves (`0x00e2`, `0x002b`, `0x0114`).
+- Async-trade stash (`0x7b` `0x63`, mode 2, `0x01a1` flag 1, `0x02ac`–`0x02b0`, `0x008e`): offline verified.
 - Tab folders: Create New Folder, moving tabs in and out (C→S 0xd1) and Delete Folder (0xd2) are kept with the stash; a
   deleted folder stays hidden so the later tabs keep their places, and S→C 0xd3 encodes guild stash affinity updates
   (18 "C→S"). Checked offline; not yet in the real client.

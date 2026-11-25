@@ -176,6 +176,7 @@ public static partial class Game
         }
         player.StashOpen = false;
         player.GuildStashOpen = false;
+        player.TradeStashOpen = false;
         player.BenchOpen = false;
         player.ModuleWindow = null;
         player.ModuleWindowAnchor = null;

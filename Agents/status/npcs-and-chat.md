@@ -71,9 +71,9 @@
   answered with S→C 0x135 and "You have joined global chat channel N.", so they do not time out and the Global and
   Trade tabs work.
   The client joins once per session, so every area entry sends 0x135 for the channels already joined.
-  Guild lines are not sent. A `%` party line reaches every member of the sender's party, in whatever area each one is
-  (S→C 0x17 with the sender prefixed `%`); a player in no party is sent none (tested, not yet checked with the real
-  client).
+  Guild (`&`) lines reach online members of the sender's guild with the tag. A `%` party line reaches every member of
+  the sender's party, in whatever area each one is (S→C 0x17 with the sender prefixed `%`); a player in no party is
+  sent none (tested, not yet checked with the real client).
   A name already on a chat server gets a number there (`Name_1`); nothing proves a name.
   Code: `Modules/Core/Player/Chat`, `Modules/Core/Player/Social`, `src/GameServer.Core/Chat`.
   Docs: [10](../docs/protocol/10-chat-and-commands.md) §6.
@@ -207,6 +207,7 @@
   队长在线时队伍状态可跨模块重载存活。屏幕外的任务仍为模拟；交易、升华构建与高级战术 AI 尚未做
   （聊天只做了一半：机器人会在区域本地聊天里偶尔说一两句，但不会读也不会回）。
   见 [玩家机器人](../docs/dev/player-bots.md)。
+- Guilds (`0x0140`–`0x014f`, `0x0146`–`0x014c`, `&` chat, shared stash & `0x00cc` reorder): offline verified.
 - PvP queue bar (S→C 0x118/0x119, C→S 0x11a/0x18d): protocol encoders and queue/challenge leave and withdraw handlers
   in `Modules/Core/Player/Social` (not yet checked live).
 - Direct vendor equipment purchases validate placement, preserve payment on failure and refresh equipped items; 3.29.3c belt purchase/swap protocol controls pass; rendered UI checks remain open.
