@@ -574,6 +574,9 @@ public static class AreaPopulation
             centres.Add(at);
         }
         var bossPoints = points.Select(p => (Point: p, Rows: BossPoint(p.Name))).Where(b => b.Rows is not null).ToList();
+        // The boss points that took a boss: a map's remaining boss rows stand with them (one "mapboss1" point covers
+        // Port's five Unravelling Horror parts and the Sepulchre's two forms; the client marks the room once).
+        var takenBossPoints = new List<RoomPoint>();
         foreach (var (p, rows) in bossPoints.Where(b => b.Rows!.Count > 0))
         {
             var mine = rows!.Select(n => n - 1).Where(i => i < area.Bosses.Count && placedRows.Add(i)).ToList();
@@ -583,6 +586,7 @@ public static class AreaPopulation
                 continue;
             }
             Bosses((p.X, p.Y), p.Name, mine);
+            takenBossPoints.Add(p);
         }
         foreach (var p in points.Where(p => p.Name.StartsWith("%area%-", StringComparison.Ordinal)))
         {
@@ -617,6 +621,16 @@ public static class AreaPopulation
                 ? new List<int> { rest[rng.Next(rest.Count)] }
                 : rest;
             Bosses((p.X, p.Y), p.Name, standing);
+        }
+        else if (rest.Count > 0 && takenBossPoints.Count > 0)
+        {
+            // The boss rows the area's own points leave stand in the room those points marked, not at the furthest cell:
+            // the client marks a boss room once ("mapboss1" of Port's five Unravelling Horror parts, "mapboss2" of the
+            // Sepulchre's two Doedre forms), and every one of them belongs beside that boss, in the arena.
+            var host = takenBossPoints[0];
+            notes.Add($"unique boss(es) {string.Join(", ", rest.Select(i => area.Bosses[i]))} of {area.AreaId}: standing with the boss at room point {host.Name} ({host.X}, {host.Y}) in {host.Room?.Split('/')[^1] ?? "its room"}");
+            for (int i = 0; i < rest.Count; i++)
+                Bosses((host.X + (i + 1) * 4, host.Y), host.Name, [rest[i]]);
         }
         else if (rest.Count > 0 && unassignedAtArrival)
         {
@@ -998,6 +1012,39 @@ public static class AreaPopulation
 
     public static (int X, int Y)? BossCell(RoomPoint point, Func<int, int, bool> walkable) =>
         Nearest((point.X, point.Y), walkable, [], BossSearchRadius);
+
+    /// <summary>The cell where a map's boss stands when the area's room points name no boss point at all: the centre of
+    /// the boss room the layout placed ("boss_3.arm" of Mao Kun, "3x3_boss.arm" of the Vinktar Square), the one farthest
+    /// from the arrival. The corner rooms of a multi-arena map are its sub-bosses' (Vinktar Square's map_boss_corner_*),
+    /// so they are taken only when no other boss room was placed. Null when the layout placed no boss room.</summary>
+    public static (int X, int Y, string Room)? BossRoomCentre(IEnumerable<GameServer.Data.Terrain.Generation.DoodadRecord> records,
+        Func<int, int, bool> walkable, (int X, int Y) arrival)
+    {
+        var rooms = new List<(int X, int Y, string Room)>();
+        var seen = new HashSet<(string, int, int)>();
+        foreach (var record in records)
+            foreach (var room in record.Rooms)
+            {
+                string file = room.Room.Path.Split('/')[^1];
+                if (!file.Contains("boss", StringComparison.OrdinalIgnoreCase) && !file.Contains("arena", StringComparison.OrdinalIgnoreCase)) continue;
+                if (!seen.Add((room.Room.Path.ToLowerInvariant(), room.X, room.Y))) continue;
+                int cx = room.X * 23 + room.Room.Width * 23 / 2;
+                int cy = room.Y * 23 + room.Room.Height * 23 / 2;
+                if (Nearest((cx, cy), walkable, [], BossSearchRadius) is not { } cell) continue;
+                rooms.Add((cell.X, cell.Y, room.Room.Path));
+            }
+        var main = rooms.Where(r => !r.Room.Split('/')[^1].Contains("corner", StringComparison.OrdinalIgnoreCase)).ToList();
+        var pool = main.Count > 0 ? main : rooms;
+        (int X, int Y, string Room)? best = null;
+        long bestDistance = -1;
+        foreach (var r in pool)
+        {
+            long d = (long)(r.X - arrival.X) * (r.X - arrival.X) + (long)(r.Y - arrival.Y) * (r.Y - arrival.Y);
+            if (d <= bestDistance) continue;
+            bestDistance = d; best = r;
+        }
+        return best;
+    }
 
     /// <summary>The free walkable cell nearest to <paramref name="at"/> within <paramref name="radius"/> (square rings
     /// outwards, the closest of each ring by distance), or null.</summary>

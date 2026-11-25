@@ -135,6 +135,15 @@ public static partial class Game
             }
             layoutDirectMonsters = directMonsters;
         }
+        // A map whose room points name no boss point at all still has a boss room in the layout it generated (Mao Kun's
+        // boss_3.arm, the Vinktar Square's 3x3_boss.arm): its boss stands in that room, not at the furthest cell.
+        if (isMapArea && area.Bosses.Count > 0 && !points.Any(p => AreaPopulation.BossPoint(p.Name) is not null)
+            && layout.Level?.Records is { Count: > 0 } bossRecords
+            && AreaPopulation.BossRoomCentre(bossRecords, walkable, (layout.SpawnX, layout.SpawnY)) is { } bossRoom)
+        {
+            points.Add(new AreaPopulation.RoomPoint("mapboss", bossRoom.X, bossRoom.Y) { Room = bossRoom.Room });
+            notes.Add($"no boss point in the room points of {layout.Id}: the boss stands in {bossRoom.Room.Split('/')[^1]} at ({bossRoom.X}, {bossRoom.Y})");
+        }
         var trapClear = new HashSet<(int X, int Y)>();
         // The Labyrinth's own rooms keep their packs off their traps too: the generated rooms' and tiles' trap lines.
         var labyrinthTraps = LabyrinthTrials.InLabyrinth(layout.Id) && ServerLevels.For(layout.Id, player.Seed) is { } labyrinthLevel
