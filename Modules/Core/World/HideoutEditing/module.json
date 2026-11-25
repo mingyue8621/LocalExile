@@ -5,7 +5,8 @@
   "name": "藏身处编辑",
   "description": "在藏身处摆放、旋转与删除装饰物。",
   "depends": [
-    "Game"
+    "Game",
+    "Portals"
   ],
   "assembly": "bin/hideoutediting.dll"
 }

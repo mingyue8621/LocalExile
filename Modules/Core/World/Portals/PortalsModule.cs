@@ -54,7 +54,9 @@ public sealed class PortalsModule : IModule
                         Console.WriteLine($"[gateway] {player.Connection.Remote} 区域生成：帧已启动={player.Connection.WorldOutput.Started} lockstep={player.Connection.LockstepClient}，开始放置传送门/摆设");
                         if (player.Closed || player.Layout.Hash != area || player.InstanceNumber != instance) return;
                         await Step("回城门", () => SpawnTownPortals(player));
-                        await Step("藏身处摆设", () => SpawnHideoutDoodads(player));
+                        // 上游的 Game.SpawnHideoutDevice 取代了本地的 SpawnHideoutDoodads：
+                        // 装置变体（含按钮与碰撞）、宠物与装饰都在里面。
+                        await Step("藏身处装置", () => global::Game.SpawnHideoutDevice(player));
                         await Step("地图返回门", () => SpawnMapReturnPortal(player));
                         // 藏身处实例在最后一个人离开六分钟后消失，装置也跟着消失：那一局的传送门原本立在那里，
                         // 现在跟随角色来到脚下这个实例，所以要在摆门之前把它们挪过来。
@@ -117,7 +119,13 @@ public sealed class PortalsModule : IModule
             }
             HideoutCatalog.Doodad? doodad;
             lock (player.HideoutDoodads) doodad = player.HideoutDoodads.GetValueOrDefault(use.TargetId);
-            if (doodad is null) return false;
+            // A device variant's button opens its device: walk to the button, open the device's window.
+            if (doodad is null && global::Game.MapDeviceOfButton(player, use.TargetId) is var (device, button))
+            {
+                await UseMapDevice(player, use with { TargetId = device }, button, requestedAt);
+                return true;
+            }
+            if (doodad is null || !HideoutCatalog.IsPlaced(doodad)) return false;
             await UseMapDevice(player, use, doodad, requestedAt);
             return true;
         });
