@@ -173,6 +173,7 @@ public static partial class Game
             {
                 if (!PlayerActionCurrent(player, action)) return;
                 player.Walk.Teleport(tx, ty, ProjectileWorldTime(player));
+                ShakariEncounter.RememberGateCheckpoint(player, transition, (tx, ty));
             }
             // A gate is a checkpoint. Into a boss room it is the door on the outside (a death inside the arena revives
             // there, not in the middle of the fight); elsewhere it is the landing cell, so a tower's floors keep their

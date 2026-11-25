@@ -221,6 +221,13 @@
   仍缺消费者的按虔诚目标属性（诅咒持续时间、召唤物/图腾/烙印/引导、魔力消耗与盾牌防御）、旧版征服者，
   以及与半径型传奇珠宝共用的、未来任何逐节点属性覆盖。
 - 下一个完成点：至少一个征服者核心天赋的机制被建模并在战斗中核对，同时不改动已经验证过的小天赋/显著天赋替换。
+- Done: the item data, `/timeless`, the alternate-tree generator, the fixed radius, replacement/addition stats, the
+  one-Historic limit, save/load, the live client check, Militant Faith's two random devotion mods on the item, and the
+  `DevotionStats` scaling of those mods by `floor(Devotion / 10)`.
+- Remaining: live checks for the implemented keystone effects, the other conqueror keystones, and legacy conquerors.
+- Per-Devotion consumers are still missing for curse duration, minions, totems, brands, channelled skills, mana cost
+  and shield defences. Future per-node stat overrides are shared with radius unique jewels.
+- Next done point: exercise the conqueror keystones in live combat and retain the existing alternate-tree replacement.
 
 ### 6. 深渊珠宝与集群珠宝
 
