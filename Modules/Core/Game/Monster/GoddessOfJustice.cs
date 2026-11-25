@@ -3,6 +3,7 @@ using GameServer.Core.Diagnostics;
 using GameServer.Core.Projectiles;
 using GameServer.Core.Protocol.Instance;
 using GameServer.Core.Protocol.Login;
+using GameServer.Core;
 using GameServer.Core.World;
 using static Game;
 using static Program;
@@ -200,6 +201,24 @@ static class GoddessOfJustice
 
     static double Speed() => ProjectileSpeed.CellsPerSecond(IzaroGoddess.MortarSpeed, _ => 0, _ => 0);
 
+    // Whether the client data's Projectiles row for this art names a landing animation at all (its ImpactAnimationIds
+    // is empty for both of hers, while every other row names one). Cached: one lookup per projectile art.
+    static readonly Dictionary<string, bool> ImpactAnimations = [];
+    static bool HasImpactAnimation(string metadata)
+    {
+        if (ImpactAnimations.TryGetValue(metadata, out bool cached)) return cached;
+        bool has = true;
+        if (ClientTables.Has("Projectiles"))
+            foreach (var row in ClientTables.Table("Projectiles"))
+                if (row.Text("Id") == metadata)
+                {
+                    has = row.Text("ImpactAnimationIds") is { Length: > 2 };
+                    if (!has) Console.WriteLine($"[gateway] {metadata}: the client data names no landing animation, so the client never draws it");
+                    break;
+                }
+        return ImpactAnimations[metadata] = has;
+    }
+
     // A mortar from her (her place, the volley's height) to a cell: a damaging one lands its area there.
     static ProjectileUse Mortar(ProjectileSession session, Player player, uint id, SpawnedMonster goddess, string metadata, (int X, int Y) target,
         object payload, bool hidden = false)
@@ -214,8 +233,10 @@ static class GoddessOfJustice
             Speed = speed, Radius = 2, Count = 1, Lobbed = true, Range = distance, DirectDamage = false,
             EndArea = damages ? new ProjectileAreaRecipe("Goddess of Justice mortar", IzaroGoddess.MortarRadius) : null,
             EndAreaReasons = damages ? new HashSet<ProjectileEndReason> { ProjectileEndReason.Landing, ProjectileEndReason.Terrain } : null,
-            // The client draws her Spirit Mortars itself (its action), so the server's are not shown.
-            HideVisual = hidden,
+            // The client draws her Spirit Mortars itself (its action), so the server's are not shown. A projectile whose
+            // client data names no landing animation is hidden as well: drawn, the client indexes clip -1 when it lands
+            // and dereferences an empty animation set (+0x180 = 0, 0x1ba5e6a: live 2026-11-25, every Guardian mortar).
+            HideVisual = hidden || !HasImpactAnimation(metadata),
         };
         var presentation = (MonsterProjectilePresentation(Game.SkillsFor(player).Clips(metadata), distance / speed) ?? new())
             with { LaunchHeight = new ContactPoint(0, 0, IzaroGoddess.VolleyHeight).HeightSteps };

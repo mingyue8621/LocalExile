@@ -9,7 +9,9 @@ using System.Text;
 /// </summary>
 public sealed class PacketHistory
 {
-    public const int Capacity = 256;
+    // 2 048 rather than 256: a busy fight sends an order every 30 ms, so 256 kept only the last 8 s and the message that
+    // broke the client (a projectile or a summon 20-30 s earlier) was already gone (live 2026-11-25, 0x1ba5e6a).
+    public const int Capacity = 2048;
     // Bytes kept per message: the id and the fields after it, enough to tell most messages apart without a full copy.
     public const int KeptBytes = 48;
     // Dump files kept in the folder; older ones are deleted at each new dump.
