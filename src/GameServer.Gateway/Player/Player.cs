@@ -366,7 +366,11 @@ public sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange
     public readonly Dictionary<int, double> KitDamageTaken = [];
     bool originallyHostile = true;
     public bool OriginallyHostile => originallyHostile;
-    public bool Hostile { get => originallyHostile && !TemporarilyAllied; init => originallyHostile = value; }
+    /// <summary>A bandit lord this character helped in Deal with the Bandits (a2b-…Ally): the client is told team 0
+    /// (InstanceProtocol.SetTeam, the switch a Conversion Trap uses), so it is no target of the player's; the server
+    /// gives it no order, and it takes no damage. The lord the amulets are handed in to stays this way.</summary>
+    public bool QuestAlly;
+    public bool Hostile { get => originallyHostile && !TemporarilyAllied && !QuestAlly; init => originallyHostile = value; }
     /// <summary>The area's time when a temporary ally returns to its original allegiance.</summary>
     public double TemporaryAllyUntil;
     public bool TemporarilyAllied => TemporaryAllyUntil > 0 && !Dead && Life > 0;
@@ -418,7 +422,7 @@ public sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange
     public bool EntranceGrace { get => Ailments.Grace; set => Ailments.Grace = value; }
     // No damage, ailments, impale or hit reaction while a scripted grace runs.
     public bool DamageImmune;
-    public bool Invulnerable => DamageImmune || KingGrace || RitualGrace || FetishGrace || EntranceGrace || LifePhases?.Active == true;
+    public bool Invulnerable => DamageImmune || QuestAlly || KingGrace || RitualGrace || FetishGrace || EntranceGrace || LifePhases?.Active == true;
     // What it is, for the experience and items its death gives (null for monsters made without a variety).
     public MonsterCatalog.Variety? Variety { get; init; }
     // Its known TakeHit clip lengths supply HitReaction's recovery duration. Native Actor TakeHit selects the actual

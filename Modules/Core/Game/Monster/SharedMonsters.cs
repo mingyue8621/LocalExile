@@ -327,7 +327,7 @@ public static partial class Game
             GridY = at.Y,
             Life = corpse ? 1u : m.Life,
             EnergyShield = corpse ? 0u : MonsterEnergyShieldOf(m) is { Max: > 0 } es ? es.Current : o.Object.EnergyShield,
-            Team = m.TemporarilyAllied ? (ushort)0 : o.Object.Team,
+            Team = m.QuestAlly || m.TemporarilyAllied ? (ushort)0 : o.Object.Team,
         };
         // One that has risen meanwhile is created risen (targetable), not in the wait it was placed in.
         if (!corpse && !dormant && m.Variety is { } v && Emerges.Kind(v, m.Rarity) != EmergeKind.None

@@ -78,6 +78,12 @@ public static class BanditChoices
 
     static bool Finished(Func<string, bool> has) => has(Delivered) || has(EramirReward) || All.Any(b => has(b.Reward));
 
+    /// <summary>True once this character has helped one of the three lords. The choice is permanent (a Book of Reform is
+    /// the only way to change it), so no camp offers a vote any more and only the spared lord stays an ally.</summary>
+    static bool Chosen(Func<string, bool> has) => All.Any(b => has(b.Ally));
+
+    static bool Allied(Player player, Bandit bandit) => player.Character.HasQuestFlag(bandit.Ally);
+
     public static bool HasCompleted(Player player) => Finished(player.Character.HasQuestFlag);
 
     static readonly Dictionary<string, (string Flag, string Name)> BookOfReformTargets = new(StringComparer.Ordinal)
@@ -161,13 +167,17 @@ public static class BanditChoices
     static bool Available(Player player, Bandit bandit) =>
         QuestsOf(player).OnMonsterKilled(bandit.Area, bandit.Variety).Contains(bandit.Killed);
 
+    // The lord this character helped keeps its camp calm (its guards were never released on the player), while the two
+    // rivals' camps are released as soon as the choice is made: they are there to be killed, not talked to.
     static bool CanHoldFor(Player player, Bandit bandit) =>
         Available(player, bandit) && !player.Character.HasQuestFlag(bandit.Killed)
+        && (Allied(player, bandit) || !Chosen(player.Character.HasQuestFlag))
         && (player.Character.HasQuestFlag(bandit.Reward) || !Finished(player.Character.HasQuestFlag));
 
     static bool CanVote(Player player, Bandit bandit) =>
         !player.Controlled && !player.Closed && !HardcoreProgressBlocked(player)
-        && Available(player, bandit) && !player.Character.HasQuestFlag(bandit.Killed) && !Finished(player.Character.HasQuestFlag);
+        && Available(player, bandit) && !player.Character.HasQuestFlag(bandit.Killed)
+        && !Finished(player.Character.HasQuestFlag) && !Chosen(player.Character.HasQuestFlag);
 
     static bool HasActiveVote(InstanceState? instance) =>
         instance is not null && ActiveVotes.TryGetValue(instance, out var session) && !session.Resolved;
@@ -194,12 +204,16 @@ public static class BanditChoices
         if (In(player) is { } bandit && flags.Contains(bandit.Ally)) flags.Add(AfterFight);
     }
 
+    // The lord this character helped is the one the rivals' amulets are handed in to. It stands as an ally (QuestAlly:
+    // team 0 on the client, no order, no damage), not as the held hostile a vote is opened on.
     static SpawnedMonster? Leader(Player player, Bandit bandit, uint id)
     {
         var leader = player.Area.Monsters.GetValueOrDefault(id);
-        return leader is { Hostile: true, Dead: false, Life: > 0, Aggro: false } && leader.Variety?.Id == bandit.Variety
-            && Npcs.Find(bandit.Variety) is not null && player.Instance?.HasState(Fight) != true
-            && CanHoldFor(player, bandit) ? leader : null;
+        if (leader is not { Dead: false, Life: > 0 } || leader.Variety?.Id != bandit.Variety
+            || Npcs.Find(bandit.Variety) is null || player.Instance?.HasState(Fight) == true)
+            return null;
+        if (Allied(player, bandit)) return leader;
+        return leader is { Hostile: true, Aggro: false } && CanHoldFor(player, bandit) ? leader : null;
     }
 
     static SpawnedMonster? NearbyLeader(Player player, Bandit bandit, uint id)
@@ -220,6 +234,51 @@ public static class BanditChoices
         var (x, y) = leader.Walk.Position(ProjectileWorldTime(player));
         if (!player.Npcs.TryGetValue(id, out var speaker)) player.Npcs[id] = speaker = new(npc, x, y);
         return speaker;
+    }
+
+    /// <summary>Makes the lord this character helped an ally in this instance: the client is told team 0 (the switch a
+    /// Conversion Trap uses on a monster it has turned), while the server stops giving it orders and stops taking damage
+    /// for it. Without it the spared lord stayed a hostile: a first hit turned its entrance grace off, it hit back, and it
+    /// could be killed for nothing. The callers only ally a unanimous Help (a mixed party keeps its fight).</summary>
+    public static async Task AllyLeader(Player player, Bandit bandit, uint id)
+    {
+        if (player.Closed || player.LeavingArea) return;
+        if (player.Area.Monsters.GetValueOrDefault(id) is not { Dead: false, Life: > 0 } leader) return;
+        if (!leader.QuestAlly)
+        {
+            leader.QuestAlly = true;
+            leader.Aggro = false;
+            leader.Target = null;
+            leader.LastTarget = null;
+            leader.SwingGeneration = null;
+            leader.ClientChase = null;
+            leader.ClientSwingAt = null;
+            leader.ClientActionWalkStop = null;
+            leader.ActionGeneration++;
+            leader.Walk.StopAt(ProjectileWorldTime(player));
+            Console.WriteLine($"[gateway] {player.Connection.Remote} {bandit.Name} 0x{id:x} is an ally ({bandit.Ally}): no order, no damage");
+        }
+        // Fresh packet per recipient: wire encryption mutates the array in place. A client whose world output is running
+        // takes these as object records; one still outside the area frame (or a test) gets them on its outbox.
+        if (player.Connection.WorldOutput.Started)
+        {
+            await SendWorldRecord(player, id, InstanceProtocol.SetTeam(id, 0), $"0x1be {bandit.Name} team 0 (helped)");
+            await SendWorldRecord(player, id, InstanceProtocol.ActionEnded(id), $"0x1ac {bandit.Name} stops its action");
+            return;
+        }
+        await SendTo(player, InstanceProtocol.SetTeam(id, 0), $"0x1be {bandit.Name} team 0 (helped)");
+        await SendTo(player, InstanceProtocol.ActionEnded(id), $"0x1ac {bandit.Name} stops its action");
+    }
+
+    // The area's lord of this bandit, if it is standing (the instance keeps one leader per camp).
+    static async Task AllyLeaderInArea(Player player, Bandit bandit)
+    {
+        foreach (var (id, m) in player.Area.Monsters.ToArray())
+            if (m.Variety?.Id == bandit.Variety && !m.Dead && m.Life > 0)
+            {
+                await AllyLeader(player, bandit, id);
+                return;
+            }
     }
 
     static bool CallsVote(NpcCatalog.Talk talk) => talk.Script.Contains("BanditCallVote", StringComparison.Ordinal);
@@ -352,12 +411,13 @@ public static class BanditChoices
             await ResolveVote(instance, player, r.Bandit, r.LeaderId, r.IsSolo, r.Participants, r.Recipients);
     }
 
-    /// <summary>Updates an active instance Bandit vote when a player finishes entering the bandit area.</summary>
+    /// <summary>Updates an active instance Bandit vote when a player finishes entering the bandit area. The lord this
+    /// character helped is put back in its ally state too: a fresh instance spawns it as the held hostile again.</summary>
     public static async Task OnAreaGenerated(Player player)
     {
-        if (player.Controlled || player.Closed || player.LeavingArea || player.Instance is not { } instance
-            || In(player) is not { } bandit || !HasActiveVote(instance))
-            return;
+        if (player.Controlled || player.Closed || player.LeavingArea || In(player) is not { } bandit) return;
+        if (Allied(player, bandit)) await AllyLeaderInArea(player, bandit);
+        if (player.Instance is not { } instance || !HasActiveVote(instance)) return;
 
         bool eligible = CanVote(player, bandit);
 
@@ -669,6 +729,12 @@ public static class BanditChoices
                             instance.World.MonsterOrigins[leaderId] = origin with { Object = origin.Object with { HasDialogue = false } };
                         }
                     }
+                    Console.WriteLine($"[gateway] {bandit.Name} vote resolved: {resolved.Count} voter(s), {(anyKill ? "fight" : "allied")}");
+                    // A unanimous Help spares the lord: every client in the instance is told it is on the player's team,
+                    // and the server stops treating it as a monster. A mixed party keeps its fight (instance state above).
+                    if (!anyKill)
+                        foreach (var recipient in recipients)
+                            await AllyLeader(recipient, bandit, leaderId);
                 }
             }
 
