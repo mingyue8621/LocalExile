@@ -452,20 +452,32 @@ public static class BossKits
         return SkillArea.Radius(radius, Get, catalog.IsSpell(effect));
     }
 
-    /// <summary>A skill's projectile as the client resolves its art (SkillCatalog.SkillArtProjectile), else the row its
-    /// action class creates for the player's skill on the same ActiveSkills row (SkillCatalog.SharedProjectile), with the count its
-    /// stats give one release (number_of_projectiles_override, else base_number_of_projectiles plus
-    /// number_of_additional_projectiles); null when the art names none.</summary>
+    /// <summary>A skill's projectile: the row the client's own tables give the skill (SkillCatalog.MonsterProjectile,
+    /// i.e. its monster_projectile_variation among MonsterProjectileAttack), else the art its effect names
+    /// (SkillCatalog.SkillArtProjectile), else the row its action class creates for the player's skill on the same
+    /// ActiveSkills row (SkillCatalog.SharedProjectile), with the count its stats give one release
+    /// (number_of_projectiles_override, else base_number_of_projectiles plus number_of_additional_projectiles); null when
+    /// none names any.</summary>
     public static SkillCatalog.MonsterProjectileInfo? ArtShot(SkillCatalog catalog, int effect, byte level)
     {
         var stats = GolemData.Skill(catalog, effect, level).Stats;
         int Get(uint key) => stats.GetValueOrDefault(key);
-        if ((ClassProjectile(catalog, effect, Get) ?? catalog.SkillArtProjectile(effect) ?? catalog.SharedProjectile(effect)) is not { } art)
-            return null;
         int count = Get(Stat.NumberOfProjectilesOverride) is > 0 and var fixedCount ? fixedCount
             : Math.Max(1, Get(Stat.BaseNumberOfProjectiles)) + Get(Stat.NumberOfAdditionalProjectiles);
         // A nova (projectiles_nova: Lightning Trap's) fires its projectiles around the full turn.
         bool nova = Stat.ProjectilesNova is var novaKey && stats.GetValueOrDefault(novaKey) != 0;
+        // The skill's own row from the client's tables first (monster_projectile_variation: a Spine Serpent's
+        // SnakeSpine). A generic action row — monster_projectile_weapon, shared by every armed monster — must not fall
+        // through to SharedProjectile, which then hands this monster another one's art (the Atlas basilisk snake's
+        // AtlasBasiliskSnakeProjectile, whose release crashed the client at 0x17a945f).
+        if (catalog.MonsterProjectile(effect, includeWeaponAttacks: true) is { Lobbed: false } native)
+            return native with
+            {
+                Count = Math.Max(1, count),
+                SpreadRadians = nova ? Math.Tau : native.SpreadRadians > 0 ? native.SpreadRadians : Math.PI / 6,
+            };
+        if ((ClassProjectile(catalog, effect, Get) ?? catalog.SkillArtProjectile(effect) ?? catalog.SharedProjectile(effect)) is not { } art)
+            return null;
         return new(art.Id, art.Speed, false, art.CollisionRadius) { Count = Math.Max(1, count), SpreadRadians = nova ? Math.Tau : Math.PI / 6 };
     }
 

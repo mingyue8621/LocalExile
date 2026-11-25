@@ -1743,7 +1743,10 @@ public sealed class SkillCatalog
                 // The weapon projectile's ACT pool is the existing SpellProjectile contact for these varieties.
                 animationKey = "SpellProjectile";
                 lobbed = false;
-                variation = variationRow;
+                // The row picks the art, not who draws it: the client draws a projectile itself only for a
+                // monster_mortar_attack record (its release carries the row and count), so a weapon attack's must stay 0
+                // or the server hides the object and the player sees no arrow at all (HideVisual, ProjectileHostile).
+                variation = 0;
             }
             else continue;
             if (projectileRow < 0 || projectileRow >= rows.Count) continue;
