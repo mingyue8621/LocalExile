@@ -318,9 +318,23 @@ public static class AreaPopulation
     public static IReadOnlyList<int>? BossPoint(string name)
     {
         var m = BossPointName.Match(name);
-        if (!m.Success) return null;
-        return m.Groups[1].Success ? [.. m.Groups[1].Value.Split('&').Select(int.Parse)] : [];
+        if (m.Success) return m.Groups[1].Success ? [.. m.Groups[1].Value.Split('&').Select(int.Parse)] : [];
+        // A league leader point: the map's whole roster of warband leaders or rogue exiles stands at one point, and one of
+        // them is the map's boss (Plan picks it). "ritual_boss_spawn_override" is where the 3.29 rooms put a map boss that
+        // has no "mapboss" point of its own (Jungle Valley's MapBossSpawnerSimplified stands beside it, Grave Trough's
+        // BurnBoss too): without it the boss fell back to the arrival, at the map's entrance.
+        if (LeagueLeaderPoint(name) || string.Equals(name, RitualBossPoint, StringComparison.OrdinalIgnoreCase)) return [];
+        return null;
     }
+
+    /// <summary>A point a map's league leaders (Warbands' mapbosswarband&lt;element&gt;&lt;camp&gt;, Rogue Exiles'
+    /// mapbossexilepack) share: WorldAreas lists every candidate as a boss, but one of them stands there.</summary>
+    public static bool LeagueLeaderPoint(string name) =>
+        name.StartsWith("mapbosswarband", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "mapbossexilepack", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The 3.29 room point a map boss without a "mapboss" point stands on (Jungle Valley, Grave Trough).</summary>
+    const string RitualBossPoint = "ritual_boss_spawn_override";
 
     /// <summary>Where one of the area's own bosses stands, if the rooms mark a point for it: its numbered point
     /// ("mapboss2" for the second of WorldAreas Bosses), or the area's single unnumbered one ("force:mapboss") for a boss
@@ -418,6 +432,19 @@ public static class AreaPopulation
                     var placed = new RoomPoint(p.Name, px, py, angle) { Room = path };
                     if (isBossOrNamed) monsterPoints.Add(placed);
                     else direct.Add((path, placed));
+                }
+                // A boss with a spawner object instead of a "mapboss" point: Jungle Valley's MapBossSpawnerSimplified
+                // stands beside its ritual_boss_spawn_override, and the uber arenas (Cowards' Trial, Death and Taxes,
+                // Ship Graveyard, Doryani's Maze, the Legends) place one BossSpawner each. Those rooms are exactly the ones
+                // room_point_areas left out, so without this their bosses stood at the arrival. The spawner names the boss,
+                // not a pack (BurnBossSkeletonSpawner, BossPackSpawner, BossTransformTo2Spawner name no "BossSpawner").
+                foreach (var o in room.Room.Doodads)
+                {
+                    if (string.IsNullOrEmpty(o.Type) || BossSpawners.ContainsKey(o.Type)
+                        || !o.Type.Contains("BossSpawner", StringComparison.OrdinalIgnoreCase)) continue;
+                    var (sx, sy, sa) = GameServer.Data.Terrain.Generation.AreaObjects.Place(room, o.X, o.Y, o.Angle);
+                    if (monsterPoints.Any(q => q.Name == "mapboss" && Math.Abs(q.X - sx) <= 4 && Math.Abs(q.Y - sy) <= 4)) continue;
+                    monsterPoints.Add(new RoomPoint("mapboss", sx, sy, sa) { Room = path });
                 }
             }
         return (monsterPoints, direct);
@@ -584,13 +611,21 @@ public static class AreaPopulation
             var dedicated = any.Where(pt => pt.Room is null || !pt.Room.EndsWith("/golden_chest.arm", StringComparison.OrdinalIgnoreCase)).ToList();
             var pool = dedicated.Count > 0 ? dedicated : any;
             var p = pool[rng.Next(pool.Count)];
-            Bosses((p.X, p.Y), p.Name, rest);
+            // A league leader point holds one leader: Warbands lists a camp's whole roster as the map's bosses (Acid Lakes'
+            // nine WbChaos leaders, Shipyard's three), and Rogue Exiles seven, of which one stands on the map.
+            var standing = LeagueLeaderPoint(p.Name) && rest.Count > 1
+                ? new List<int> { rest[rng.Next(rest.Count)] }
+                : rest;
+            Bosses((p.X, p.Y), p.Name, standing);
         }
         else if (rest.Count > 0 && unassignedAtArrival)
         {
-            notes.Add($"no room point for unique boss(es) {string.Join(", ", rest.Select(i => area.Bosses[i]))} of {area.AreaId}: standing at arrival");
+            // A map boss with no point of its own (Vinktar Square's Avatar of Thunder, Fairgraves' island) stands deep in
+            // the map: at the arrival it was the first monster the player met, at the entrance.
+            var stand = FarCell(w, h, walkable, arrival) ?? arrival;
+            notes.Add($"no room point for unique boss(es) {string.Join(", ", rest.Select(i => area.Bosses[i]))} of {area.AreaId}: standing at {stand}, the furthest walkable cell from the arrival");
             for (int i = 0; i < rest.Count; i++)
-                Bosses((arrival.X + (i + 1) * 4, arrival.Y), "mapboss", [rest[i]]);
+                Bosses((stand.X + (i + 1) * 4, stand.Y), "mapboss", [rest[i]]);
         }
         else if (rest.Count > 0 && LabyrinthTrials.InLabyrinth(area.AreaId))
             // The Labyrinth's areas (WorldAreas IsLabyrinthArea) list Izaro's varieties as bosses, but his fight raises him
@@ -1070,6 +1105,23 @@ public static class AreaPopulation
     }
 
     static bool Near((int X, int Y) a, (int X, int Y) b, int d) => (long)(a.X - b.X) * (a.X - b.X) + (long)(a.Y - b.Y) * (a.Y - b.Y) < (long)d * d;
+
+    /// <summary>The walkable cell furthest from <paramref name="from"/>, sampled every 8 cells (a map boss without a room
+    /// point stands there rather than at the arrival, at the map's entrance).</summary>
+    static (int X, int Y)? FarCell(int w, int h, Func<int, int, bool> walkable, (int X, int Y) from)
+    {
+        (int X, int Y)? best = null;
+        long bestDistance = -1;
+        for (int y = 4; y < h; y += 8)
+            for (int x = 4; x < w; x += 8)
+            {
+                long dx = x - from.X, dy = y - from.Y, distance = dx * dx + dy * dy;
+                if (distance <= bestDistance || !walkable(x, y)) continue;
+                best = (x, y);
+                bestDistance = distance;
+            }
+        return best;
+    }
 
     sealed class SpatialPoints(int spacing)
     {
