@@ -3,7 +3,7 @@
 # The release workflow runs this; it also runs by hand in a clean checkout (it builds in place: bin\ and obj\ of Release).
 # It needs the .NET SDK and npm, and neither the client nor data\: a package never holds game files, and this refuses one that does.
 #   -Version <x.y.z[-pre]>   required
-param([Parameter(Mandatory)][string]$Version)
+param([Parameter(Mandatory)][string]$Version, [switch]$NoZip)
 
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') { throw "version '$Version' is not x.y.z or x.y.z-pre" }
@@ -184,6 +184,13 @@ do {
     $empty = @(Get-ChildItem $package -Recurse -Directory -Force | Where-Object { -not (Get-ChildItem $_.FullName -Force | Select-Object -First 1) })
     $empty | Remove-Item -Force
 } while ($empty.Count)
+
+# -NoZip: the tree under artifacts\release\LocalExile is the deliverable (it is what a deploy copies over the
+# installed server). No zip and no .sha256 are made; nothing is uploaded anywhere either way.
+if ($NoZip) {
+    Step "built $package (no zip)"
+    return
+}
 
 Step 'compressing ...'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
