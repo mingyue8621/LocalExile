@@ -601,6 +601,9 @@
   Docs: [labyrinth-trials](../docs/game/labyrinth-trials.md).
 
 ## 尚未实现
+- Breach: maps roll Unstable Breaches; a touch opens the arena and the wave. Hive, boss and rewards are pending.
+
+## Not working yet
 
 - Gateway 自己不生成的区域，其区域切换需要该种子的 `-Walkmaps` 抓取。
   游戏后来才打开的出口没有建模："teleportNdisabled" 门（竞技场的入口、回去的捷径）以打开状态创建。

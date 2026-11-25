@@ -667,6 +667,8 @@
   See [league modes](../docs/game/league-modes.md).
 - Permanent Achievements (S→C 0x124–0x127, C→S 0x123): tracks permanent achievement items (`SetId == 2`), persists
   progress account-wide, syncs packed bitsets on entry and panel open, and emits completion toasts (not yet checked live).
+- Achievements and League Challenges (S→C 0x124–0x127, C→S 0x123): tracks permanent set 2 and active league sets 79/80.
+  Progress persists account-wide, syncs packed bitsets on entry, and emits completion and milestone notices (offline).
 - Dual Wielding Mastery's different-weapon-types damage. Docs: [20](../docs/protocol/20-damage.md) §2b.
 - Passive mastery effects on defences, attributes and equipment: slot increases (helmet ES, gloves and boots armour,
   body evasion), the all-equipment and socket conditions, per-mastery attributes, six Life masteries, the full-life
