@@ -76,6 +76,13 @@ public static class BossKits
                 || id.Contains("Bond", StringComparison.Ordinal)
                 || id.Contains("Mark", StringComparison.Ordinal)
                 || id.Contains("Souls", StringComparison.Ordinal)
+                // A "…CallOnHit" effect is the payload of a hit event (LieutenantFireCallOnHit, BeyondDemonFlameCallOnHit,
+                // ProphecyStormCallOnHit): every one of them shares storm_call's ActiveSkills row and carries no Animation
+                // row of its own, so playing it as a swing asks the actor for SpellAreaOfEffectLightning. A skeleton whose
+                // .ao is the fire one has no such row: the client logged "PlayAnimation failed! [type:
+                // SpellAreaOfEffectLightning] [object: LabyrinthLieutenantSkeletonMelee]" and then dereferenced the null
+                // animation set at +0x1ba5e6a (live 2026-11-25, Izaro's lieutenants). The hit's own event plays it.
+                || id.Contains("CallOnHit", StringComparison.Ordinal)
                 // This action drives the arena's ArakaaliTurret_A/B objects, not a standalone hit. Without them its
                 // native shuffle dereferences an empty turret list (live Arakaali crash at 0x141c7a0e4).
                 || id.StartsWith("SpiderGodActivateLaser", StringComparison.Ordinal)

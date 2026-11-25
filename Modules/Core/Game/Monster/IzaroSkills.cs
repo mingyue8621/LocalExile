@@ -78,9 +78,13 @@ static class IzaroSkills
         new(4768, "Thorns", 799.0 / 1333, 0, 40, Shape.Self, 0, 0, 15, Buff: "bull_thorns", BuffSeconds: 5),
         // Lieutenant of the Mace: GlacialHammer is its Melee (attack1_sword_shield).
         new(1013, "Burning Hammer", 732.0 / 1066, 0, 12, Shape.Ahead, 12, 0, 25),
-        // Lieutenant of the Mace: Storm Call (monster_cast_spell_%_on_attack_hit; cast here as a skill of its own), its mark
-        // bursting base_skill_effect_duration 2.95 s later at the cell; its radius is ours.
-        new(3078, "Storm Call", 799.0 / 1333, 0, 60, Shape.Circle, 20, 0, 15, DelaySeconds: 2.95, MonsterDamage: (DamageType.Fire, 0.8, 1.2)),
+        // It gets no Storm Call. LieutenantFireCallOnHit (3078) is the attack-hit event's payload
+        // (monster_cast_spell_%_on_attack_hit), not a skill of its own: it shares storm_call's ActiveSkills row and carries
+        // no Animation row, so the client asks the actor for SpellAreaOfEffectLightning. LieutenantFire.ao has no such row,
+        // the client logged "PlayAnimation failed! [type: SpellAreaOfEffectLightning] [object:
+        // LabyrinthLieutenantSkeletonMelee]" and then dereferenced the null animation set at +0x1ba5e6a -- eight crashes,
+        // all of them in 1_Labyrinth_boss_1, the room this lieutenant is in (live 2026-11-25). Its hit event fires it
+        // officially; the server does not run that event, and casting it by hand is what asked for the missing row.
         // Lieutenant of the Bow: rain_of_arrow_bow contact 533 of 1166 ms (its act plays lightningarrows.ao); the arrows land
         // a moment later (ours).
         new(1537, "Rain of Arrows", 533.0 / 1166, 0, 60, Shape.Circle, 18, 0, 15, DelaySeconds: 0.5),
