@@ -54,6 +54,20 @@ public static partial class MapEssences
         var catalog = SkillsFor(conn);
         var kit = new List<MonsterKitSkill>();
         var seen = new HashSet<int>();
+        // The rare leads its kit with its own combat effect as a pathing swing. SpawnPackMonster does that for an
+        // extra-only kit only when the variety's granted effect builds a skill row; when it does not, the first kit entry
+        // is an essence summon or spell, and an attack that plays where the actor stands has no chase in the AI
+        // (PlanMonsterAi walks only a monster whose attack is not InPlace). The rare then stands in the broken crystal and
+        // does nothing between the periodic caster's pulses — live 2026-11-26, a released Carrion Swarmer at (1102, 969)
+        // for four minutes while the player fought it 26 cells away. BossKits.WithExtra drops this entry when the built
+        // kit already leads with the same effect, so a monster that already has its swing is unchanged.
+        int own = MavenNucleus.CombatEffect(catalog, variety);
+        if (own >= 0 && BossKits.AttackFor(conn, variety, level, own, (ushort)0x4000) is { InPlace: false } swing
+            && swing.Summon is null && !swing.Damage.IsZero)
+        {
+            kit.Add(new(own, swing, 0));
+            seen.Add(own);
+        }
         // A summon another essence consumer already drives is not cast twice. Contempt's chasing spirits come from the
         // EssenceDaemonSummonMovingKaruiSpirit1 monster mod, which Monster/Mods/EssenceContempt.cs casts on its own cycle
         // with its own cap, defences and parent lifecycle; that mod appears from tier 5 up. While it is on the rare, the
@@ -88,7 +102,11 @@ public static partial class MapEssences
                 // AttackFor reach is the variety's aggro range (60+), and MonsterSurround stands a ranged chaser off at
                 // reach - 1 — so a long-reach essence spell in the kit made the rare back away to its aggro edge instead
                 // of closing in. The spell keeps the rare's own attack reach, which is where it fights from.
-                if (attack.Range > variety.AttackRange) attack = attack with { Range = variety.AttackRange };
+                // An attack that plays where the actor stands is the exception while the kit has nothing that paths: no
+                // reach to clamp to would leave the rare unable to cast (out of 6 cells) and unable to walk to them.
+                bool pathingKit = kit.Any(k => !k.Attack.InPlace);
+                if (attack.Range > variety.AttackRange && (!attack.InPlace || pathingKit))
+                    attack = attack with { Range = variety.AttackRange };
                 // The summon count scales with the essence tier (the tier-7 observation is the maximum).
                 if (attack.Summon is { } summon)
                     attack = attack with { Summon = summon with { Count = ScaledSpellCount(effect, tier, summon.Count) } };

@@ -143,7 +143,9 @@ public static partial class MapEssences
             mods = MonsterModRolls.Create([.. mods.Mods, empowered.Roll(ModSection.Implicit, AreaRng(player))], mods.NameWords, MonsterRarity.Rare, level);
         // Only the rare casts the essences' spells: they go into its kit as specials with the skill's cooldown.
         var essenceKit = EssenceKit(player, variety, level, monolith.Essences, mods);
-        RemoveEncasedPreviews(player, monolith);
+        // Awaited: the frozen previews must leave the client before the released monsters arrive at their cells, or the
+        // client keeps the encased copy (no life bar, no damage, no movement) under the released one.
+        await RemoveEncasedPreviews(player, monolith);
         // Established: the rare emerges from the crystal's own cell. The monolith's blocker is still registered until
         // the break is presented, so the proposed placement's nearest-clear search would spawn it offset from the crystal.
         uint monster = await SpawnMonster(player, variety, level, MonsterRarity.Rare,
@@ -158,6 +160,14 @@ public static partial class MapEssences
                 Keep(player, area);
             });
         if (monster == 0) return false;
+        // One line per release: what the rare attacks with (a monster whose attack plays where it stands never chases),
+        // what its kit offers, and whether it can be hurt at all — the three things a "the released monster will not move
+        // or take damage" report has to be told apart by.
+        if (player.Area.Monsters.TryGetValue(monster, out var released))
+            Console.WriteLine($"[map-content] essence released 0x{monster:x} ({variety.Name}@{level}): attack "
+                + $"0x{released.Attack?.SkillId ?? 0:x4} inPlace={released.Attack?.InPlace} range={released.Attack?.Range:0.#} "
+                + $"kit=[{string.Join(',', released.Kit.Select(k => $"0x{k.Attack.SkillId:x4}{(k.Attack.InPlace ? "!" : "")}"))}] "
+                + $"cannotBeDamaged={released.Effects[Stat.BaseCannotBeDamaged]} asleep={released.Asleep} scripted={released.Scripted}");
         // The pack's magic monsters release with the rare: each mini crystal breaks and spawns its monster. Essence
         // modifiers can only appear on rare or unique monsters (the wiki), so the minis are ordinary magic monsters of
         // the pack — no essence mods; the essence reward still drops only from the rare, through Drops.

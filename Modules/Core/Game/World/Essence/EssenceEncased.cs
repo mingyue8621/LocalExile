@@ -103,17 +103,19 @@ public static partial class MapEssences
         return await SpawnEncasedPreviews(conn, cleaned);
     }
 
-    /// <summary>Removes the encased previews when the crystal breaks; the released monsters take their place.</summary>
-    public static void RemoveEncasedPreviews(Player conn, Monolith monolith)
+    /// <summary>Removes the encased previews when the crystal breaks; the released monsters take their place. Awaited,
+    /// and sent to every client of the instance: a removal left in flight left the frozen, invulnerable preview standing
+    /// exactly where the released monster spawns, so the client kept showing (and hit-testing) the encased copy.</summary>
+    public static async Task RemoveEncasedPreviews(Player conn, Monolith monolith)
     {
         var ids = new List<uint> { monolith.Preview };
         ids.AddRange(monolith.Minis.Select(m => m.Preview));
+        var members = Members(conn).ToArray();
         foreach (uint id in ids)
-            if (id != 0 && conn.Area.Monsters.Remove(id, out var monster))
-            {
-                monster.Dead = true; monster.Life = 0; monster.ActionGeneration++;
-                // The supported world send, not the minion output queue: this runs on a spell/release continuation.
-                _ = SendWorldRemoval(conn, id, "essence encased ends");
-            }
+        {
+            if (id == 0 || !conn.Area.Monsters.Remove(id, out var monster)) continue;
+            monster.Dead = true; monster.Life = 0; monster.ActionGeneration++;
+            foreach (var member in members) await SendWorldRemoval(member, id, "essence encased ends");
+        }
     }
 }
