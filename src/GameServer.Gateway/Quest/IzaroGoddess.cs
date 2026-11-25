@@ -38,9 +38,13 @@ public static class IzaroGoddess
     public static readonly double[] VolleyContacts = [0.566, 0.733, 0.9, 1.066, 1.233, 1.4];
     public const float VolleyHeight = -318.593f;
 
-    /// <summary>Her actor's Animation.dat types (GoddessOfJustice.act): SpellProjectileFire plays <c>volly</c>,
-    /// SpellAreaOfEffect <c>channel</c>.</summary>
-    public const byte VolleyAnimation = 24, SummonAnimation = 22;
+    /// <summary>What her actor can play at all. GoddessOfJustice.act binds SpellProjectileFire to <c>volly</c> and
+    /// SpellAreaOfEffect/SpellProjectile/Channel to <c>channel</c>, but her LabyrinthBossStatue.ao holds only death,
+    /// emerge, flinch, idle, spellcast_aoe, spellcast_projectile and vanish. The client finds no clip for those types,
+    /// leaves her animation set empty and dies counting its release events (live 2026-11-25: +0x1ba5e6a, +0x180 = 0,
+    /// clip index -1, on every volley). Melee is the only type that maps to a clip she has (<c>spellcast_aoe</c>), so
+    /// every cast of hers plays as Melee and the server draws her mortars itself.</summary>
+    public const byte CastAnimation = 1;
 
     /// <summary>The Spirit Mortar: its cooldown (GrantedEffectsPerLevel), its speed (Projectiles.dat), its fire damage as
     /// FloatStatsValues of the monster damage at her level (StatInterpolations 3: 0.6 to 1 below the row at level 66, 0.8 to

@@ -132,8 +132,9 @@ static class GoddessOfJustice
         await Send(player, InstanceProtocol.ActionEnded(id), null);
     }
 
-    // Her volley: the Spirit Mortar's action at the player's cell, which the client plays and fires (SkillsFor). The server
-    // lands the same mortars there, unseen, one at each of the volly clip's contacts, for their hits.
+    // Her volley: her cast animation at the player's cell (Melee, the one type her actor has a clip for; her skill's
+    // action would play SpellProjectileFire, whose clip her .ao lacks), while the server throws the Spirit Mortars
+    // itself, one at each of the volly clip's contacts.
     static async Task Volley(Player player, uint id, SpawnedMonster goddess, Func<bool> fighting)
     {
         int action;
@@ -143,11 +144,10 @@ static class GoddessOfJustice
         if (!await SendMonsterAction(player, id, goddess, action, () =>
         {
             started = AreaTime(player);
-            var from = goddess.Walk.Position(started);
             aim = player.Walk.Position(started);
             return [.. InstanceProtocol.ActionEnded(id),
-                .. InstanceProtocol.ActionStarted(id, from.X, from.Y, aim.X, aim.Y, MortarSkillId, player.NextActionSequence(), player.MonsterOrderFlags)];
-        }, $"0x01ab the Goddess of Justice 0x{id:x} lobs her Spirit Mortars")) return;
+                .. InstanceProtocol.ActorAnimation(id, (float)IzaroGoddess.VolleySeconds, IzaroGoddess.CastAnimation)];
+        }, $"0x01d1 the Goddess of Justice 0x{id:x} lobs her Spirit Mortars")) return;
         var mortar = MortarAttack(player, goddess);
         var session = ProjectilesFor(player);
         session.Advance();
@@ -157,7 +157,7 @@ static class GoddessOfJustice
             double release = started + cast * IzaroGoddess.VolleyContacts[Math.Min(i, IzaroGoddess.VolleyContacts.Length - 1)] / IzaroGoddess.VolleySeconds;
             session.Schedule(ProjectileRuntime.Time(release), () => fighting() && player.PlayerLife > 0 && !InGracePeriod(player),
                 () => Mortar(session, player, id, goddess, IzaroGoddess.SpiritMortar, aim,
-                    new HostileProjectileOffense(id, goddess, mortar, action, "the Goddess of Justice's Spirit Mortar"), hidden: true));
+                    new HostileProjectileOffense(id, goddess, mortar, action, "the Goddess of Justice's Spirit Mortar")));
         }
     }
 
@@ -180,7 +180,7 @@ static class GoddessOfJustice
         // Not during a volley or a beam.
         if (!await Hold(player, goddess, 0.5)) return new double[spots.Count];
         double now = AreaTime(player);
-        await Send(player, [.. InstanceProtocol.ActionEnded(id), .. InstanceProtocol.ActorAnimation(id, 0.5f, IzaroGoddess.SummonAnimation)],
+        await Send(player, [.. InstanceProtocol.ActionEnded(id), .. InstanceProtocol.ActorAnimation(id, 0.5f, IzaroGoddess.CastAnimation)],
             $"0x01d1 the Goddess of Justice 0x{id:x} calls her Guardians");
         var session = ProjectilesFor(player);
         session.Advance();
@@ -215,7 +215,8 @@ static class GoddessOfJustice
             Speed = speed, Radius = 2, Count = 1, Lobbed = true, Range = distance, DirectDamage = false,
             EndArea = damages ? new ProjectileAreaRecipe("Goddess of Justice mortar", IzaroGoddess.MortarRadius) : null,
             EndAreaReasons = damages ? new HashSet<ProjectileEndReason> { ProjectileEndReason.Landing, ProjectileEndReason.Terrain } : null,
-            // The client draws her Spirit Mortars itself (its action), so the server's are not shown.
+            // Her cast is a plain animation now (her skill's action crashed the client on every volley), so the server's
+            // mortars are the ones the player sees.
             HideVisual = hidden,
         };
         var presentation = (MonsterProjectilePresentation(Game.SkillsFor(player).Clips(metadata), distance / speed) ?? new())
