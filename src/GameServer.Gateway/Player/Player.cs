@@ -380,8 +380,9 @@ public sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange
     public bool Scripted { get; init; }
     /// <summary>When this unique's next AI state line goes to the log (a boss that stands still and never swings says why).</summary>
     public double NextAiTrace;
-    /// <summary>Non-blocking actor (e.g. Mirage Warrior): excluded from living collision so walkers pass through it.</summary>
-    public bool NonBlocking { get; init; }
+    /// <summary>Non-blocking actor (e.g. Mirage Warrior): excluded from living collision so walkers pass through it. Read
+    /// each frame, so a caller may give a monster its body later (false), in the area's frame.</summary>
+    public bool NonBlocking { get; set; }
     public uint? OwnerId { get; init; }
     // The monster whose summoning skill brought it (MonsterAttack.Summon), whether its death gives no experience or items
     // (summoned_monsters_no_drops_or_experience), and when its own summoning skill is off cooldown.
@@ -420,6 +421,9 @@ public sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange
     /// <summary>An encounter's own entrance: hits do nothing and no chill, freeze or shock lands until its script clears it
     /// (Izaro rising on his elevator; live, the ailments landed while hits did nothing).</summary>
     public bool EntranceGrace { get => Ailments.Grace; set => Ailments.Grace = value; }
+    /// <summary>Optional non-lethal life floor owned by an encounter controller: when damage would reduce life to 0,
+    /// life stops at 1 and this callback runs synchronously in the area's frame instead of killing the monster.</summary>
+    public Action<SpawnedMonster>? OnNonLethalZero;
     // No damage, ailments, impale or hit reaction while a scripted grace runs.
     public bool DamageImmune;
     public bool Invulnerable => DamageImmune || QuestAlly || KingGrace || RitualGrace || FetishGrace || EntranceGrace || LifePhases?.Active == true;
@@ -703,6 +707,7 @@ public sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange
     /// player who simply walked away (live 2026-11-08); the data's own row keeps the chase as long as the game's.</summary>
     public int ChaseRange => chaseRange > 0 ? chaseRange : 2 * aggroRange;
     public uint MaxLife { get; set; } = maxLife;
+    public uint? MaxLifeWithoutParty { get; init; }
     /// <summary>Its life; a change goes to every client at the frame's end (AreaLife).</summary>
     public uint Life { get; set { if (field == value) return; field = value; LifeChanged?.Invoke(); } } = maxLife;
     internal Action? LifeChanged;
@@ -900,8 +905,13 @@ public sealed partial class Player(AreaLayout layout, uint ticket, uint seed) : 
 
     public readonly CharacterBuildImports.Session BuildImport = new();
     public bool BuildFinalized;
-    public bool Controlled, ControlledPrepared;
-    public double ControlledNextAction, ControlledDeadSince = double.NaN;
+    /// <summary>False for a player the server drives (Program.DriveByServer): nothing reaches a client, and it answers no
+    /// window, vote or prompt.</summary>
+    public bool HasClient => Connection.Driven is null;
+    /// <summary>Whether its account's progress counts (achievements, play time, kill and death counts): a client's does.</summary>
+    public bool EarnsProgress => Connection.Driven?.EarnsProgress ?? true;
+    /// <summary>Whether it is found by name or account (whispers, /who, friends, the guild, invites): a client's is.</summary>
+    public bool Listed => Connection.Driven?.Listed ?? true;
     public AreaLayout Layout { get; private set; } = layout;
     public uint Ticket => ticket;
     public uint Seed => seed;
@@ -1294,7 +1304,7 @@ public sealed partial class Player(AreaLayout layout, uint ticket, uint seed) : 
     public InstanceProtocol.UseSkillAtLocation? HeldMove;
     public readonly PlayerHitRecovery HitRecovery = new();
     public readonly WardState Ward = new();
-    public readonly AntiquarianCombatState Antiquarian = new();
+    public readonly WardBreakState WardBreak = new();
     public double WitchbaneImmunityUntil;
     public readonly TimedLifeRecovery EnduringCryRecovery = new();
     /// <summary>Petrified Blood's buff, reservation, deferred hit loss and life-cost rules (Combat/PetrifiedBlood.cs).</summary>

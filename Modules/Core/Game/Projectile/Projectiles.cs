@@ -269,6 +269,7 @@ public static partial class Game
                     try
                     {
                         DrainPendingExplosiveDetonations();
+                        DrainInfernalBlowDeaths();
                         TickChannelTriggers(Player, this, AreaTime(Player));
                         Runtime.AdvanceTo(Math.Max(Runtime.Now, ProjectileRuntime.Time(AreaTime(Player))));
                     }
@@ -291,6 +292,7 @@ public static partial class Game
                 try
                 {
                     DrainPendingExplosiveDetonations();
+                    DrainInfernalBlowDeaths();
                     Runtime.AdvanceTo(at);
                 }
                 finally
@@ -883,7 +885,7 @@ public static partial class Game
             if (!Player.Area.Monsters.TryGetValue(contact.Target.Id, out var target) || target.Dead || target.Life == 0 || target.WorldHidden
                 || ArenaHazards.Untargetable(Player, target) || Key(contact.Target.Id, target) != contact.Target)
             {
-                if (Player.ControlledPrepared)
+                if (!Player.HasClient)
                     Console.WriteLine($"[bots] {CharacterName(Player)} {contact.Projectile.Profile.Id} shot ends on 0x{contact.Target.Id:x}: "
                         + $"the target is not this instance's living monster");
                 return ProjectileHitResult.Miss;
@@ -931,7 +933,7 @@ public static partial class Game
                 hitChance = AttackHitChanceAt(Player, contact.Target.Id, target, at, accuracy);
                 if (!accuracy.CannotBeEvaded && !target.AttackEvasion.Hits(hitChance, at, Player.AttackAccuracyRandom))
                 {
-                    if (Player.ControlledPrepared)
+                    if (!Player.HasClient)
                         Console.WriteLine($"[bots] {CharacterName(Player)} {contact.Projectile.Profile.Id} shot evaded by 0x{contact.Target.Id:x} "
                             + $"({target.Label}): hit chance {hitChance}%, accuracy {accuracy.Rating}");
                     return ProjectileHitResult.Miss;
@@ -976,17 +978,17 @@ public static partial class Game
             double more = contact.Multiplier * (contact.Phase > 0 ? shot.ReturnMultiplier : 1);
             if (ReferenceEquals(shot.BrandedTarget, target))
                 more *= Math.Max(0, 1 + GolemStat(shot.SkillStats, Stat.TriggerBrandSupportHitDamagePlusPctFinalVsBrandedEnemy) / 100.0);
-            if (!shot.Spell && shot.FarShot) more *= AntiquarianEffects.FarShot(contact.Projectile.Distance);
-            if (!shot.Spell && shot.PointBlank) more *= AntiquarianEffects.PointBlank(contact.Projectile.Distance);
+            if (!shot.Spell && shot.FarShot) more *= WardBreakEffects.FarShot(contact.Projectile.Distance);
+            if (!shot.Spell && shot.PointBlank) more *= WardBreakEffects.PointBlank(contact.Projectile.Distance);
             if (shot.ShatteringSteelAmmoHitBonus > 0)
                 more *= 1 + shot.ShatteringSteelAmmoHitBonus * Math.Clamp((70 - contact.Projectile.Distance) / 60, 0, 1);
             var baseHit = contact.IsArea ? shot.AreaHit ?? shot.Hit : shot.Hit;
             // One stat build per contact: every input below reads the same owner state (about 120 µs per build).
             var player = shot.ActualCaster ?? CharacterPlayerStats(Player);
             var packet = new SkillDamageContext(shot.Spell ? SkillHitKind.Spell : SkillHitKind.Attack, player).Hit(baseHit).Scale(more * chainsMore);
-            var gambler = GamblerFor(player);
+            var hitRolls = HitRollsFor(player);
             var rolled = WithConditionalSupportDamageLocked(Player, shot.SkillStats, !shot.Spell, target,
-                GameEvents.WithOutgoingDamage(Player, player, target, WithIntimidatingCryExert((gambler with { DamageMorePct = 0 })
+                GameEvents.WithOutgoingDamage(Player, player, target, WithIntimidatingCryExert((hitRolls with { DamageMorePct = 0 })
                     .ForSkill(name => name is var k ? shot.SkillStats.GetValueOrDefault(k) : 0, shot.Spell,
                         finalRepeat: contact.Projectile.Use.RepeatsLeft == 0), shot.IntimidatingCryExerted)
                     .ForWeapon(shot.WeaponLocal).RollOutgoingHit(packet, random)), at);
@@ -1010,7 +1012,7 @@ public static partial class Game
                 && (shot.ProjectileAttack ?? (shot.Effect < 0 || SkillsFor(Player).IsProjectile(shot.Effect)));
             int additionalTaken = projectileAttack ? EnsnaredProjectileAttackTaken(target, at) : 0;
             var (damage, _, mitigated) = MonsterHitDamage(target, rolled, critical, !shot.Spell, at, resonance.Mods,
-                resonance.Penetration, gambler.InvertsResistance(random, shot.SkillResistanceInversionChance),
+                resonance.Penetration, hitRolls.InvertsResistance(random, shot.SkillResistanceInversionChance),
                 random, trapOrMine: shot.FromTrapOrMine,
                 additionalTakenPct: additionalTaken);
             if (critical) damage = DamageModel.CriticalDamage(damage, multiplier);
@@ -1113,7 +1115,7 @@ public static partial class Game
             if (critical) Enqueue(() => MaybeCreateProfaneGround(Player, target.Walk.Position(at)));
             // A party bot's arrow, said out loud: its own client never shows the party whether the shot landed, so a
             // report of "the bots' shots do nothing" cannot be checked any other way.
-            if (Player.ControlledPrepared)
+            if (!Player.HasClient)
                 Console.WriteLine($"[bots] {CharacterName(Player)} {contact.Projectile.Profile.Id} shot hits 0x{contact.Target.Id:x} "
                     + $"({target.Label}) for {damage}{(critical ? " critical" : "")}, life {hit.Value.Life}/{target.MaxLife}, "
                     + $"hit chance {hitChance}%");
@@ -1153,7 +1155,7 @@ public static partial class Game
                     LandUnearth(corpse, (x, y));
             }
             if (value.Kind == ProjectileEventKind.End && p.ParentId == 0
-                && (ServerTrace.Projectiles || Player.ControlledPrepared) && !Quiet(p.Use.Payload))
+                && (ServerTrace.Projectiles || !Player.HasClient) && !Quiet(p.Use.Payload))
                 Console.WriteLine($"[gateway] {Player.Connection.Remote} projectile end use={p.UseId} entity={p.Id}"
                     + $" reason={value.Reason} position={value.Position} metadata={p.Profile.Id}"
                     + $" grid={Player.Layout.Id}_seed{Player.Seed} blocked={ProjectileGrid.Blocks(Player.Layout.Id, Player.Seed, x, y)?.ToString() ?? "unknown"}");

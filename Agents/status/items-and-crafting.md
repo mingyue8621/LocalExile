@@ -744,8 +744,8 @@
   Docs: [13](../docs/protocol/13-items.md), "Currency metamod protection".
 - Repeat currency use by type on passives (`C→S 0x78`) and world objects (`C→S 0x79`) routes to Tattoo/Scouring,
   Strongbox and Essence handlers (offline verified; live client check pending).
-- Divine Vessels capture Pantheon souls in matching Atlas maps into the Map Device and unlock upgrades at Sin
-  (not checked live).
+- Divine Vessels drop as the one-cell base used by the fragment stash. Both empty base types can capture
+  Pantheon souls in matching Atlas maps and unlock upgrades at Sin (soul capture not checked live).
   Docs: [pantheon](../docs/game/campaign/pantheon.md).
 
 ## Not working yet

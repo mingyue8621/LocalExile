@@ -1906,6 +1906,11 @@ later. Spells, channels and Ground Slam's wave never repeat: a clip's number of 
 deals damage (Cyclone's `whirl_*` has two per loop). The support form `skill_number_of_additional_hits` is not read, as
 no source shows whether the two add.
 
+Double Strike of Momentum uses its own stage counter (BuffDefinitions 2325). The client attack-speed calculator at
+`0x142706610` multiplies speed by `(100 + double_strike_current_stages × double_strike_attack_speed_+%_final_per_stage) / 100`.
+The server samples each pair's speed when reserving the use and applies the stage as that pair begins. The two contacts
+keep the pair's timing.
+
 **Ground Slam's wave** (`SkillArea.GroundSlamWave`): the skills whose ActionTypes action is `DistanceScaledGroundSlam`
 (GrantedEffects GroundSlam, GroundSlamAltX, GroundSlamAltY, GroundSlamRoyale, PlaytestSlam) hit a sector from the
 player whose front advances to the skill's reach; each monster is hit as the front reaches it, and the rest of the
@@ -4124,8 +4129,8 @@ buffs), `Modules/Core/Game/Combat/Resources/Charges.cs` (the Gateway glue) and `
   `frenzy_charge_duration_+%_per_frenzy_charge` × the Frenzy Charges after the gain) × (1 +
   `power_charge_duration_+%_final`), floored to milliseconds. Gaining a charge restarts the duration of every charge of
   its type, also at the maximum, where none is added, and all charges of a type expire together (poewiki). The maximum
-  is `ChargePanelStats`' (3 from Character.ot plus `max_*_charges`, the combined power-and-endurance and
-  power-and-frenzy mods and `maximum_frenzy_power_endurance_charges`; verified on the native Charges tab with all three
+  is `ChargePanelStats`' (3 from Character.ot plus `max_*_charges`, the combined power-and-endurance
+  mod and `maximum_frenzy_power_endurance_charges`; verified on the native Charges tab with all three
   baseline rows at `0 / 3`); the minimum is `base_minimum_*_charges` +
   `minimum_frenzy_power_endurance_charges`, at most the maximum, and is always held; a gain adds on top of what the
   character has (Path of Building: max(charges, min(maximum, minimum)); poewiki: the maximum takes priority). A lower

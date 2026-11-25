@@ -1,7 +1,11 @@
 using GameServer.Core.Protocol.Instance;
 using GameServer.Core.World;
 
-static partial class Game
+using static Game;
+
+namespace GameServer.Modules.PlayerBots;
+
+public static partial class BotPlay
 {
     // ---- a party bot's own decisions in a fight ----
     // Everything here runs only for a controlled player (ControlledPlayers), never for a human's connection: which enemy
@@ -148,7 +152,7 @@ static partial class Game
             if (life ? use.LifePerUse <= 0 : use.ManaPerUse <= 0) continue;
             plan.FlaskAt = now + 1.2;
             await UseFlask(conn, held.X);
-            Console.WriteLine($"[bots] {CharacterName(conn)} drinks a {(life ? "life" : "mana")} flask: " +
+            Console.WriteLine($"[bots] {Program.CharacterName(conn)} drinks a {(life ? "life" : "mana")} flask: " +
                 $"{conn.PlayerLife}/{conn.PlayerMaxLife} life, {conn.PlayerMana}/{mana} mana");
             return true;
         }

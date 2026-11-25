@@ -171,7 +171,7 @@ public sealed record SharedMonster(uint Id, SharedMonsterOrigin Origin, SpawnedM
 public partial class Program
 {
     /// <summary>The connections in game now (entered an area, not yet gone), for what plays beside them without one of its
-    /// own: server-driven players (the PlayerBots module) look up the towns players are in.</summary>
+    /// own: whoever drives a player with no client looks up the towns players are in.</summary>
     public static readonly System.Collections.Concurrent.ConcurrentDictionary<Player, byte> InGame = new();
 
     /// <summary>The connections in this one's party, itself included (filled by the social module, which owns the parties).
@@ -238,7 +238,7 @@ public sealed partial class Player
     }
     /// <summary>This player's shares of the instance host's kills, for its own loop to apply (SharedKills.cs).</summary>
     public readonly System.Collections.Concurrent.ConcurrentQueue<Func<Player, Task>> KillShares = new();
-    /// <summary>The party this player is in, counting the player (1: none): Social's parties and PlayerBots' (SetPartySize).
+    /// <summary>The party this player is in, counting the player (1: none): Social's parties, and what else sets it (SetPartySize).
     /// Each member beyond the first gives Game.PartyBonus.</summary>
     public int PartySize = 1;
     public readonly Dictionary<(uint Peer, ushort Skill), AuraCatalog.Aura> ReceivedAuras = [];

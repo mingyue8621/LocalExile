@@ -175,7 +175,7 @@ public static class BanditChoices
         && (player.Character.HasQuestFlag(bandit.Reward) || !Finished(player.Character.HasQuestFlag));
 
     static bool CanVote(Player player, Bandit bandit) =>
-        !player.Controlled && !player.Closed && !HardcoreProgressBlocked(player)
+        player.HasClient && !player.Closed && !HardcoreProgressBlocked(player)
         && Available(player, bandit) && !player.Character.HasQuestFlag(bandit.Killed)
         && !Finished(player.Character.HasQuestFlag) && !Chosen(player.Character.HasQuestFlag);
 
@@ -191,7 +191,7 @@ public static class BanditChoices
         if (CanHoldFor(player, bandit)) return true;
         if (instance is null) return false;
         foreach (var other in instance.Presence.PlayersExcept(player.Id))
-            if (other is { Controlled: false, Closed: false, LeavingArea: false }
+            if (other is { HasClient: true, Closed: false, LeavingArea: false }
                 && ReferenceEquals(other.Instance, instance) && CanHoldFor(other, bandit))
                 return true;
         return false;
@@ -373,7 +373,7 @@ public static class BanditChoices
 
     public static async Task VoteAnswer(Player player, bool help)
     {
-        if (player.Controlled || In(player) is not { } bandit || player.Instance is not { } instance)
+        if (!player.HasClient || In(player) is not { } bandit || player.Instance is not { } instance)
             return;
 
         VoteBroadcast? broadcast = null;
@@ -415,7 +415,7 @@ public static class BanditChoices
     /// character helped is put back in its ally state too: a fresh instance spawns it as the held hostile again.</summary>
     public static async Task OnAreaGenerated(Player player)
     {
-        if (player.Controlled || player.Closed || player.LeavingArea || In(player) is not { } bandit) return;
+        if (!player.HasClient || player.Closed || player.LeavingArea || In(player) is not { } bandit) return;
         if (Allied(player, bandit)) await AllyLeaderInArea(player, bandit);
         if (player.Instance is not { } instance || !HasActiveVote(instance)) return;
 
@@ -484,7 +484,7 @@ public static class BanditChoices
     /// <summary>Updates or resolves an active Bandit vote when a participant leaves the area or disconnects.</summary>
     public static async Task OnPlayerLeaving(Player player, string why = "left the area")
     {
-        if (player.Controlled) return;
+        if (!player.HasClient) return;
         string name = CharacterName(player);
 
         if (player.Instance is { } instance && HasActiveVote(instance))
@@ -511,7 +511,7 @@ public static class BanditChoices
     /// human leaves or is kicked from a party, broadcasting or resolving immediately so votes never deadlock.</summary>
     public static async Task OnPartyChanged(Player member)
     {
-        if (member.Controlled) return;
+        if (!member.HasClient) return;
         InstanceState[] instances;
         lock (VoteGate)
             instances = [.. ActiveVotes.Where(e => !e.Value.Resolved).Select(e => e.Key)];
@@ -838,7 +838,7 @@ public static class BanditChoices
 
     static void EnsureObserverLocked(PartyVote session, Player player)
     {
-        if (player.Controlled || player.Closed || player.LeavingArea) return;
+        if (!player.HasClient || player.Closed || player.LeavingArea) return;
         string name = CharacterName(player);
         session.Observers.RemoveAll(o => o.Closed || o.LeavingArea
             || string.Equals(CharacterName(o), name, StringComparison.OrdinalIgnoreCase));
@@ -853,7 +853,7 @@ public static class BanditChoices
         {
             var members = provider(anchor);
             var liveParty = new HashSet<string>(
-                members.Where(m => !m.Controlled && !m.Closed && !ReferenceEquals(m, exclude)).Select(CharacterName),
+                members.Where(m => m.HasClient && !m.Closed && !ReferenceEquals(m, exclude)).Select(CharacterName),
                 StringComparer.OrdinalIgnoreCase);
             ulong instanceNumber = anchor.InstanceNumber;
             session.Participants.RemoveAll(p => p.State == InstanceNpcs.VoteStateWaitingToEnterArea
@@ -871,7 +871,7 @@ public static class BanditChoices
         HashSet<string> names = new(StringComparer.OrdinalIgnoreCase);
         void TryAdd(Player? candidate)
         {
-            if (candidate is not { Controlled: false, Closed: false, LeavingArea: false }
+            if (candidate is not { HasClient: true, Closed: false, LeavingArea: false }
                 || ReferenceEquals(candidate, exclude) || !ReferenceEquals(candidate.Instance, instance))
                 return;
             if (names.Add(CharacterName(candidate))) result.Add(candidate);
@@ -892,7 +892,7 @@ public static class BanditChoices
         var names = new HashSet<string>(list.Select(CharacterName), StringComparer.OrdinalIgnoreCase);
         void TryAdd(Player? candidate)
         {
-            if (candidate is not { Controlled: false, Closed: false, LeavingArea: false }
+            if (candidate is not { HasClient: true, Closed: false, LeavingArea: false }
                 || ReferenceEquals(candidate, exclude) || !ReferenceEquals(candidate.Instance, instance))
                 return;
             if (names.Add(CharacterName(candidate))) list.Add(candidate);
@@ -907,7 +907,7 @@ public static class BanditChoices
         if (partyMembersProvider is not { } provider) return [];
         List<Player> waiting = [];
         foreach (var member in provider(player)
-            .Where(m => !m.Controlled && !m.Closed && !ReferenceEquals(m.Instance, instance))
+            .Where(m => m.HasClient && !m.Closed && !ReferenceEquals(m.Instance, instance))
             .OrderBy(CharacterName, StringComparer.OrdinalIgnoreCase))
         {
             if (!CanVote(member, bandit)) continue;

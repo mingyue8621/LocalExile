@@ -54,7 +54,7 @@ static class BotGear
     }
 
     // One of the two highest bases of the classes a character of this level can wear (DropLevel), with the tag if given, and
-    // only one whose own attribute requirements the character's allocation meets (ControlledPlayers.GearFitsClass): worn
+    // only one whose own attribute requirements the character's allocation meets (BotHooks.GearFitsClass): worn
     // anyway it would read "requirements not met" and give nothing. When nothing of that class fits at all (a low-level
     // caster asked for strength armour) the unfiltered pick is kept: better than an empty slot.
     static ItemCatalog.BaseType? Best(string[] classes, CharacterClass cls, int level, Random random, string? tag = null)
@@ -64,7 +64,7 @@ static class BotGear
                 && t.Id.StartsWith("Metadata/Items/", StringComparison.Ordinal) && !t.Id.Contains("Demigod", StringComparison.Ordinal)
                 && !t.Id.Contains("Royale", StringComparison.Ordinal) && !t.Id.Contains("Talisman", StringComparison.Ordinal)
                 && (tag is null || t.Tags.Contains(tag) || !t.Tags.Any(g => g.EndsWith("_armour", StringComparison.Ordinal) || g.EndsWith("_shield", StringComparison.Ordinal)))
-                && (!byAttributes || (ControlledPlayers.GearFitsClass?.Invoke(cls, Math.Max(1, level), t) ?? true)));
+                && (!byAttributes || BotPlay.GearFitsClass(cls, Math.Max(1, level), t)));
         var fitting = Candidates(true).OrderByDescending(t => t.DropLevel).Take(2).ToList();
         if (fitting.Count == 0) fitting = Candidates(false).OrderByDescending(t => t.DropLevel).Take(2).ToList();
         return fitting.Count == 0 ? null : fitting[random.Next(fitting.Count)];
@@ -89,7 +89,7 @@ static class BotGear
                 _ => OffHand,
             };
             if (slot is MainHand) firstHand = false;
-            var skin = ControlledPlayers.BotSkin?.Invoke(t.Id, seed);
+            var skin = BotPlay.BotSkin(t.Id, seed);
             if (t.Class == "Bow")
             {
                 // Held in the left hand, an arrow in the right, the quiver on the back (BowSetup). Its skin dresses the bow's

@@ -1,6 +1,10 @@
 using GameServer.Core.Protocol.Instance;
 
-static partial class Game
+using static Game;
+
+namespace GameServer.Modules.PlayerBots;
+
+public static partial class BotPlay
 {
     // ---- what a party bot is wearing ----
     // A controlled player used to carry no items at all: it fought unarmed (WeaponFor falls back to the class's unarmed
@@ -8,17 +12,17 @@ static partial class Game
     // class and level (BotGear); this puts those base items on the character as real equipment, so the model shows them
     // and the weapon's damage counts.
 
-    /// <summary>Wears the gear <see cref="ControlledPlayers.Gear"/> names for this character, at the given level. Replaces
+    /// <summary>Wears the gear <see cref="BotHooks.Gear"/> names for this character, at the given level. Replaces
     /// whatever is in those slots, so a bot that came back at another level is dressed for that level.</summary>
     internal static void EquipControlledGear(Player conn, int level)
     {
-        if (ControlledPlayers.Gear?.Invoke(CharacterName(conn)) is not { Count: > 0 } ids) return;
+        if (BotHooks.Gear?.Invoke(Program.CharacterName(conn)) is not { Count: > 0 } ids) return;
         var items = ItemsOf(conn);
         var catalog = ItemsFor(conn);
         var used = new HashSet<byte>();
         // One draw per character and level: the same bot wears the same gear after a relog, and rolls again only when it
         // levels (a bot re-rolled on every join would change its weapon's affixes under the party's feet).
-        var rng = new Random(StableSeed(CharacterName(conn), level));
+        var rng = new Random(StableSeed(Program.CharacterName(conn), level));
         int worn = 0, carried = 0;
         foreach (string id in ids)
         {
@@ -48,7 +52,7 @@ static partial class Game
             worn++;
             carried += gems.Count;
         }
-        if (worn > 0) Console.WriteLine($"[bots] {CharacterName(conn)} wears {worn} piece(s) at level {level}, {carried} gem(s) in the weapon");
+        if (worn > 0) Console.WriteLine($"[bots] {Program.CharacterName(conn)} wears {worn} piece(s) at level {level}, {carried} gem(s) in the weapon");
         EquipControlledFlasks(level, items, catalog);
     }
 

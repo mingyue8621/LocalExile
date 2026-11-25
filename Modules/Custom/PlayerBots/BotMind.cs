@@ -1,7 +1,11 @@
 using GameServer.Core.Protocol.Instance;
 using GameServer.Core.World;
 
-static partial class Game
+using static Game;
+
+namespace GameServer.Modules.PlayerBots;
+
+public static partial class BotPlay
 {
     // ---- what a party bot is like of its own accord ----
     // A follower used to be one behaviour for every bot: form up, hit what stood near the leader, drink at a third life. Five
@@ -48,7 +52,7 @@ static partial class Game
     internal static uint ControlledSeed(Player conn)
     {
         uint hash = 2166136261;
-        foreach (char c in CharacterName(conn)) { hash ^= c; hash *= 16777619; }
+        foreach (char c in Program.CharacterName(conn)) { hash ^= c; hash *= 16777619; }
         return hash;
     }
 
@@ -64,7 +68,7 @@ static partial class Game
         var claimed = new HashSet<uint>();
         foreach (var other in Program.InGame.Keys)
         {
-            if (ReferenceEquals(other, conn) || !other.Controlled) continue;
+            if (ReferenceEquals(other, conn) || other.HasClient) continue;
             if (!ReferenceEquals(other.Instance.Presence, conn.Instance.Presence)) continue;
             if (!FollowerPlans.TryGetValue(other, out var plan) || plan.Target == 0) continue;
             if (now < plan.AttackUntil + 1.5) claimed.Add(plan.Target);
@@ -119,11 +123,11 @@ static partial class Game
     {
         var mind = MindOf(conn);
         if (now < mind.SayAt || conn.Closed) return;
-        string name = CharacterName(conn);
+        string name = Program.CharacterName(conn);
         bool told = false;
         foreach (var other in Program.InGame.Keys)
         {
-            if (other is not { Controlled: false, Closed: false, Connection.Outbox: { } outbox }) continue;
+            if (other is not { HasClient: true, Closed: false, Connection.Outbox: { } outbox }) continue;
             if (!ReferenceEquals(other.Instance.Presence, conn.Instance.Presence)) continue;
             // A send encrypts in place, so each client gets its own bytes (ChatModule.SayLocally). A client that has gone
             // leaves a faulted send behind, which is dropped rather than raised on the bots' loop.

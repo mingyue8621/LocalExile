@@ -283,6 +283,7 @@ public static partial class Game
         frame.Clock = clock;
         var graph = frame.Graph ??= PlayerStatGraph(player, frame);
         CheckMomentumPresentation(player, clock);
+        RefreshDoubleStrikeMomentum(player, clock);
         if (!ReferenceEquals(frame.Area, player.Frames.Area))
         {
             if (frame.Area is not null) PlayerStatBuffsChanged(player);
@@ -384,7 +385,7 @@ public static partial class Game
         On([PlayerStatStep.SoulEater, PlayerStatStep.AttackSpeed], a => player.SoulEater.Changed = () => { a(); PresentStats(player); });
         On([PlayerStatStep.SpiritLeadership], a => player.SpiritChieftains.Changed = a);
         On([PlayerStatStep.Ward], a => player.Ward.Changed = a);
-        On([PlayerStatStep.Sources, PlayerStatStep.TimedRecovery], a => player.Antiquarian.Changed = a);
+        On([PlayerStatStep.Sources, PlayerStatStep.TimedRecovery], a => player.WardBreak.Changed = a);
         On([PlayerStatStep.TimedRecovery], a => player.EnduringCryRecovery.Changed = a);
         On([PlayerStatStep.TotemAura], a => player.Totems.Changed = a);
         On([PlayerStatStep.Rampage], a => player.Rampage.Changed = a);

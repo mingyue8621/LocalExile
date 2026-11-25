@@ -1,3 +1,4 @@
+using GameServer.Modules.PlayerBots;
 using GameServer.Core.Accounts;
 using GameServer.Core.Protocol.Instance;
 using GameServer.Storage;
@@ -12,7 +13,7 @@ internal static class ControlledPlayerBuildChecks
         var leader = runtime.PlayerOf(instance, wire);
         var bot = runtime.PlayerOf(instance, wire, "HeraldFollower" + Guid.NewGuid().ToString("N"));
         bot.Pools = new(25, 1000, 1000, 0, 0, Strength: 1000, Dexterity: 1000, Intelligence: 1000);
-        bot.Character.Passives = [.. Game.BuildControlledPlayer(CharacterClass.Witch, 25).Passives!];
+        bot.Character.Passives = [.. BotPlay.BuildControlledPlayer(CharacterClass.Witch, 25).Passives!];
         bot.LeagueModule = new(new League("test", "Standard", false, false), new HashSet<string>(["Game"]));
         // Inspect the AI's own auto-attack scan without starting background player updates or a cast timer: a flask or a
         // walk there would persist this character's items, and these are only ever held in memory here.
@@ -29,12 +30,12 @@ internal static class ControlledPlayerBuildChecks
             Assert.All(gems, g => Assert.True(SkillHitPlan.ForSkill(Program.Skills, g.Effect, g.Level, g.Quality).CanHit));
             // The two Heralds hit reactively, but their reservation is a toggle: a bot that "cast" one would switch it
             // off. Only Fireball is left to attack with.
-            Assert.Equal(gems[2].Effect, Assert.Single(Game.ControlledSkills(bot)).Effect);
+            Assert.Equal(gems[2].Effect, Assert.Single(BotPlay.ControlledSkills(bot)).Effect);
 
             // With only the reactive reservation hits equipped, automatic combat leaves their toggles alone.
             var equipped = items.Items(PlayerInventories.Weapon1).Single();
             items.Change(PlayerInventories.Weapon1, equipped.Id, item => item with { Sockets = [.. item.Sockets.Take(2)] });
-            Assert.Empty(Game.ControlledSkills(bot));
+            Assert.Empty(BotPlay.ControlledSkills(bot));
         }
         finally
         {
@@ -59,7 +60,7 @@ internal static class ControlledPlayerBuildChecks
                     var record = new GameServer.Core.Accounts.Character(Guid.NewGuid(), Guid.NewGuid(), name, characterClass, level,
                         "Standard", "1_1_town", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
                     accounts.AddCharacter(record);
-                    var build = Game.BuildControlledPlayer(characterClass, level);
+                    var build = BotPlay.BuildControlledPlayer(characterClass, level);
                     Assert.Equal(level - 1, build.Passives!.Count);
                     CharacterSaves.Write(name, build);
                     int row = Program.Skills.RowOfClass((int)characterClass);
@@ -83,7 +84,7 @@ internal static class ControlledPlayerBuildChecks
                     if (level >= 25)
                     {
                         var weapon = Program.Items.ByHash(Game.ItemsOf(player).Items(PlayerInventories.Weapon1).First().Item.TypeHash)!;
-                        int most = Game.SocketsFor(weapon) - 1;
+                        int most = BotPlay.SocketsFor(weapon) - 1;
                         Assert.True(supported.Supports.Count >= 2 && supported.Supports.Count <= most,
                             $"{name}: {active.Name} on {weapon.Class} ({most} supports at most), supports: " +
                             $"{string.Join(", ", supported.Supports.Select(s => s.Effect.Id))}");
@@ -100,11 +101,11 @@ internal static class ControlledPlayerBuildChecks
                             PlayerInventories.Helmet, PlayerInventories.Gloves, PlayerInventories.Boots, PlayerInventories.Belt,
                         }
                         .SelectMany(row => worn.Items(row)).Select(held => Program.Items.ByHash(held.Item.TypeHash)!.Id).ToArray();
-                    var gear = ControlledPlayers.Gear;
-                    ControlledPlayers.Gear = _ => pieces;
+                    var gear = BotHooks.Gear;
+                    BotHooks.Gear = _ => pieces;
                     try
                     {
-                        Game.EquipControlledGear(player, level);
+                        BotPlay.EquipControlledGear(player, level);
                         Assert.Single(Game.GemSkillEffects(player));
                         foreach (var held in worn.Items(PlayerInventories.Weapon1).ToList())
                         {
@@ -112,10 +113,10 @@ internal static class ControlledPlayerBuildChecks
                             worn.Add(PlayerInventories.Weapon1, 0, 0, held.Item with { Sockets = [], Links = null });
                         }
                         Assert.Empty(Game.GemSkillEffects(player));
-                        Game.EquipControlledGear(player, level);
+                        BotPlay.EquipControlledGear(player, level);
                         Assert.Single(Game.GemSkillEffects(player));
                     }
-                    finally { ControlledPlayers.Gear = gear; }
+                    finally { BotHooks.Gear = gear; }
                 }
         }
         finally

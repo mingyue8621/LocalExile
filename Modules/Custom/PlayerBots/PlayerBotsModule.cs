@@ -24,7 +24,7 @@ public sealed class PlayerBotsModule : IModule
         module.Lifetime.Own(new StopOnDispose(director.Stop));
         // What a bot wears when it becomes a party follower: the game module equips these base items on its character (it is
         // the only place that can), so the follower is armed and dressed for its level instead of fighting bare-handed.
-        ControlledPlayers.Gear = director.GearOf;
+        BotHooks.Gear = director.GearOf;
         director.Start();
         // Social owns the shared roster; this module resolves town actors that have no human socket.
         GameEvents.Packet(InstanceSocial.PartyInviteId).Add(module.Manifest.Id, async (player, bytes) =>

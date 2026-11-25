@@ -1,6 +1,11 @@
 using GameServer.Core.World;
 
-public static partial class Game
+using static Game;
+
+namespace GameServer.Modules.PlayerBots;
+
+// How a bot plays: the game's own rules, run for a player the server drives.
+public static partial class BotPlay
 {
 
     /// <summary>How far behind it will still try to run after the leader before blinking back into the party: it keeps to
@@ -117,7 +122,7 @@ public static partial class Game
         if (DateTime.UtcNow - plans.NoSpotLogged > TimeSpan.FromSeconds(5))
         {
             plans.NoSpotLogged = DateTime.UtcNow;
-            Console.WriteLine($"[bots] {CharacterName(player)} found no cell to stand in near ({origin.X}, {origin.Y}): "
+            Console.WriteLine($"[bots] {Program.CharacterName(player)} found no cell to stand in near ({origin.X}, {origin.Y}): "
                 + $"it stands at ({here.X}, {here.Y}), {Dist(here, origin):0.0} cells behind");
         }
         return here;
@@ -134,7 +139,7 @@ public static partial class Game
         if (distance > 40 && DateTime.UtcNow - plan.DiagLogged > TimeSpan.FromSeconds(5))
         {
             plan.DiagLogged = DateTime.UtcNow;
-            Console.WriteLine($"[bots] {CharacterName(player)} diag: gap {distance:0.0} cells, leader moving {leader.Walk.Moving(now)}, "
+            Console.WriteLine($"[bots] {Program.CharacterName(player)} diag: gap {distance:0.0} cells, leader moving {leader.Walk.Moving(now)}, "
                 + $"following {plan.Following}, engage {now < plan.EngageUntil}, attacking {now < plan.AttackUntil}, "
                 + $"walking {player.Walk.Moving(now)}");
         }
@@ -169,14 +174,14 @@ public static partial class Game
             Interlocked.Increment(ref player.ChannelGeneration);
             player.ChannelSkill = 0;
             player.Walk.Teleport(at.X, at.Y, now);
-            player.ControlledNextAction = now + .35;
+            BodyOf(player).NextAction = now + .35;
             plan.Following = false;
             plan.AttackUntil = 0;
             plan.Target = 0;
             plan.FarSince = double.NaN;
             ScheduleControlledIdle(player, plan, now);
             PublishPlayerPose(player);
-            Console.WriteLine($"[bots] {CharacterName(player)} returns to leader: {distance:0.0} cells -> ({at.X}, {at.Y})");
+            Console.WriteLine($"[bots] {Program.CharacterName(player)} returns to leader: {distance:0.0} cells -> ({at.X}, {at.Y})");
             return true;
         }
         // Hysteresis: a moving leader is followed in legs, not by constantly finding a new formation cell.
@@ -323,7 +328,7 @@ public static partial class Game
         var plan = FollowerPlans.GetOrCreateValue(player);
         plan.Target = target;
         plan.AttackUntil = now + Math.Max(.35, seconds) + .1;
-        player.ControlledNextAction = plan.AttackUntil;
+        BodyOf(player).NextAction = plan.AttackUntil;
         plan.RepathAt = plan.AttackUntil;
         ScheduleControlledIdle(player, plan, plan.AttackUntil);
     }

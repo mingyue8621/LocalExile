@@ -29,6 +29,18 @@
 4. 在同一个 PR 里：把代码本身说明不了的东西写进 `docs/protocol/`（新的消息 id、布局、客户端地址记到
    [address-index.md](docs/protocol/address-index.md)），保持简短；把该条目以一行移进它所属区域在 `status/` 下的文件，
    并在 `roadmap/` 下对应区域的文件里删掉或更新它。
+GitHub Issues are the active queue for bugs and claimed tasks; `Agents/roadmap/` holds long-term subsystem notes and
+reverse-engineering starting points.
+
+1. Check existing open GitHub Issues and PRs first; comment on an existing issue (or open one) to claim it before
+   writing code, and release the claim if dropped.
+2. Read only the docs the item links to. Most items start with reverse engineering: find how the client reads a message,
+   then send it from the server. [docs/re/tooling.md](docs/re/tooling.md) has the workflow and recipes.
+3. Verify with the real client through `.\scripts\dev\live.ps1`, and check the logs in `logs\`. Add tests for any
+   message layout you implement (see `tests/GameServer.Core.Tests` and [AGENTS.md](../AGENTS.md)).
+4. In the same pull request: link `Closes #N` to the claimed issue, note what the code cannot tell in `docs/protocol/`
+   (new message ids, layouts, client addresses in [address-index.md](docs/protocol/address-index.md)), keep it short,
+   move the item to its area's file in `status/` as one line, and remove or update it in its area's file in `roadmap/`.
 
 [Status.md](Status.md) 里「如何维护这份状态」一节的编辑规则同样适用于路线图文件：条目放进它所属区域的文件和分组，
 改动条目而不是给它加备注，每句话另起一行。

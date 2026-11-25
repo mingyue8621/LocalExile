@@ -1,6 +1,10 @@
 using GameServer.Core.Protocol.Instance;
 
-static partial class Game
+using static Game;
+
+namespace GameServer.Modules.PlayerBots;
+
+public static partial class BotPlay
 {
     // ---- cosmetics for bots ----
     // A bot's look follows its class and weapon: an armour skin on the row that item is worn in, a weapon skin on the hand
@@ -75,7 +79,7 @@ static partial class Game
     /// model is built from (Equipment.Looks: SkinVisual + the hash, as a player's own picks arrive).</summary>
     internal static void WearBotCosmetics(Player conn)
     {
-        string name = CharacterName(conn);
+        string name = Program.CharacterName(conn);
         var items = ItemsOf(conn);
         List<InstanceMicrotransactions.Equipped> worn = [];
         foreach (byte row in new[]
