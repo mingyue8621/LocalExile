@@ -36,12 +36,7 @@ public static class AuraCatalog
     public static IEnumerable<Buff> Buffs(Aura aura, uint player, ushort? action, byte? receivedDisplayState = null, ushort tag = 0)
     {
         // Both source and received buffs instantiate these native behaviours, which read two words unchecked.
-        uint[]? behaviourData = aura.EffectId switch
-        {
-            "TempestShield" => [(uint)Math.Max(0, aura.ArtVariation), aura.HideVisual ? 1u : 0u],
-            "TemporalRift" => [42u, 100u],
-            _ => null,
-        };
+        uint[]? behaviourData = BehaviourData(aura.EffectId, aura.ArtVariation, aura.HideVisual);
         if (aura.SourceBuff is not null)
             yield return new(aura.BuffRow, player, aura.SkillId, AuraSource: true, DisplayState: 0, Visual: aura.SourceVisual, List: behaviourData, Tag: tag);
         // An enemy hex aura has a source on its caster, never a received self curse.
@@ -55,6 +50,33 @@ public static class AuraCatalog
     /// <summary>Whether a buff row is one of the auras' (a player's own aura buffs are replaced as one group).</summary>
     public static bool IsAuraRow(ushort row) => (auraRows ??= [.. BuffRows.Values]).Contains(row);
     static HashSet<ushort>? auraRows;
+
+    /// <summary>TempestShield's BuffDefinitions row: its native behaviour reads the art variation and hide-user-buff
+    /// flag from the first two list entries without checking the length (0x1417a9410).</summary>
+    public const ushort TempestShieldRow = 112;
+
+    /// <summary>TemporalRift's BuffDefinitions row: its native behaviour reads two words the same way.</summary>
+    public const ushort TemporalRiftRow = 1915;
+
+    /// <summary>The words a native behaviour reads unchecked from a buff's list (0x1417a9410): TempestShield's art
+    /// variation and hide-user-buff flag, TemporalRift's two. Null for every other row, whose behaviour reads nothing.
+    /// One source for every path that sends such a buff: the player's own aura, the aura a peer shares, and a monster's
+    /// skill, which has no art variation and so sends zeros.</summary>
+    public static uint[]? BehaviourData(string effectId, int artVariation = 0, bool hideVisual = false) => effectId switch
+    {
+        "TempestShield" => [(uint)Math.Max(0, artVariation), hideVisual ? 1u : 0u],
+        "TemporalRift" => [42u, 100u],
+        _ => null,
+    };
+
+    /// <summary>The same list for a buff sent by its BuffDefinitions row alone (a monster's aura or buff, which holds no
+    /// <see cref="Aura"/>): the rows whose behaviour reads words, and null for every other row.</summary>
+    public static uint[]? BehaviourDataOfRow(ushort row) => row switch
+    {
+        TempestShieldRow => BehaviourData("TempestShield"),
+        TemporalRiftRow => BehaviourData("TemporalRift"),
+        _ => null,
+    };
 
     /// <summary>The BuffDefinitions row that draws each aura's visual and buff icon.</summary>
     private static readonly Dictionary<string, ushort> BuffRows = new()
@@ -88,7 +110,7 @@ public static class AuraCatalog
         ["FleshAndStone"] = FleshAndStoneBloodRow,
         ["BloodAndSand"] = FleshAndStoneBloodRow,
         ["ArcticArmour"] = 427,
-        ["TempestShield"] = 112,
+        ["TempestShield"] = TempestShieldRow,
         ["HeraldOfAsh"] = 344,
         ["HeraldOfIce"] = 345,
         ["HeraldOfThunder"] = 346,
@@ -98,7 +120,7 @@ public static class AuraCatalog
         // The planted banners: War 1221 (war_banner_physical_damage_+%_final_with_melee_skills and accuracy_rating_+%),
         // Defiance 1864 armour_evasion_banner_buff_aura, Dread 1222 puresteel_banner_buff_aura.
         ["WarBanner"] = 1221, ["DefianceBanner"] = 1864, ["DreadBanner"] = 1222,
-        ["TemporalRift"] = 1915,
+        ["TemporalRift"] = TemporalRiftRow,
         ["CatAspect"] = 1036,
         ["AspectOfTheAvian"] = 1039,
         ["AspectOfTheSpider"] = 1042,

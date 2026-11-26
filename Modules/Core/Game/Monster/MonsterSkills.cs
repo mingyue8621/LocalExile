@@ -273,7 +273,17 @@ public static partial class MonsterSkills
     {
         string id = Prefix().Replace(effectId, "");
         if (id.StartsWith("Vaal", StringComparison.Ordinal)) id = id[4..];
-        return Suffix().Replace(id, "");
+        id = Suffix().Replace(id, "");
+        // The warband, Perandus and mercenary Tempest Shields are the one skill (GrantedEffects 1574/1575/1571/1572,
+        // all ActiveSkills 217) at another stat set, and the client draws every one of them with the single
+        // TempestShieldBuff row (112). Without this they resolve to no row at all ("wb_tempest_shield"). Hit by
+        // WbLightningGrunt5/Leader, the Perandus guard bosses and the mercenary encounters.
+        return id switch
+        {
+            "WbTempestShield" or "PerandusTempestShield"
+                or "TempestShieldMercenary" or "TempestShieldMercenaryEncounter" => "TempestShield",
+            _ => id,
+        };
     }
 
     [GeneratedRegex("^(Dark)?(Exile|Monster)(Duelist|Ranger|Templar|Shadow|Marauder|Witch|Scion)?")]
@@ -323,7 +333,9 @@ public static partial class MonsterSkills
     {
         foreach (ushort row in rows)
         {
-            player.Area.Buffs.Set(id, new(row, id, AuraSource: true));
+            // A row whose native behaviour reads words unchecked (Tempest Shield's, 0x1417a9410) gets them here too:
+            // zeros, since a monster has no art variation and nothing to hide.
+            player.Area.Buffs.Set(id, new(row, id, AuraSource: true, List: AuraCatalog.BehaviourDataOfRow(row)));
         }
     }
 
@@ -593,7 +605,8 @@ public static partial class MonsterSkills
         m.BuffStats = Sum(buffs.Active.Select(b => b.Stats));
         // Each use is a buff of its own (its tag), with its countdown.
         if (use.BuffRow > 0)
-            player.Area.Buffs.Set(id, new(use.BuffRow, id, U68: Buff.Seconds(use.Seconds), Tag: buff));
+            player.Area.Buffs.Set(id, new(use.BuffRow, id, U68: Buff.Seconds(use.Seconds),
+                List: AuraCatalog.BehaviourDataOfRow(use.BuffRow), Tag: buff));
         _ = EndBuff(player, id, m, use, buffs, buff, player.Layout);
     }
 

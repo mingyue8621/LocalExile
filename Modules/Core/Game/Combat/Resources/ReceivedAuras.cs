@@ -54,7 +54,9 @@ public static partial class Game
             if (player.ReceivedAuras.ContainsKey(key)) continue;
             player.ReceivedAuras[key] = candidate; changed = true;
             // A received buff has no cancellation association with an unrelated local skill id; its source is the caster.
-            player.Area.Buffs.Set(player.Id, new(candidate.BuffRow, key.Item1));
+            // It keeps the caster's art variation and hide flag, which its row's native behaviour reads unchecked.
+            player.Area.Buffs.Set(player.Id, new(candidate.BuffRow, key.Item1,
+                List: AuraCatalog.BehaviourData(candidate.EffectId, candidate.ArtVariation, candidate.HideVisual)));
         }
         if (changed)
         {

@@ -2069,11 +2069,15 @@ public static partial class Game
                 yield return buff;
             yield break;
         }
+        // A timed aura sends the same two lists AuraCatalog.Buffs sends for a reservation: its row's native behaviour
+        // reads those words unchecked (0x1417a9410).
+        uint[]? behaviourData = AuraCatalog.BehaviourData(aura.EffectId, aura.ArtVariation, aura.HideVisual);
         if (aura.SourceBuff is not null)
-            yield return new(aura.BuffRow, id, aura.SkillId, AuraSource: true, DisplayState: 0, Visual: aura.SourceVisual, Tag: tag);
+            yield return new(aura.BuffRow, id, aura.SkillId, AuraSource: true, DisplayState: 0, Visual: aura.SourceVisual,
+                List: behaviourData, Tag: tag);
         yield return new(aura.BuffRow, id, aura.SkillId, U68: Buff.Seconds(duration),
             ActiveSkill: tag != (ushort)BuffTag.VaalAura && Skills.ActionHash(aura.Effect) is ushort hash ? (aura.SkillId, hash) : null,
-            Visual: aura.BuffVisual, Tag: tag);
+            Visual: aura.BuffVisual, List: behaviourData, Tag: tag);
     }
 
     public static async Task DisableReservations(Player player, string name)

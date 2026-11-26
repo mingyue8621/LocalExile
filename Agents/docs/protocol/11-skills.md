@@ -3640,10 +3640,20 @@ evidence and limits: [Paladin](../game/paladin.md#link-skills).
    Overload (BuffDefinitions row 606, returned one-based by `0x14245b6a0`), not an aura UI event or a
    network opcode. Sending a standalone 0x25f packet is invalid and is not needed for aura indicators.
   Tempest Shield (row 112, `TempestShieldBuff`) additionally requires a two-word counted list: art variation,
-  alternate-shield flag. `0x1417a9410` dereferences `Buff+0x80` and its second word before any length check;
+  hide-user-buff flag. `0x1417a9410` dereferences `Buff+0x80` and its second word before any length check;
   `0x1417a9e70` passes the first word to MiscEffectPacks variation lookup. Empty-list activation reproduced
   an access violation at `0x1417a945f`. The base shield visual uses `[0, 0]`.
   Both the source and received buff instantiate this behaviour and require the list, even with source display disabled.
+  The two words are the caster's `skill_art_variation` and `skill_hide_user_buff_effects` (the Tempest Shield Skin
+  MTX's values, e.g. Celestial/Fungal; an earlier note read the second word as an alternate-shield flag).
+  Every path that sends such a buff builds it from `AuraCatalog.BehaviourData`: the player's own aura, the aura a peer
+  shares (the caster's values), and a monster's (`MonsterSkills.ShowAuras` source buff and `BuffSelf` received buff).
+  A monster has no skin, so it sends the base `[0, 0]`; `AuraCatalog.BehaviourDataOfRow` serves those row-only paths.
+  The client holds one skill and one row for it, but several GrantedEffects names: `MonsterTempestShield` 1576,
+  `WbTempestShield` 1574, `PerandusTempestShield` 1575, `TempestShieldMercenary` 1571/1572, all ActiveSkills 217 at
+  their own stat set. `MonsterSkills.Family` strips the `Monster` prefix and maps the warband, Perandus and mercenary
+  names to `TempestShield`, so the stone statue bosses, the warband lightning monsters and the Perandus guard bosses
+  all resolve to row 112; without it the latter two resolve to no row at all (`wb_tempest_shield`).
 
   Temporal Rift (row 1915, `ChronomancerBuff`) also dereferences its list immediately: `0x141f83180`
   allocates the sample ring from word 0, and `0x141f832b0` reads the interval in milliseconds from word 1.
