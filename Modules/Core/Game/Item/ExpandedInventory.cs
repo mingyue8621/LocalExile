@@ -7,7 +7,7 @@ static partial class Game
     // The grant is the real source value, never the presentation-only recovery flag below. What grants it is the
     // backpack mod's stat hook (GameEvents.Stats, the same stat the Primalist's "Might of the Bear" carries) or that
     // ascendancy node itself — the server has no setting of its own for it.
-    internal static bool ExpandedInventoryGranted(Player player)
+    public static bool ExpandedInventoryGranted(Player player)
     {
         if (!(ExpandedInventoryStat is var key)) return false;
         long value = StatSourceValues(player).GetValueOrDefault(key);
