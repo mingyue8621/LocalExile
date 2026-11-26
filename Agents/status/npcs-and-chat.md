@@ -184,7 +184,7 @@
   接在她的进度页签之后或替换它们，已实机核对；没有赛季列出它。
   标准赛季使用进度库存；完整的传奇词缀、传奇区域路由与更新后的开发展示仍是部分实现。
   见 [17](../docs/protocol/17-npcs.md#vendor-evidence-and-local-policy)。
-- **玩家机器人**（PlayerBots 模块，默认关闭）：机器人随时间创建，在任务之间走访城镇。
+- **玩家机器人**（模组 `playerbots`，在 LocalExile-Mods 仓库，默认关闭）：机器人随时间创建，在任务之间走访城镇。
   玩家能看到它们以自己的职业模型与装备行走。
   每个剧情城镇维持 2 到 5 名居民，等级显示为原生数值（第一幕 1 到 3；第十幕 59 到 75；中间的幕按两端插值并 ±5）。
   受邀的机器人跨区域保留其在城镇选定的等级，并通过获得的经验成长，不会随怪物等级缩放。
@@ -203,10 +203,10 @@
   移动中的跟随者会就近对可及的目标出手，有目标时原地守住，不会为此打断自己的挥击/施法。
   超过 60 格（战斗中 90 格）的间隙会获得短暂追赶宽限再传送；大幅跳变则立即把跟随者带回。
   共享死亡会在每个观察者那里隐藏尸体血条，包括被受控队员击杀的情况。
-  可选的 [MCP 控制](../../Modules/PlayerBots/MCP.md) 提供按机器人的租约、观测与原生战术指令，同时保留普通跟随/回落行为。
+  可选的 MCP 控制（见模组目录里的 MCP.md）提供按机器人的租约、观测与原生战术指令，同时保留普通跟随/回落行为。
   队长在线时队伍状态可跨模块重载存活。屏幕外的任务仍为模拟；交易、升华构建与高级战术 AI 尚未做
   （聊天只做了一半：机器人会在区域本地聊天里偶尔说一两句，但不会读也不会回）。
-  见 [玩家机器人](../docs/dev/player-bots.md)。
+  见 LocalExile-Mods 仓库 `mods/playerbots/README.md`（玩法与尚未实现的部分都在那里）。
 - Guilds (`0x0140`–`0x014f`, `0x0146`–`0x014c`, `&` chat, shared stash & `0x00cc` reorder): offline verified.
 - PvP queue bar (S→C 0x118/0x119, C→S 0x11a/0x18d): protocol encoders and queue/challenge leave and withdraw handlers
   in `Modules/Core/Player/Social` (not yet checked live).
@@ -251,7 +251,7 @@
   `nessadevelopmenttabs` in LocalExile-Mods: after her progression tabs or replacing them; no league lists it.
   Standard uses progression stock; full unique modifiers, unique-area routing and the updated development display remain partial.
   See [17](../docs/protocol/17-npcs.md#vendor-evidence-and-local-policy).
-- **Player bots** (PlayerBots module, off by default): bots are created over time and visit the towns between quests.
+- **Player bots** (the mod `playerbots` of LocalExile-Mods, off by default): bots are created over time and visit the towns between quests.
   Town bots are not drawn: since the area replicates its own entities, a bot is not yet one of them (party followers,
   which are players the server drives, are).
   Each campaign town maintains 2–5 residents with native level display (Act 1: 1–3; Act 10: 59–75; intermediate acts interpolate the center with ±5).
@@ -271,11 +271,11 @@
   Moving followers aim ahead along the leader's ordered route and take reachable attacks without chasing off it or cancelling their own swing/cast.
   Gaps over 60 cells get a short catch-up grace before relocation; large jumps return followers immediately.
   Shared deaths hide corpse health bars on each observer, including kills made by controlled party members.
-  Optional [MCP control](../../Modules/Custom/PlayerBots/MCP.md) exposes per-bot leases, observations and native tactical orders with ordinary following/fallback.
+  Optional MCP control (the mod's MCP.md) exposes per-bot leases, observations and native tactical orders with ordinary following/fallback.
   Human friends and town-invited bots share one six-member roster, including kicks, leader handover and area changes.
   Party state survives module reload while the leader remains online. Offscreen quests remain simulated;
   trade, chat, ascendancy builds and advanced tactical AI remain open.
-  See [player bots](../docs/dev/player-bots.md).
+  See the `playerbots` mod's README in LocalExile-Mods.
 - **Player bots** are the mod `playerbots` in LocalExile-Mods (its README has what they do and what is open). Core
   keeps what they use and any tool may: players the server drives (`Program.DriveByServer`, `Player.HasClient`), and
   Social's one six-member roster for human friends and server-driven members (invites, kicks, leader handover).
