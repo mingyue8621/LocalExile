@@ -109,6 +109,7 @@
   以及正义之火已保存的美术输入保持不变。
   报告中提到的原生选择器不匹配仍需用户验证；报文测试不能证明界面已修好。
   协议证据、限制与客户端侧的验收步骤见：[23](../docs/protocol/23-microtransactions.md) §4。
+- Tiered MTX bytes (VisibleItem), incremental deltas (0x1ff-0x205, 0x1f7-0x20f), and mannequins (0x5f-0x6f) are built.
 - Offline local MTX shop & mystery/salvage boxes (`0x12c`–`0x139`, `0x204`–`0x206`, `0x26e`, `0x282`): offline ok.
 - Cosmetics skill target lifetime and request validation (issue [#306](https://github.com/Wrathen/LocalExile/issues/306)).
   Key reuse across gem replacements and acceptance of stale/incompatible picks are reproduced in Gateway tests.

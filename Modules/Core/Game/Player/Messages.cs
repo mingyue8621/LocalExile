@@ -492,7 +492,7 @@ public static partial class Game
             {
                 // The client chose lockstep (07 §6): it is served as it asks.
                 OnLockstepRequest(player, id, bytes);
-                if (id == InstanceProtocol.LockstepMoveUpdateId && !HeldLockstepMovingChannel(player))
+                if (id == InstanceProtocol.LockstepMoveUpdateId && !HeldLockstepAimedChannel(player))
                     await AimLockstepChannel(player);
             }
             else if (id == InstancePause.RequestId)
@@ -809,22 +809,33 @@ public static partial class Game
                 // player is. Without this update the channel counts as silent and ends (ChannelSilenceSeconds).
                 var (cx, cy) = InstanceProtocol.ReadChannelUpdate(bytes);
                 double t = player.ClockAt(readAt);
+                ushort? changedAim = null;
                 using (ProjectileMutation(player))
                 {
                     t = Math.Max(t, player.ProjectileRuntime?.Runtime.Now / 120000d ?? 0);
                     if (PlayerActionBlocked(player, t, AreaTime(player))) continue;
-                    ChannelAimedAt(player, cx, cy, t);
+                    if (ApplyChannelAim(player, cx, cy, t) && !player.Connection.LockstepClient)
+                        changedAim = player.ChannelSkillSequence;
                     player.LastChannelUpdateAt = AreaTime(player);
                 }
+                if (changedAim is ushort sequence)
+                    await SendChannelAim(player, sequence, (cx, cy));
             }
             else if (id == InstanceProtocol.ChannelEndId)
             {
-                bool hadChannel = player.ChannelSkill != 0;
-                int channelGen = player.ChannelGeneration;
-                ushort endedSequence = player.ChannelSkillSequence;
-                ChannelReleased(player, player.ClockAt(readAt));
+                bool hadChannel;
+                int channelGen;
+                ushort endedSequence;
+                (int X, int Y)? landing;
+                lock (LevelUpdatesFor(player).Gate)
+                {
+                    hadChannel = player.ChannelSkill != 0;
+                    channelGen = player.ChannelGeneration;
+                    endedSequence = player.ChannelSkillSequence;
+                    landing = EndChannel(player, player.ClockAt(readAt));
+                }
                 if (hadChannel && !player.Connection.LockstepClient)
-                    await EmitPredictiveChannelFinished(player, channelGen, endedSequence);
+                    await EmitPredictiveChannelFinished(player, channelGen, endedSequence, landing);
             }
             else if (id == InstanceProtocol.RetargetActionId)
                 await RetargetAction(player, InstanceProtocol.ReadRetargetAction(bytes), readAt);
@@ -1099,7 +1110,12 @@ public static partial class Game
                     // the player's first movement waited for it (live 2026-11-17).
                     player.WalkersSteppedTo = ProjectileWorldTime(player);
                     StartWorldFrames(player);
-                    Program.ActivatePlayerUpdates(player);
+                    // Wait until Joining + this player's first frame end before starting periodic updates, so
+                    // restored persistent summons and minion rosters never drain to an already-due peer alone.
+                    player.Frames.AfterFirstFrame(player, () =>
+                    {
+                        if (!player.Closed && !player.LeavingArea) Program.ActivatePlayerUpdates(player);
+                    });
                     // The area's population stays in this handler: its monster creations and the frame pass hold the
                     // combat lock long enough that a packet builder waiting for that lock while holding the send gate
                     // stalls every cast and walk echo (live 2026-11-17: two 400-500 ms freezes behind a 596 ms empty

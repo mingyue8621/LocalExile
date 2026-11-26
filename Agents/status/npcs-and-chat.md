@@ -207,9 +207,10 @@
   队长在线时队伍状态可跨模块重载存活。屏幕外的任务仍为模拟；交易、升华构建与高级战术 AI 尚未做
   （聊天只做了一半：机器人会在区域本地聊天里偶尔说一两句，但不会读也不会回）。
   见 LocalExile-Mods 仓库 `mods/playerbots/README.md`（玩法与尚未实现的部分都在那里）。
+- Public party noticeboard (`0xac`/`0xa2` → `0xad`/`0xa9`) and noticeboard joins (`0x95`) are built (not checked live).
 - Guilds (`0x0140`–`0x014f`, `0x0146`–`0x014c`, `&` chat, shared stash & `0x00cc` reorder): offline verified.
-- PvP queue bar (S→C 0x118/0x119, C→S 0x11a/0x18d): protocol encoders and queue/challenge leave and withdraw handlers
-  in `Modules/Core/Player/Social` (not yet checked live).
+- PvP queue bar (`0x118`/`0x119`, `0x11a`/`0x18d`) and duel triggers (`0x155`/`0x156`) in `Modules/Core/Player/Social`
+  (not yet checked live).
 - Direct vendor equipment purchases validate placement, preserve payment on failure and refresh equipped items; 3.29.3c belt purchase/swap protocol controls pass; rendered UI checks remain open.
 
 - Faustus's Currency Exchange works with built-in baseline chaos ratios when `liveeconomy` rates are absent,
