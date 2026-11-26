@@ -276,6 +276,9 @@
   Party state survives module reload while the leader remains online. Offscreen quests remain simulated;
   trade, chat, ascendancy builds and advanced tactical AI remain open.
   See [player bots](../docs/dev/player-bots.md).
+- **Player bots** are the mod `playerbots` in LocalExile-Mods (its README has what they do and what is open). Core
+  keeps what they use and any tool may: players the server drives (`Program.DriveByServer`, `Player.HasClient`), and
+  Social's one six-member roster for human friends and server-driven members (invites, kicks, leader handover).
 
 ## 尚未实现
 
