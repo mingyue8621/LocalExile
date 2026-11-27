@@ -8,7 +8,9 @@ static partial class QuestobjectsRules
     // BeaconPayload attaches the PedestalBuffZone art. MiscAnimated stores its radius in world units.
     static double BeaconEscortRadius => (global::Game.Art.ArtRadius(BeaconCircle) ?? 250) * 23d / 250;
     static string BeaconCartFlag(GlyphQuest.Placement at) => Quests.InstanceFlag($"BeaconCart:{at.X}:{at.Y}");
-    static readonly RuleTable<Player, BeaconView> BeaconViews = new();
+    // Keyed by the area, not the player: a player who leaves the Beacon and comes back to the same instance keeps both his
+    // Player and his Instance, but the client builds a new area and knows none of the carts that area had.
+    static readonly RuleTable<GameArea, BeaconView> BeaconViews = new();
     static readonly RuleTable<InstanceState, BeaconRun> BeaconRuns = new();
 
     internal sealed class BeaconCart(GlyphQuest.Placement start, RailEscort walk)
@@ -84,8 +86,8 @@ static partial class QuestobjectsRules
         await run.Gate.WaitAsync();
         try
         {
-            var view = BeaconViews.GetValue(player, _ => new());
-            if (!view.Loaded) await CreateBeacon(player, run, view);
+            var view = BeaconViews.GetValue(player.Area, _ => new());
+            if (!view.Loaded) await CreateBeacon(player, run, view); else RegisterBeaconCarts(player, run);
             if (!IsMonsterRunner(player) || run.Carts.Count != 2) return;
             double now = AreaTime(player);
             double seconds = Math.Max(0, now - run.LastAt);
@@ -179,26 +181,28 @@ static partial class QuestobjectsRules
             var position = cart.Start with { X = (int)Math.Round(at.X), Y = (int)Math.Round(at.Y) };
             uint id = i < run.CartIds.Count ? run.CartIds[i] : 0;
             if (id == 0)
-            {
                 lock (player.QuestObjects)
-                    id = player.QuestObjects.Where(p => p.Value.Rule.ObjectType == Act6Objects.BeaconPayload).OrderBy(p => p.Key).Skip(i).Select(p => p.Key).FirstOrDefault();
-                if (id == 0)
-                {
-                    id = player.Instance.World.TakeObjectId();
-                    lock (player.QuestObjects)
-                        player.QuestObjects[id] = (new Quests.ObjectRule(Act6Areas.Beacon, Act6Objects.BeaconPayload, BeaconCartFlag(cart.Start)), position, info);
-                    await global::Game.SendWorldCreate(player, id, () => InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(Act6Objects.BeaconPayload),
-                        new QuestObject(position.X, position.Y, info.Components, position.Rotation, position.Z,
-                            TransitionState: (byte)(cart.Walk.Complete ? 2 : 1), Team: 4).Blob()),
-                                $"[Beacon] fuel cart at ({position.X}, {position.Y})", wake: true, awaitBirth: false);
-                }
-                run.CartIds.Add(id);
+                    id = player.QuestObjects.Where(p => p.Value.Rule.ObjectType == Act6Objects.BeaconPayload
+                        && p.Value.Rule.TransitionedBy == BeaconCartFlag(cart.Start)).Select(p => p.Key).FirstOrDefault();
+            // Only the area's own records can put a cart in a client that enters it. The id this instance remembers is the
+            // last visit's area, which the client has thrown away, so a cart absent from this area is created again.
+            if (id != 0 && player.Area.Objects.Has(id))
+            {
+                // Already written to this area (a hot reload, or a late join): just register locally.
+                lock (player.QuestObjects)
+                    player.QuestObjects.TryAdd(id, (new Quests.ObjectRule(Act6Areas.Beacon, Act6Objects.BeaconPayload, BeaconCartFlag(cart.Start)), position, info));
             }
             else
             {
-                // SendWorldCreate already recorded this cart in Area.Objects for late joiners; just register locally.
+                id = player.Instance.World.TakeObjectId();
+                while (run.CartIds.Count <= i) run.CartIds.Add(0);
+                run.CartIds[i] = id;
                 lock (player.QuestObjects)
-                    player.QuestObjects.TryAdd(id, (new Quests.ObjectRule(Act6Areas.Beacon, Act6Objects.BeaconPayload, BeaconCartFlag(cart.Start)), position, info));
+                    player.QuestObjects[id] = (new Quests.ObjectRule(Act6Areas.Beacon, Act6Objects.BeaconPayload, BeaconCartFlag(cart.Start)), position, info);
+                await global::Game.SendWorldCreate(player, id, () => InstanceEntities.CreateObject(id, InstanceEntities.ObjectTypeHash(Act6Objects.BeaconPayload),
+                    new QuestObject(position.X, position.Y, info.Components, position.Rotation, position.Z,
+                        TransitionState: (byte)(cart.Walk.Complete ? 2 : 1), Team: 4).Blob()),
+                            $"[Beacon] fuel cart at ({position.X}, {position.Y})", wake: true, awaitBirth: false);
             }
             lock (player.QuestObjects)
                 if (player.QuestObjects.TryGetValue(id, out var shown))
@@ -215,6 +219,22 @@ static partial class QuestobjectsRules
         if (!run.Players.Any(w => w.TryGetTarget(out var peer) && ReferenceEquals(peer, player)))
             run.Players.Add(new(player));
         view.Loaded = true;
+    }
+
+    /// <summary>A cart belongs to the area: a player who comes to an area that already has them (a second client, or a
+    /// player back after the first visit) is written their creates by the area's join, so only the player's own quest
+    /// objects, which an order or a use of the cart goes through, have to be registered here.</summary>
+    static void RegisterBeaconCarts(Player player, BeaconRun run)
+    {
+        if (QuestObjectTypes.Find(Act6Objects.BeaconPayload) is not { } info) return;
+        for (int i = 0; i < Math.Min(run.Carts.Count, run.CartIds.Count); i++)
+        {
+            var cart = run.Carts[i];
+            var at = cart.Walk.Position;
+            var position = cart.Start with { X = (int)Math.Round(at.X), Y = (int)Math.Round(at.Y) };
+            lock (player.QuestObjects)
+                player.QuestObjects.TryAdd(run.CartIds[i], (new Quests.ObjectRule(Act6Areas.Beacon, Act6Objects.BeaconPayload, BeaconCartFlag(cart.Start)), position, info));
+        }
     }
 
     static async Task ShowBeacon(Player runner, BeaconRun run, Player[] players)
