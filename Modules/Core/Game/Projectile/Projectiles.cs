@@ -112,6 +112,7 @@ public static partial class Game
             // Where the object is created (the release point) and whether its first move has been sent from there.
             public ProjectileVector SpawnedAt;
             public bool Glided;
+            public float Orientation, PendingOrientation;
             // The move the client has to make to follow the flight as it stands now, and whether one intent is already
             // queued to write it. A redirect replaces the pending move instead of being dropped as superseded.
             public byte[][]? PendingGlide;
@@ -271,8 +272,11 @@ public static partial class Game
                         DrainPendingExplosiveDetonations();
                         DrainEarthshatterDetonations();
                         DrainInfernalBlowDeaths();
+                        DrainInfernalCryDeaths();
                         TickChannelTriggers(Player, this, AreaTime(Player));
                         Runtime.AdvanceTo(Math.Max(Runtime.Now, ProjectileRuntime.Time(AreaTime(Player))));
+                        ReconcileBladestorms();
+                        ReconcileTrarthus();
                     }
                     finally
                     {
@@ -295,7 +299,10 @@ public static partial class Game
                     DrainPendingExplosiveDetonations();
                     DrainEarthshatterDetonations();
                     DrainInfernalBlowDeaths();
+                    DrainInfernalCryDeaths();
                     Runtime.AdvanceTo(at);
+                    ReconcileBladestorms();
+                    ReconcileTrarthus();
                 }
                 finally
                 {
@@ -375,10 +382,15 @@ public static partial class Game
             ClearPlacedVolatileOrbs();
             ClearCremationGeysers();
             ClearEnsnares();
+            ClearElectrocutionArrows();
+            ClearStormRain();
+            ClearConflagration();
             ClearExplosiveFuses();
             RetireBannerLocked(Player);
             ClearDivineBlastOrbs();
             ClearConvictionWaves();
+            ClearBladestorms();
+            ClearTrarthus();
             kineticAnomalies?.Clear();
             while (somaticShells is { Count: > 0 }) RemoveSomaticShell(somaticShells[^1]);
             if (archer is { } currentArcher) EndMirage(currentArcher, retire: true);
@@ -1000,7 +1012,7 @@ public static partial class Game
                 chainsMore *= Math.Max(0, 1 + (double)shot.CompletedChainDamagePercent
                     * (contact.Projectile.Profile.Chain - contact.Projectile.ChainsRemaining) / 100);
             double returnMore = contact.Phase > 0 ? shot.ReturnMultiplier : 1;
-            double ailmentMore = chainsMore * returnMore * OverexertionMore(shot.SkillStats, shot.IntimidatingCryExerted, shot.OtherWarcryExertions);
+            double ailmentMore = chainsMore * returnMore * ExertedAttackMore(shot.SkillStats, shot.IntimidatingCryExerted, shot.OtherWarcryExertions, shot.RallyingDamage);
             if (ailmentMore != 1)
                 shot = shot with
                 {
@@ -1029,7 +1041,7 @@ public static partial class Game
             var rolled = WithConditionalSupportDamageLocked(Player, shot.SkillStats, !shot.Spell, target,
                 GameEvents.WithOutgoingDamage(Player, player, target,
                     damageRoll.RollBeforeCritical(packet, random, criticalDoubleDamage)), at);
-            rolled = WithOverexertion(rolled, shot.SkillStats, shot.IntimidatingCryExerted, shot.OtherWarcryExertions);
+            rolled = WithExertedAttackDamage(rolled, shot.SkillStats, shot.IntimidatingCryExerted, shot.OtherWarcryExertions, shot.RallyingDamage);
             bool secondForm = contact.Projectile.Form > 0;
             var formCrit = secondForm ? shot.SecondFormOptions : null;
             int chance = secondForm && shot.SecondFormCriticalChance is int second
@@ -1054,7 +1066,8 @@ public static partial class Game
             bool projectileAttack = !shot.Spell
                 && (shot.ProjectileAttack ?? (shot.Effect < 0 || SkillsFor(Player).IsProjectile(shot.Effect)));
             int additionalTaken = projectileAttack ? EnsnaredProjectileAttackTaken(target, at) : 0;
-            bool ownHit = shot.ActualCaster is null && !shot.FromTrapOrMine && !shot.FromTotem && !shot.Mirage;
+            bool ownHit = shot is { ActualCaster: null, FromTrapOrMine: false, FromTotem: false, Mirage: false }
+                && contact.Projectile.Use.Emitter.Id == Player.Id;
             int witheredElemental = ownHit ? WitheredElementalHitTaken(target, Player.Id, at, player) : 0;
             var (damage, _, mitigated, takenRules) = ResolveMonsterHit(target, rolled, critical, !shot.Spell, at, resonance.Mods,
                 resonance.Penetration, hitRolls.InvertsResistance(random, shot.SkillResistanceInversionChance),
@@ -1083,7 +1096,7 @@ public static partial class Game
                 allyAt: shot.ActualCaster is null && !shot.FromTrapOrMine && !shot.Mirage ? null : ((int)contact.Projectile.Use.Origin.X, (int)contact.Projectile.Use.Origin.Y),
                 cull: Cull.Of(player, shot.SkillStats, critical, shot.Spell).WithWeapon(weaponLocal),
                 cullPlayer: null, chaosDamage: chaosDamage,
-                preventsShellBreak: shot.PreventsSomaticShellBreak);
+                preventsShellBreak: shot.PreventsSomaticShellBreak, ownHit: ownHit && !immune);
             if (hit is null) return ProjectileHitResult.Miss;
             if (shot.FromTotem && !immune) LeechFromTotemHitLocked(Player, target, directDamage, at, player);
             if (!immune) steel?.Targets.Add(contact.Target);
@@ -1143,10 +1156,20 @@ public static partial class Game
                     hitOrigin: emitterTotem?.At,
                     attackerSize: emitterTotem?.BodySize ?? LivingCollision.PlayerSize,
                     attackerHasReversedStat: emitterTotem is null, projectileDamage: true, projectileFreezeChance: projectileFreezeChance,
-                    areaHit: contact.IsArea, sourceEffect: shot.Effect, ownHit: ownHit);
+                    areaHit: contact.IsArea, sourceEffect: shot.Effect, ownHit: ownHit,
+                    weaponWitherChance: weaponLocal?.GetValueOrDefault(Stat.LocalWitheredOnHitFor2SecondsPctChance) ?? 0);
+                if (critical && shot.DirectAttackContact && ownHit)
+                    TryDeathmarkedLocked(Player, target, at, player);
             }
             if (!immune && hit.Value.Life > 0 && shot.EssenceDrain is { } drain)
                 EssenceDrainOnHitLocked(contact.Target.Id, target, drain, at);
+            if (!immune && hit.Value.Life > 0)
+            {
+                if (shot.TrarthusBurn is { } burn)
+                    ApplyTrarthusBurn(Player, contact.Target.Id, target, burn, at);
+                if (shot.ConflagrationBurn is { } conflagration)
+                    ApplyConflagrationBurn(Player, contact.Target.Id, target, conflagration, at);
+            }
             if (!immune && hit.Value.Life > 0 && !shot.Spell && shot.MaimChance > 0)
                 TryMaimOnHitLocked(target, shot.MaimChance, 0, at, contact.Projectile.ReactionRandomSource);
             if (!immune && hit.Value.Life > 0 && shot.Ignite.CanIgnite(rolled))
@@ -1159,7 +1182,8 @@ public static partial class Game
             if (shot.ActualCaster is null)
                 RageOnHitWithWeaponLocked(Player, attack: !shot.Spell, melee: false, critical,
                     shot.FromTrapOrMine || shot.FromTotem ? null : shot.WeaponClass, shot.SkillStats,
-                    contact.Projectile.ReactionRandomSource, player);
+                    contact.Projectile.ReactionRandomSource, player,
+                    target: !shot.FromTrapOrMine && !shot.FromTotem ? target : null);
             if (shot.ActualCaster is null) ChargesOnHit(Player, target, critical, shot.Spell, shot.Effect, shot.Level, shot.Quality, melee: false,
                 primary: shot.FirstHit?.Claim() ?? true, skillStats: shot.SkillStats);
             CommitProjectileHit(this, contact, target, hit.Value, damage, shot, critical,
@@ -1204,6 +1228,7 @@ public static partial class Game
                 LeaveKnifeBlade(value);
                 ExplosiveArrowAtEnd(value);
                 EnsnaringArrowAtEnd(value);
+                ElectrocutionAtEnd(value);
                 if (value.Reason == ProjectileEndReason.Landing && p.Use.Payload is ProjectileOffense { Unearth: { } corpse })
                     LandUnearth(corpse, (x, y));
             }
@@ -1287,8 +1312,11 @@ public static partial class Game
                     // The first glide starts here too; the visual trails the simulation by the output delay and catches
                     // up at its stop.
                     var at = visual.SpawnedAt;
+                    float angle = (float)Math.Atan2(p.Direction.X, -p.Direction.Y);
+                    visual.Orientation = angle;
+                    visual.PendingOrientation = angle;
                     var obj = new ProjectileObject(p.Profile.Id, (int)Math.Round(at.X), (int)Math.Round(at.Y),
-                        (float)Math.Atan2(p.Direction.X, -p.Direction.Y),
+                        angle,
                         Team: p.Use.Team == 1 ? (ushort)0 : (ushort)1,
                         Height: (visual.Arc is { } arc ? arc.Height(arc.Fraction(p.Distance)) : visual.Height).ObjectHeight)
                         { AnimatedObject = flightVisual };
@@ -1522,7 +1550,11 @@ public static partial class Game
         // The pending move as it is projected: the next one built stops at the simulated position first.
         static byte[][]? Projected(Visual visual)
         {
-            if (visual.PendingGlide is not null) visual.Glided = true;
+            if (visual.PendingGlide is not null)
+            {
+                visual.Glided = true;
+                visual.Orientation = visual.PendingOrientation;
+            }
             return visual.PendingGlide;
         }
 
@@ -1557,8 +1589,20 @@ public static partial class Game
                 Console.WriteLine($"[gateway] {Player.Connection.Remote} projectile glide object={visual.Id} entity={p.Id}"
                     + $" from={start} to={end} duration={duration:0.###}"
                     + $" speed={p.Speed:0.##} first={first}");
-            return first ? [move]
-                : [startHeight.StopAt(visual.Id, (int)Math.Round(p.Position.X), (int)Math.Round(p.Position.Y)), move];
+            if (first)
+            {
+                if (p.Direction.Length > 0) visual.PendingOrientation = (float)Math.Atan2(p.Direction.X, -p.Direction.Y);
+                return [move];
+            }
+            var stop = startHeight.StopAt(visual.Id, (int)Math.Round(p.Position.X), (int)Math.Round(p.Position.Y));
+            if (p.Direction.Length <= 0) return [stop, move];
+            float angle = (float)Math.Atan2(p.Direction.X, -p.Direction.Y);
+            visual.PendingOrientation = angle;
+            float delta = MathF.Abs(angle - visual.Orientation);
+            if (delta > MathF.PI) delta = MathF.Tau - delta;
+            if (delta <= 1e-4f) return [stop, move];
+            var orient = InstanceProtocol.Orientation(visual.Id, angle);
+            return [stop, orient, move];
         }
         public static ProjectileVector Vector((int X, int Y) p) => new(p.X, p.Y);
         static string? PayloadLabel(object? payload) => payload switch

@@ -95,10 +95,9 @@ public sealed class CommandsModule : IModule
                     await player.Commands!.Reply(ChatPresence.SetAutoReply(player, command.Argument));
                     return true;
                 case InstanceItems.AfkCommand:
-                    // Preserve lockstep latency probing: S→C 0x194 elicits an automatic C→S 0x16 AfkCommand response
-                    // carrying the client's localized default AFK text (non-empty) while LockstepProbeSentAt != 0.
-                    if (player.Connection.LockstepClient
-                        && Volatile.Read(ref player.Connection.LockstepProbeSentAt) != 0) return false;
+                    // The AFK latency probe is settled in Messages.cs before command hooks run (upstream's
+                    // "0x194 asks the client for a non-empty AFK reply" gate), so this sees only real /afk.
+                    // ToggleAfk returns null when the same message is repeated: nothing to say back.
                     if (ChatPresence.ToggleAfk(player, command.Argument) is { } reply)
                         await player.Commands!.Reply(reply);
                     return true;

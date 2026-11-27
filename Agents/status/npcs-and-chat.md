@@ -14,7 +14,8 @@
 - `/played` saves online character time across area changes, relog and module reload: [10](../docs/protocol/10-chat-and-commands.md).
   Retail commands `/remaining`, `/deaths`, `/kills`, `/age`, `/itemlevel`, `/whois`, `/ladder`, `/invite`, `/afk`,
   `/dnd`, `/autoreply`, `/atlaspassives` and `/oosme`, plus area-wide level-up announcements, are implemented.
-  Their live client check is pending.
+  Area-entry latency probes stay out of chat presence in Predictive and Lockstep.
+  The remaining commands still need live checks.
 
 - 聊天命令 `/commands`（可写 `/com`；分页显示，`/com <名称>` 只看一条）、`/raw <十六进制>`、`/set_stat`、
   `/set_speed`、`/set_level <1 到 100>`（保存到账号，就地生效）、`/add_passive_points <n>`、`/add_passive <id>`

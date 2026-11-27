@@ -162,6 +162,13 @@
   每个拆分与合并的 tick/聊天回归都通过；集成的原生传送之后命令仍被保留。
   未知报文布局与既有的 0x0099 处理保持不变。
   文档：[副本分帧](../docs/protocol/02-instance-connection.md#fixed-message-boundaries-across-tcp-reads)。
+- Instance framing retains split 0x020a and 0x0059 messages at their primary-writer lengths of 3 and 16 bytes.
+  Every-split and coalesced tick/chat regressions pass; integrated native transfers preserve subsequent commands.
+  Unknown message layouts and existing 0x0099 handling remain unchanged.
+  Docs: [instance framing](../docs/protocol/02-instance-connection.md#fixed-message-boundaries-across-tcp-reads).
+- Instance framing measures the Trade Market panel's requests 0x01e2, 0x01e4, 0x01e6, 0x01e8 and 0x01ea.
+  They reach `GameEvents.Packet`, and the messages after them in the same read are no longer dropped as unframed.
+  The server does not answer them; a mod can. Layouts: [c2s](../docs/protocol/c2s.md).
 
 ## 部分实现
 
