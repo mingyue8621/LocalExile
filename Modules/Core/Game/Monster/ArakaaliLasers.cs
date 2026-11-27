@@ -15,6 +15,13 @@ public static class ArakaaliLasers
     internal const double Charge = .533, Contact = 1.999, Duration = 3.333;
     internal const double Radius = 3; // Collision-band calibration in grid cells.
     static readonly Store<InstanceState, Field> Fields = new();
+    /// <summary>Whether a rail's turret names its opposite end as a script entity reference. The client binds the beam
+    /// through that reference and reads the end's Positioned over it (Game.patched.exe 0x1b00f47, <c>mov rdx,[rax+0x98]</c>
+    /// with rax null); an end its world does not hold leaves the reference null and the client crashes when the rail's
+    /// Transitionable (S→C 0x2bc) plays — Arakaali's arena, live 2026-11-27. Off by default: the two ends still animate
+    /// the rail on their own StateMachine, and the damage is the server's either way. world.db's
+    /// <c>system_settings.arakaali_laser_link_ends</c> = 1 turns it back on.</summary>
+    static bool LinkEnds => SystemSettings.Default.GetIntOrDefault("arakaali_laser_link_ends", 0) != 0;
     public static async Task Tick(Player c)
     {
         if (c.Layout.Id != Arakaali.Area || !CurrentGameWork || !c.Connection.PlayerSent || c.Closed || c.LeavingArea || c.Paused) return;
@@ -46,10 +53,13 @@ public static class ArakaaliLasers
         readonly List<Lane> lanes = [];
         readonly List<Lane> groupA = [], groupB = [];
         readonly List<ActiveLane> activeSweep = [];
+        /// <summary>The clients that already hold the rails' creates. A client that loses sight of the boss (leaving the
+        /// arena, its world rebuilt on the way back) loses its mark and is sent them again.</summary>
+        readonly System.Runtime.CompilerServices.ConditionalWeakTable<Player, object> sent = new();
         internal IReadOnlyList<Lane> Lanes => lanes;
         double next;
         int wave;
-        bool stopped, reset = true, scenesBroadcast;
+        bool stopped, reset = true;
 
         public Field(Player c, uint id, SpawnedMonster actor)
         {
@@ -79,8 +89,12 @@ public static class ArakaaliLasers
                 if (!instance.World.SceneObjects.TryGetValue(Key(end), out var target)) continue;
                 available.Remove(end);
                 var origin = instance.World.SceneObjects[Key(source)];
-                instance.World.SceneObjects[Key(source)] = (origin.Id, origin.Type,
-                    origin.Object with { EntityVariables = new Dictionary<uint, uint> { [NextVariable] = target.Id } });
+                // The opposite-end reference is written only on request: the client resolves it when the turret is
+                // created and the rail's transition reads it back (see LinkEnds). Without it the rail has no bound end
+                // to dereference, and both ends still animate their own charging and firing.
+                instance.World.SceneObjects[Key(source)] = (origin.Id, origin.Type, LinkEnds
+                    ? origin.Object with { EntityVariables = new Dictionary<uint, uint> { [NextVariable] = target.Id } }
+                    : origin.Object);
                 double midX = (source.X + end.X) * 0.5, midY = (source.Y + end.Y) * 0.5;
                 var lane = new Lane(Key(source), Key(end), source.Type.EndsWith("_A", StringComparison.Ordinal), midX, midY);
                 lanes.Add(lane);
@@ -102,24 +116,22 @@ public static class ArakaaliLasers
 
         public async Task Bind(Player c)
         {
-            if (!MonsterShown(c, bossId) || MonsterAsleep(c, bossId)) return;
+            if (!MonsterShown(c, bossId)) { sent.Remove(c); return; }
+            if (MonsterAsleep(c, bossId)) return;
             players.Add(c);
+            if (sent.TryGetValue(c, out _)) return;
             var scenes = instance.World.SceneObjects
                 .Where(p => p.Key.StartsWith(Prefix, StringComparison.Ordinal))
-                .Select(p => p.Value).ToArray();
-            if (!scenesBroadcast)
-            {
-                scenesBroadcast = true;
-                foreach (var s in scenes)
-                {
-                    if (await SendWorldCreate(c, s.Id, () => InstanceEntities.CreateObject(s.Id, InstanceEntities.ObjectTypeHash(s.Type), s.Object.Blob()),
-                        "[Arakaali] linked arena turret", wake: true))
-                        foreach (var p in Present.ToArray()) Scenes(p).Add(s.Id);
-                }
-                return;
-            }
+                .Select(p => p.Value)
+                // A turret names its end at its own create: the ends are created first, whatever order the area built
+                // its objects in.
+                .OrderBy(s => s.Type.EndsWith("Display", StringComparison.Ordinal) ? 0 : 1).ToArray();
+            // Once per client: the area's objects outlive a client's world, so a client that came back needs them
+            // created again. A refused create is not retried every tick — the next visit tries again.
             foreach (var s in scenes)
-                Scenes(c).Add(s.Id);
+                if (await SendWorldCreate(c, s.Id, () => InstanceEntities.CreateObject(s.Id, InstanceEntities.ObjectTypeHash(s.Type), s.Object.Blob()),
+                    "[Arakaali] linked arena turret", wake: true)) Scenes(c).Add(s.Id);
+            sent.Add(c, scenes);
         }
 
         async Task State(string key, byte transition, int active)
@@ -128,11 +140,17 @@ public static class ArakaaliLasers
             s.Object = s.Object with { TransitionState = transition, StateMachine = s.Object.StateMachine!.Set("active", active) };
             instance.World.SceneObjects[key] = s;
             var components = s.Object.Components.ToList();
-            if (Present.FirstOrDefault(p => Scenes(p).Contains(s.Id)) is { } p)
+            // A type without the component has no index to send: `(byte)-1` would be 255 and the client would write past
+            // its component list, so neither record goes out.
+            int machine = components.IndexOf("StateMachine"), transitionable = components.IndexOf("Transitionable");
+            if (machine < 0 || transitionable < 0) return;
+            // Every client that holds the rail gets its state, not just the first one: each other client's copy would
+            // stay in the state it was created in.
+            foreach (var p in Present.Where(p => Scenes(p).Contains(s.Id)).ToArray())
             {
                 await SendWorldRecords(p, s.Id, () =>
-                    [InstanceEntities.StateMachineUpdate(s.Id, (byte)components.IndexOf("StateMachine"), s.Object.StateMachine!),
-                     InstanceEntities.TransitionableUpdate(s.Id, (byte)components.IndexOf("Transitionable"), transition)], "[Arakaali] turret rail state");
+                    [InstanceEntities.StateMachineUpdate(s.Id, (byte)machine, s.Object.StateMachine!),
+                     InstanceEntities.TransitionableUpdate(s.Id, (byte)transitionable, transition)], "[Arakaali] turret rail state");
             }
         }
 

@@ -303,6 +303,9 @@ public static class Arakaali
                 hideDestination = CampaignBossHelpers.WalkableNear(c, corners[cornerIndex]);
                 await Cast(c, HideEffect, hideDestination, now);
                 CampaignBossHelpers.SetInvulnerable(c, id, boss, true);
+                // The webs' buff names this boss as its caster; it is released before the boss' object leaves every
+                // client, so no client is left holding a debuff whose caster it no longer has.
+                await ClearWebDebuffs();
                 await SetWorldHidden(c, id, boss, true);
                 hideDeadline = now + HideSeconds;
                 boss.BusyUntil = hideDeadline;
@@ -474,6 +477,11 @@ public static class Arakaali
 
         async Task UpdateWebDebuffs(double now)
         {
+            // A held web's buff is drawn by its caster: the boss leaves the world for its relocation, and an effect that
+            // binds the player to a caster that is gone reads the caster's Positioned through a null reference
+            // (Game.patched.exe 0x1b00f47, live 2026-11-27). Nothing is held while it is hidden; the pools' slow comes
+            // back on the first check after it returns.
+            if (!double.IsNaN(hideDeadline)) { await ClearWebDebuffs(); return; }
             if (now < nextWebCheck) return;
             nextWebCheck = now + 0.25;
             foreach (var p in Present.ToArray())
