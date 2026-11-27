@@ -39,23 +39,28 @@ public static partial class Game
     public static bool LandsAtAim(Player player, int effect) =>
         SkillsFor(player).IsMovement(effect) && !SkillsFor(player).IsChannelled(effect)
         && !(SkillsFor(player).EffectId(effect) is { } id && (IsLightningWarpEffect(id) || id == "FrostblinkAltX"
-            || id.StartsWith("BlinkArrow", StringComparison.Ordinal)
+            || IsConsecratedPath(id) || id.StartsWith("BlinkArrow", StringComparison.Ordinal)
             || MovementInPlace.Any(name => id.StartsWith(name, StringComparison.Ordinal))));
 
     public static bool IsFlameDashEffect(string? effectId) =>
         effectId is "FlameDash" or "FlameDashAltX" or "FlameDashAltY" or "FlameDashHardMode" or "FlameDashRoyale";
+
+    internal static double FlameDashGroundSeconds(Player player, ushort skillId, int effect,
+        IReadOnlyDictionary<uint, int>? own = null, IReadOnlyDictionary<uint, int>? playerStats = null)
+    {
+        own ??= SupportedSkill(player, skillId).Stats;
+        playerStats ??= CharacterPlayerStats(player);
+        int baseMs = GolemStat(own, Stat.BaseSkillEffectDuration);
+        return SkillDurationModifiers.Seconds(baseMs > 0 ? baseMs : 4000,
+            k => GolemStat(playerStats, k), k => GolemStat(own, k), DurationKinds(player, effect));
+    }
 
     /// <summary>Builds Flame Dash's S→C 0x2c8 burning-ground segment update (reader 0x141478930 → 0x1414786c0):
     /// four i32 LE grid coordinates (x1, y1, x2, y2) and f32 LE duration in seconds.</summary>
     public static byte[] FlameDashGroundSegment(Player player, ushort skillId, int effect, ushort sequence,
         (int X, int Y) from, (int X, int Y) to)
     {
-        var own = SupportedSkill(player, skillId).Stats;
-        var playerStats = CharacterPlayerStats(player);
-        int baseMs = GolemStat(own, Stat.BaseSkillEffectDuration);
-        double seconds = baseMs > 0
-            ? SkillDurationModifiers.Seconds(baseMs, k => GolemStat(playerStats, k), k => GolemStat(own, k))
-            : 4.0;
+        double seconds = FlameDashGroundSeconds(player, skillId, effect);
         ushort actionTypeHash = SkillsFor(player).ActionHash(effect) ?? 0x5ccd;
         byte[] tail = new BlobWriter().I32(from.X).I32(from.Y).I32(to.X).I32(to.Y).F32((float)seconds).ToArray();
         return InstanceProtocol.ActionUpdate(player.Id, actionTypeHash, skillId, sequence, tail);
@@ -64,11 +69,36 @@ public static partial class Game
     public static (int X, int Y) MovementLanding(Player player, int effect, (int X, int Y) from, (int X, int Y) aim) =>
         MovementLanding(player, effect, from, aim, 0, 0);
 
+    /// <summary>Admits Flame Dash inside the cooldown critical section only when its resolved landing moves the player
+    /// (<c>landing != from</c>, matching client <c>0x141d39830</c>'s <c>dx^2 + dy^2 &gt;= 25</c> check before spending a
+    /// charge), and hands the resolved timing and landing to <paramref name="onAccepted"/> so rejected casts never
+    /// debit cooldowns, bump <c>ActionCount</c>, or acknowledge <c>0x01ab</c>/<c>0x02bc</c>.</summary>
+    internal static bool TryBeginFlameDashUse(Player player, ushort skillId, int effect, ushort flags,
+        double requestedAt, Func<double, (int X, int Y)> resolveAim,
+        Action<double, (int X, int Y), (int X, int Y), (int X, int Y)> onAccepted, out CooldownUseTicket? ticket)
+    {
+        double acceptedAt = 0;
+        (int X, int Y) from = default, aim = default, landing = default;
+        return TryBeginSkillCooldownUse(player, skillId, effect, CooldownForSkill(player, skillId), false,
+            () => onAccepted(acceptedAt, from, aim, landing), out ticket, requestedAt: requestedAt,
+            admit: () =>
+            {
+                bool lockstep = player.Connection.LockstepClient;
+                acceptedAt = lockstep && player.Connection.LockstepFrame is { } frame ? frame.Start
+                    : Math.Max(requestedAt, ProjectileWorldTime(player));
+                if (lockstep) StepWalkers(player, acceptedAt);
+                from = player.Walk.Position(acceptedAt);
+                aim = resolveAim(acceptedAt);
+                landing = MovementLanding(player, effect, from, aim, skillId, flags);
+                return landing != from;
+            });
+    }
+
     static (int X, int Y) MovementLanding(Player player, int effect, (int X, int Y) from, (int X, int Y) aim, ushort skill, ushort flags)
     {
-        if (player.Layout.Walkable is not { } floor) return aim;
-        bool walkable(int x, int y) => floor(x, y) && !player.Barrier.Contains((x, y));
         string? id = SkillsFor(player).EffectId(effect);
+        if (player.Layout.Walkable is not { } floor) return IsFlameDashEffect(id) ? from : aim;
+        bool walkable(int x, int y) => floor(x, y) && !player.Barrier.Contains((x, y));
         if (id == "FrostblinkAltX")
         {
             const uint distanceStat = Stat.SkillMaximumTravelDistancePlusPct;
@@ -77,12 +107,31 @@ public static partial class Game
             return InstantLocationSkill.TryResolveLanding(player, from, aim, travel, allowTerrainFallback: true, out var landing)
                 ? landing : from;
         }
+        if (IsFlameDashEffect(id))
+        {
+            // 3.29.3c 0x141d39ea0 / 0x141d39d10 / 0x141d399a0 / 0x141d3b790 / 0x141d39830: Flame Dash clamps to
+            // [25, 60 * (100 + travel + maxTravel) / 100], checks layer-1 sight along direct travel, falls back with
+            // the same layer-0-abort / layer-1-record trace as IceDash, and requires dx^2 + dy^2 >= 25.
+            var playerStats = CharacterPlayerStats(player);
+            int travel = GolemStat(playerStats, Stat.SkillTravelDistancePlusPct)
+                + GolemStat(playerStats, Stat.SkillMaximumTravelDistancePlusPct);
+            if (skill != 0)
+            {
+                var own = SupportedSkill(player, skill).Stats;
+                travel += GolemStat(own, Stat.SkillTravelDistancePlusPct)
+                    + GolemStat(own, Stat.SkillMaximumTravelDistancePlusPct);
+            }
+            return InstantLocationSkill.TryResolveLanding(player, from, aim, travel, allowTerrainFallback: true,
+                out var landing, minRange: 25, baseMaxRange: 60)
+                ? landing : from;
+        }
         if (id is "Dash" or "DashHardMode")
         {
             const uint distanceStat = Stat.SkillTravelDistancePlusPct;
             int travel = GolemStat(CharacterPlayerStats(player), distanceStat);
             if (skill != 0) travel += GolemStat(SupportedSkill(player, skill).Stats, distanceStat);
-            return DashLanding(player.Layout, player.Barrier, from, aim, travel, (flags & 1) != 0);
+            return DashLanding(player.Layout, player.Barrier, from, aim, travel, (flags & 1) != 0,
+                size: 1, sightBarriers: player.SightBarrier);
         }
         if (id?.StartsWith("WhirlingBlades", StringComparison.Ordinal) == true && aim != from)
         {
@@ -97,40 +146,16 @@ public static partial class Game
             }
             return last;
         }
-        // A blink (Dash, Frostblink, Flame Dash) and a leap (Leap Slam, Blink Arrow) land where they land: what matters
-        // is that the cell holds the player, not that a path leads to it. Walking the line back from the aim put the
-        // player at the start whenever the aim was inside a wall, and the client's next resync pulled them back there
-        // (the same complaint as 2026-10-23, live again 2026-11-12 with Dash).
-        if (SkillsFor(player).IsBlink(effect) || SkillsFor(player).IsTravel(effect))
-            return StandableNear(aim, walkable) ?? from;
-        foreach (var cell in ClientPathfinder.Line(aim, from))
-            if (walkable(cell.X, cell.Y)) return cell;
-        return from;
-    }
-
-    // How far from the aimed cell a blink looks for a cell the player can stand on.
-    const int LandingSearchRadius = 12;
-
-    /// <summary>The aimed cell when the player can stand on it, else the nearest one that can, ring by ring. A blink
-    /// aimed into a wall lands beside it, as the client's own does, instead of at the start.</summary>
-    static (int X, int Y)? StandableNear((int X, int Y) aim, Func<int, int, bool> walkable)
-    {
-        if (walkable(aim.X, aim.Y)) return aim;
-        for (int radius = 1; radius <= LandingSearchRadius; radius++)
+        var sight = player.Layout.Sight;
+        var sightBarrier = player.SightBarrier;
+        var landed = from;
+        foreach (var cell in ClientPathfinder.Line(from, aim))
         {
-            (int X, int Y)? best = null;
-            int bestDistance = int.MaxValue;
-            for (int dy = -radius; dy <= radius; dy++)
-                for (int dx = -radius; dx <= radius; dx++)
-                {
-                    if (Math.Max(Math.Abs(dx), Math.Abs(dy)) != radius) continue;   // this ring only
-                    if (!walkable(aim.X + dx, aim.Y + dy)) continue;
-                    int distance = dx * dx + dy * dy;
-                    if (distance < bestDistance) (bestDistance, best) = (distance, (aim.X + dx, aim.Y + dy));
-                }
-            if (best is not null) return best;
+            if (sightBarrier.Contains(cell) || sight is not null && sight(cell.X, cell.Y) < 1) break;
+            if (sight is null && cell != from && !walkable(cell.X, cell.Y)) break;
+            if (walkable(cell.X, cell.Y)) landed = cell;
         }
-        return null;
+        return landed;
     }
 
     // Dash crosses open gaps. Only the landing needs walking clearance. If the direct landing fails,
@@ -139,7 +164,12 @@ public static partial class Game
     // standing room at the end and along the line, and one more of clearance for the fallback: Ainsley Varrich's
     // stopped 4-5 cells short of the size-1 landing at both ends of an open line (sync trace 2026-11-17).
     public static (int X, int Y) DashLanding(AreaLayout layout, IReadOnlySet<(int X, int Y)> barriers,
-        (int X, int Y) from, (int X, int Y) aim, int travelPercent, bool reverse, int size = 1)
+        (int X, int Y) from, (int X, int Y) aim, int travelPercent, bool reverse, int size = 1) =>
+        DashLanding(layout, barriers, from, aim, travelPercent, reverse, size, barriers);
+
+    public static (int X, int Y) DashLanding(AreaLayout layout, IReadOnlySet<(int X, int Y)> barriers,
+        (int X, int Y) from, (int X, int Y) aim, int travelPercent, bool reverse, int size,
+        IReadOnlySet<(int X, int Y)> sightBarriers)
     {
         size = Math.Max(1, size);
         if (from == aim) return from;
@@ -170,7 +200,7 @@ public static partial class Game
         foreach (var cell in ClientPathfinder.Line(from, end).Skip(1))
         {
             int clearance = sight(cell.X, cell.Y);
-            if (clearance < size || barriers.Contains(cell)) return last;
+            if (clearance < size || sightBarriers.Contains(cell)) return last;
             fallback &= clearance >= size + 1;
             if (fallback && floor(cell.X, cell.Y)) last = cell;
             if (!fallback && !direct) break;

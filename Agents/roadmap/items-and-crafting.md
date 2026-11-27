@@ -101,6 +101,9 @@ essence upgrading remain separate features.
   并不能把未证明的零对照变成通过。这些历史原生结果不能验证新的效果解析器。条件获取/效果运算符、
   整件传奇的原生获取/提示行为、非正持续时间策略、官方小数取整与排队后的原生计时器/预测显示仍待处理。
   见 protocol 13 §8 与物品状态文档。
+- Future item triggers can reuse the [world rule sources, events, conditions and actions](../docs/dev/combat-effect-rules.md) introduced for
+  Onslaught, granted marks and Svalinn. Additional actions need combat support and behavior checks.
+
 - **Jeweller's Orb:** initial local 0x71/Shift 0x72 implementation rerolls counts, colours and links with class and
   item-level caps; the live-found refusal at the item-level cap is fixed (only base capacity blocks use), verified
   live.

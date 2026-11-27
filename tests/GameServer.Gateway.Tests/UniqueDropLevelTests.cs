@@ -19,7 +19,7 @@ public class UniqueDropLevelTests
             var type = catalog.Find(id)!;
             for (int level = 1; level <= 20; level++)
                 for (int roll = 0; roll < 40; roll++)
-                    if (drops.Unique(type, level, level + ItemDrops.ItemLevelBonus(MonsterRarity.Unique), new Random(level * 1000 + roll)) is { } item)
+                    if (drops.TryUnique(type, level, level + ItemDrops.ItemLevelBonus(MonsterRarity.Unique), new Random(level * 1000 + roll)) is { } item)
                         Assert.True(Required(catalog, item) <= level, $"{id} at level {level} gave a unique needing {Required(catalog, item)}");
         }
     }
@@ -33,7 +33,7 @@ public class UniqueDropLevelTests
         // Every Chain Belt unique the catalogue rolls at level 60 is legal there, and at least one needs more than a level
         // 2 area: the gate is what keeps that one out of the early acts.
         var highs = Enumerable.Range(0, 300)
-            .Select(seed => drops.Unique(belt, 60, 63, new Random(seed)))
+            .Select(seed => drops.TryUnique(belt, 60, 63, new Random(seed)))
             .OfType<Item>()
             .Select(item => Required(catalog, item))
             .ToList();
