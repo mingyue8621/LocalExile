@@ -36,7 +36,7 @@ public static partial class Game
         // An NPC is the player's quest view: their quest state chose it, so it is theirs alone to see (AreaDelta's private entities).
         if (InAreaFrame(player))
         {
-            player.Area.Delta.Add(id, InstanceEntities.CreateObject(id, type, obj.Blob()), log, AreaDelta.Kind.Create, only: player);
+            player.Area.Delta.Add(id, InstanceEntities.CreateObject(id, type, obj.Blob(), headerU32: uint.MaxValue), log, AreaDelta.Kind.Create, only: player);
             player.Area.Delta.Add(id, InstanceProtocol.EnterWakeZone(id), null, only: player);
         }
         else
@@ -83,6 +83,7 @@ public static partial class Game
         {
             // A town NPC a quest stages (DiallaTown / DiallaTownWithered, Lilly shipside / sitting …) comes with the quest NPCs (World/Quest/QuestNpcs.cs).
             if (quests.ManagesNpc(player.Layout.Id, p.Id) || p.ShownBy is not null || p.GoneWith is not null) continue;
+            if (p.RequiredLeagueFlag is int reqLqf && !player.Character.LeagueQuestFlags.Contains(reqLqf)) continue;
             if (Npcs.Place(p) is not { } placed) { Console.WriteLine($"[gateway] {player.Connection.Remote} npc {p.Id}: not in NPCs.dat"); continue; }
             // Several NPC types read components the server does not write (Kingsmarch's villagers: StateMachine,
             // ControlZone, Functions, Brackets). Rather than dropping them — which left the town empty — send the plain

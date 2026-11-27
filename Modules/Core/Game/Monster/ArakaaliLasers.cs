@@ -53,9 +53,6 @@ public static class ArakaaliLasers
         readonly List<Lane> lanes = [];
         readonly List<Lane> groupA = [], groupB = [];
         readonly List<ActiveLane> activeSweep = [];
-        /// <summary>The clients that already hold the rails' creates. A client that loses sight of the boss (leaving the
-        /// arena, its world rebuilt on the way back) loses its mark and is sent them again.</summary>
-        readonly System.Runtime.CompilerServices.ConditionalWeakTable<Player, object> sent = new();
         internal IReadOnlyList<Lane> Lanes => lanes;
         double next;
         int wave;
@@ -116,22 +113,25 @@ public static class ArakaaliLasers
 
         public async Task Bind(Player c)
         {
-            if (!MonsterShown(c, bossId)) { sent.Remove(c); return; }
-            if (MonsterAsleep(c, bossId)) return;
+            if (!MonsterShown(c, bossId) || MonsterAsleep(c, bossId)) return;
             players.Add(c);
-            if (sent.TryGetValue(c, out _)) return;
             var scenes = instance.World.SceneObjects
                 .Where(p => p.Key.StartsWith(Prefix, StringComparison.Ordinal))
                 .Select(p => p.Value)
-                // A turret names its end at its own create: the ends are created first, whatever order the area built
-                // its objects in.
+                // A turret names its end at its own create: the ends must exist first, whatever order the area built
+                // its objects in (live crash before this: the turret's create carried an empty end reference).
                 .OrderBy(s => s.Type.EndsWith("Display", StringComparison.Ordinal) ? 0 : 1).ToArray();
-            // Once per client: the area's objects outlive a client's world, so a client that came back needs them
-            // created again. A refused create is not retried every tick — the next visit tries again.
             foreach (var s in scenes)
+            {
+                if (Scenes(c).Contains(s.Id) || c.Area.Objects.Has(s.Id))
+                {
+                    Scenes(c).Add(s.Id);
+                    continue;
+                }
                 if (await SendWorldCreate(c, s.Id, () => InstanceEntities.CreateObject(s.Id, InstanceEntities.ObjectTypeHash(s.Type), s.Object.Blob()),
-                    "[Arakaali] linked arena turret", wake: true)) Scenes(c).Add(s.Id);
-            sent.Add(c, scenes);
+                    "[Arakaali] linked arena turret", wake: true))
+                    Scenes(c).Add(s.Id);
+            }
         }
 
         async Task State(string key, byte transition, int active)
@@ -206,12 +206,19 @@ public static class ArakaaliLasers
         public async Task Step(Player c, double now)
         {
             if (stopped || !CurrentGameWork || c.Paused || lanes.Count == 0) return;
-            if (reset) { await Reset(); reset = false; next = now + 5; }
             if (boss.Dead || boss.StageRunning || boss.LifePhases?.Active == true)
-            { if (activeSweep.Count > 0) await Reset(); next = now + 5; return; }
-            var target = Present.Where(p => p.PlayerLife > 0 && MonsterShown(p, bossId) && !MonsterAsleep(p, bossId))
-                .MinBy(p => CampaignBossHelpers.Distance(boss.Walk.Position(now), p.Walk.Position(now)));
-            if (target is null) return;
+            {
+                if (reset || activeSweep.Count > 0) { await Reset(); reset = false; }
+                next = now + 5;
+                return;
+            }
+            var target = CampaignBossHelpers.NearestLivingTarget(c, boss.Walk.Position(now), now, 140, bossId);
+            if (target is null)
+            {
+                if (activeSweep.Count > 0) { await Reset(); next = now + 5; }
+                return;
+            }
+            if (reset) { await Reset(); reset = false; next = now + 5; return; }
 
             if (activeSweep.Count == 0)
             {

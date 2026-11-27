@@ -206,10 +206,16 @@
   Driver step files `scripts/dev/campaign/quests/a7q*.py` … `a10q*.py`, `A11q0.py`, `a10q3a11.py`.
   Code: `Acts/Act7.cs` … `Acts/Act11.cs` (QuestObjects module), `NPC/TownNpcs.cs`, `CharacterVoiceLines.cs`.
   Act 6–10 quest/NPC fixes cover dual Shavronne/Brutus kill, Karui blockers, prerequisite-free Strand clear, all four
-  Ralakesh avatars, Nessa/Yeena post-kill NPCs, Tolman/Kira kills, Bannon town gating and Epilogue `a11q1` Map Device
-  progression (not checked live).
+  Ralakesh avatars, Nessa/Yeena post-kill NPCs, Tolman/Kira kills, and Bannon town gating (not checked live).
   Docs: [12](../docs/protocol/12-quests.md) §16–19; [act 7](../docs/game/campaign/act7.md) …
   [act 10](../docs/game/campaign/act10.md).
+- Act 11 endgame storylines (verified live in 3.29.3d): `a11q1` ("A Call to Arms") Karui Shores Helena/Kirac dialogue
+  and War Room Map Device progression without bypassing flags, `kirac_atlas` / Envoy encounters, `maven_atlas` and
+  `maven_boss` real witnessing and Crucible flow, `tangle` and `cleansing_fire` Eldritch influence, Altars, and 28-map
+  trackers, `ThreadsOfTheOriginator` and `Colourful Roses` Zana/Eagon Memory Tears, Astrolabes, Memory Vaults, 3.29
+  Atlas Anomalies, all nine Atlas Books of Skill, and Merciless/Eternal Labyrinth (`labyrinth_a11`).
+  Code: `Modules/Core/World/Atlas/`, `Modules/Core/World/QuestObjects/Acts/Act11.cs`, `NpcScripts.cs`.
+  Docs: [21](../docs/protocol/21-hideouts.md).
 
 - 任务引擎以及建立在其上的整个第一幕，由第一幕的标准答案检查，尚未在模块上用客户端实机跑过
   （「已实现」里的 a1q1、a1q4、a1q5 是在它们迁到引擎上之前跑的；下面其他第一幕任务是在游戏搬进模块之前跑在引擎上的）：

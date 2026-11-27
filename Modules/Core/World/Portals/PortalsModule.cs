@@ -18,10 +18,31 @@ public sealed class PortalsModule : IModule
         global::PortalsRules.LoadRulesSettingsData();
     }
 
+    static readonly string[] FlagNone = [];
+    static readonly string[] FlagInMapArea = ["InMapArea"];
+    static readonly string[] FlagMapDeviceActive = ["MapDeviceActive"];
+
+    static IReadOnlyList<string> TransientMapAreaFlags(Player player)
+    {
+        if (MapDevices.IsMapArea(player.Layout.Hash)) return FlagInMapArea;
+        if (HideoutCatalog.ByArea(player.Layout.Hash) is not null)
+        {
+            // Keep MapDeviceActive off while mid-a11q1 (LQF 1036 seen, 1038 not completed) until portals are opened
+            // so the quest tracker waits at state 4 ("Place it in the Map Device and activate it") instead of skipping.
+            const int kiracMapTutorialSeen = 1036, kiracMapTutorialDone = 1038;
+            if (!player.Character.LeagueQuestFlags.Contains(kiracMapTutorialSeen)
+                || player.Character.LeagueQuestFlags.Contains(kiracMapTutorialDone)
+                || MapDevice.AtEntrance(player.Layout.Hash, player.InstanceNumber) is { PortalsLeft: > 0 })
+                return FlagMapDeviceActive;
+        }
+        return FlagNone;
+    }
+
     /// <inheritdoc/>
     public void Load(IModuleContext module)
     {
         LoadData();
+        GameEvents.AreaQuestFlags.Add(module.Manifest.Id, TransientMapAreaFlags);
         // The portals a player can take are their own view (each keeps its own portal state): theirs alone to see.
         GameEvents.PlayerEntered.Add(module.Manifest.Id, async player =>
         {
@@ -57,13 +78,20 @@ public sealed class PortalsModule : IModule
                         // 上游的 Game.SpawnHideoutDevice 取代了本地的 SpawnHideoutDoodads：
                         // 装置变体（含按钮与碰撞）、宠物与装饰都在里面。
                         await Step("藏身处装置", () => global::Game.SpawnHideoutDevice(player));
+                        await Step("终局城镇装置", () => global::Game.SpawnEndgameTownDevice(player));
                         await Step("地图返回门", () => SpawnMapReturnPortal(player));
                         // 藏身处实例在最后一个人离开六分钟后消失，装置也跟着消失：那一局的传送门原本立在那里，
                         // 现在跟随角色来到脚下这个实例，所以要在摆门之前把它们挪过来。
                         await Step("跟随装置实例", () => PortalsRules.FollowDeviceToThisInstance(player));
-                        // Everyone in this exact device instance sees and spends the same run's portals (upstream's shared
-                        // map-device portals, by area and instance rather than by the character's own open map).
-                        if (MapDevice.AtEntrance(player.Layout.Hash, player.InstanceNumber) is { PortalsLeft: > 0 } open)
+                        // Everyone in a hideout/campaign device instance sees the same run's portals; in Karui Shores, each player sees their own.
+                        if (player.Layout.Id == MapDevice.EndgameTownArea)
+                        {
+                            if (MapDevice.OpenOf(CharacterName(player)) is { PortalsLeft: > 0 } ownOpen
+                                && (ownOpen.Entrance ?? ownOpen.ReturnTo) is { } ownOrigin
+                                && ownOrigin.Area == player.Layout.Hash && ownOrigin.Instance == player.InstanceNumber)
+                                await Step("地图装置的门（自己的）", () => SpawnMapPortals(player, ownOpen, firstAfterMs: MapPortalEntryMs, standing: true));
+                        }
+                        else if (MapDevice.AtEntrance(player.Layout.Hash, player.InstanceNumber) is { PortalsLeft: > 0 } open)
                             await Step("地图装置的门", () => SpawnMapPortals(player, open, firstAfterMs: MapPortalEntryMs, standing: true));
                     }
                     catch (Exception e)
@@ -115,6 +143,11 @@ public sealed class PortalsModule : IModule
             if (portal is { } p)
             {
                 await UseMapPortal(player, use, p, requestedAt);
+                return true;
+            }
+            if (global::Game.EndgameTownDevice(player) is { } townDevice && use.TargetId == townDevice.Id)
+            {
+                await UseEndgameTownMapDevice(player, use, (townDevice.X, townDevice.Y), requestedAt);
                 return true;
             }
             HideoutCatalog.Doodad? doodad;

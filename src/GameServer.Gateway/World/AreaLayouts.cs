@@ -55,35 +55,39 @@ public sealed record AreaLayout(ushort Hash, string Id, int GridW, int GridH, in
         [(AreaLayouts.LioneyesWatch, 0xf00a /* 1_1_1 The Twilight Strand */)] = (123, 308),
     };
 
-    // Areas whose client data names two ways to the same neighbour: the k-th out cannot be paired with the k-th back,
-    // so EntrancePoint falls back to putting the disabled entrance first, and its point is a tower marker the server
-    // never creates — inside that tower's client-side collision while the walk map calls the cell walkable, so the
-    // player arrives unable to move (live 2026-11-25: "arrival from 0xbeab: (530, 326)" seven times, The Control
-    // Blocks' entrance2disabled tower_v01_01_area_transition at (530, 326), a duplicate 1_5_town connection next to
-    // the real one, slave_doublewall_tower_stair_transition at (632, 501) → 1_5_town). They arrive at the spawn.
-    static readonly HashSet<(ushort Area, ushort From)> SpawnArrivals =
-        [(0xf50a /* 1_5_2 The Control Blocks */, 0xbeab /* 1_5_town Overseer's Tower */)];
-
     /// <summary>Where a player entering this area appears: the room's authored entrance point for
     /// <paramref name="cameFrom"/> when available, else next to the exit leading back to <paramref name="cameFrom"/>,
-    /// else the spawn (logins, Resurrect in Town, no exit back).</summary>
+    /// else an unslotted entrance fallback, else the spawn (logins, Resurrect in Town, no exit back).</summary>
     public (int X, int Y) Arrival(ushort? cameFrom, int? entrance = null)
     {
         if (cameFrom is not { } from) return (SpawnX, SpawnY);
-        if (SpawnArrivals.Contains((Hash, from))) return (SpawnX, SpawnY);
         if (OneWayArrivals.TryGetValue((Hash, from), out var point)) return point;
-        if (EntranceFrom?.Invoke(from, entrance) is { } authored)
+        var authored = EntranceFrom?.Invoke(from, entrance);
+        if (authored is { NamedPoint: true } named)
         {
-            var pt = (authored.X, authored.Y);
+            var pt = (named.X, named.Y);
             bool onTransition = AreaTransitions.Any(t => t.Transition.DestinationHash16 == from && t.Transition.TeleportTo is null
                 && Math.Abs(t.Transition.GridX - pt.X) <= 4 && Math.Abs(t.Transition.GridY - pt.Y) <= 4);
-            if (authored.NamedPoint && !onTransition && (Walkable is null || Walkable(pt.X, pt.Y)))
+            if (!onTransition && (Walkable is null || Walkable(pt.X, pt.Y)))
                 return pt;
-            return Near(pt);
+            var near = Near(pt);
+            if (Walkable is null || Walkable(near.X, near.Y))
+                return near;
         }
         foreach (var (_, t) in AreaTransitions)
             if (t.DestinationHash16 == from && t.TeleportTo is null
-                && (entrance is null || t.Entrance == entrance)) return Near((t.GridX, t.GridY));
+                && (entrance is null || t.Entrance == entrance))
+            {
+                var near = Near((t.GridX, t.GridY));
+                if (Walkable is null || Walkable(near.X, near.Y))
+                    return near;
+            }
+        if (authored is { } fallback)
+        {
+            var near = Near((fallback.X, fallback.Y));
+            if (Walkable is null || Walkable(near.X, near.Y))
+                return near;
+        }
         return (SpawnX, SpawnY);
     }
 
