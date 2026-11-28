@@ -56,8 +56,11 @@ public static partial class Game
         long Get(uint id) => (long)stats.GetValueOrDefault(id) + (own?.GetValueOrDefault(id) ?? 0);
         long additionalChance = (twoHanded ? Get(Stat.AttacksWithTwoHandedWeaponsImpaleOnHitPctChance) : 0)
             + (axeOrSword ? Get(Stat.ImpaleOnHitPctChanceWithAxesSwords) : 0);
-        return ImpaleStats.From(stats, catalog, attack, own, local, critical, additionalChance);
+        return WithRingImpaleDuration(ImpaleStats.From(stats, catalog, attack, own, local, critical, additionalChance), stats);
     }
+
+    static ImpaleStats.Settings WithRingImpaleDuration(ImpaleStats.Settings settings, IReadOnlyDictionary<uint, int> stats) =>
+        settings with { Duration = settings.Duration * Math.Max(0, 1 + stats.GetValueOrDefault(Stat.LocalRingImpaledDebuffDurationPlusPctFinal) / 100d) };
 
     // The gem's nearby effect is estimated at 2.3 m. Its stat set does not export a radius.
     const int KillingBlowImpaleRadius = 23;
@@ -80,7 +83,7 @@ public static partial class Game
             if (enemy is not { Hostile: true, OwnerId: null, Dead: false, Life: > 0, Invulnerable: false, WorldHidden: false }
                 || Dist(centre, enemy.Walk.Position(now)) > KillingBlowImpaleRadius) continue;
             int damage = MonsterImpaleDamage(enemy, stored, now);
-            if (damage <= 0 || ApplyMonsterHitLocked(player, enemy, damage, playerStats: stats, allyAt: centre) is not { } hit)
+            if (damage <= 0 || ApplyMonsterIndirectDamageLocked(player, enemy, damage, playerStats: stats, allyAt: centre) is not { } hit)
                 continue;
             if (hit.Life == 0) SetStats(player, id, [(Stat.HideMiniLifeBar, 1)]);
             session.World(id, InstanceProtocol.LifeUpdate(id, hit.Life),

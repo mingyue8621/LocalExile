@@ -170,6 +170,8 @@ public static partial class Game
         if (devoured)
             session.Enqueue(() => SendWorldRemoval(player, id,
                 $"0x02bd corpse 0x{id:x} ({monster.Label}) devoured by the supported skill"));
+        else if (!corpseDestroyed && ConsumeVoidSphereCorpseLocked(player, id, monster, now))
+            session.WorldRecords(id, () => [InstanceProtocol.RemoveObject(id)], remove: true);
         // The mods (Program.Mods.cs) as in MonsterKilled: their modifiers here, inside the commit; the kill after it.
         var killer = PlayerOf(player);
         var modMonster = ModMonster(monster, position);
@@ -231,9 +233,13 @@ public static partial class Game
                 session.Enqueue(async () => { await SynchronizeAccountLevel(player); });
             }
         }
-        if (!MonsterGivesNoRewards(monster))
+        if (MonsterGrantsKillFlaskCharges(monster))
+        {
+            int flaskChargesPct = ActorScale.Saturate((long)(tinctureKill?.FlaskChargesPct ?? 0)
+                + BleedingKillFlaskChargesPct(player, monster.BleedSourcesAtDeath?.Contains(player.Id) == true));
             CommitProjectileFlaskGain(session, (_, _) => FlaskCharges.FullShortcut ? int.MaxValue
-                : FlaskCharges.KillCharges(monster.Rarity, ItemsFor(player).Mods, tinctureKill?.FlaskChargesPct ?? 0));
+                : FlaskCharges.KillCharges(monster.Rarity, ItemsFor(player).Mods, flaskChargesPct));
+        }
         // The map overlay's "X monsters remain" (S→C 0x1a0): coalesced once per batch instead of once per kill.
         session.QueueRemainingMonsters();
         // Loot rolling is catalogue work (ItemDrops.Roll); doing it under the projectile runtime's Monsters lock held
@@ -315,7 +321,7 @@ public static partial class Game
         foreach (var (flask, local, charges, amount) in gaining)
         {
             if (!CanGainFlaskCharges(player, flask, local, stats)) continue;
-            int whole = player.FlaskChargeCarry.Take(flask.Id, amount * FlaskCharges.GainMultiplier(local, Get, areaIncrease));
+            int whole = player.FlaskChargeCarry.Take(flask.Id, amount * FlaskGainMultiplier(player, flask.Id, local, Get, areaIncrease));
             if (whole > 0 && items.ChangeUnsaved(PlayerInventories.Flask, flask.Id, value => Flasks.Gain(value, charges, whole)) is { } item)
                 changed.Add(item);
         }

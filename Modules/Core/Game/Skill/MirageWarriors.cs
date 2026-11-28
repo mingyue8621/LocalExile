@@ -598,10 +598,13 @@ public static partial class Game
                     if (m.Dead || m.Life == 0) continue;
                     int hitChance = AttackHitChanceAt(player, id, m, now, accuracy, playerStats);
                     if (!accuracy.CannotBeEvaded && !m.AttackEvasion.Hits(hitChance, now, player.AttackAccuracyRandom)) continue;
-                    if (MonsterBlocks(m, AreaRng(player), spell: false, now, skillStats)) continue;
+                    if (MonsterBlocks(m, AreaRng(player), spell: false, now, skillStats, playerStats)) continue;
                     var fullLifeStrike = dualStrikeBonuses.Against(m);
                     double damageMore = fullLifeStrike.DamageMore;
-                    var contactHit = damageMore == 1 ? hitPacket : hitPacket.Scale(damageMore);
+                    var addedPhysical = PoachersAddedPhysical(m, now);
+                    var contactHit = addedPhysical.IsZero ? hitPacket : SupportedHitFrom(capturedInputs, suppress: false,
+                        addedPhysical: addedPhysical).Scale(factor);
+                    if (damageMore != 1) contactHit = contactHit.Scale(damageMore);
                     var rolled = WithConditionalSupportDamageLocked(player, skillStats, attack: true, m,
                         GameEvents.WithOutgoingDamage(player, playerStats, m,
                             damageRoll.RollBeforeCritical(contactHit, AreaRng(player), criticalDoubleDamage)), now);
@@ -636,7 +639,7 @@ public static partial class Game
                         AilmentsOnHitLocked(player, id, m, mitigated, spell: false, critical, multiplier, playerStats, ailmentStats, now,
                             AreaRng(player), attackGains: default, projectileDamage: false, projectileFreezeChance: 0,
                             sourceEffect: gem.Effect, poison: damageMore == 1 ? poison : RepeatAilment(poison, damageMore),
-                            sourceSkill: skillId, ownHit: false,
+                            sourceSkill: skillId, ownHit: false, playerAilmentOwned: false,
                             weaponWitherChance: local?.GetValueOrDefault(Stat.LocalWitheredOnHitFor2SecondsPctChance) ?? 0);
                         if (applied.Life > 0 && ignite.CanIgnite(rolled)
                             && IgniteOnHitLocked(player, id, m, damageMore == 1 ? ignite : RepeatAilment(ignite, damageMore),
@@ -644,7 +647,7 @@ public static partial class Game
                             dotPackets.AddRange(ign);
                         if (applied.Life > 0 && rolled[DamageType.Physical].Max > 0
                             && BleedOnHitLocked(player, id, m, damageMore == 1 ? bleed : RepeatAilment(bleed, damageMore),
-                                critical, now) is { } bld)
+                                critical, now, reflect: false, playerOwned: false) is { } bld)
                             dotPackets.AddRange(bld);
                     }
                     if (meleeExcludedId == 0 && IsLightningStrike(gem.Effect)) meleeExcludedId = id;

@@ -437,8 +437,14 @@ public static partial class Game
             }
         }
         int extraBeidatProjectiles = CastingBeidatSpell(player, skillId)?.Projectiles ?? 0;
-        int Get(uint k) => k == Stat.NumberOfAdditionalProjectiles
-            ? merged.GetValueOrDefault(k) + extraBeidatProjectiles : merged.GetValueOrDefault(k);
+        var placed = from is not null ? PlacedKind(admittedGem) : default;
+        int extraPlacedChains = placed.Trap || placed.Mine ? merged.GetValueOrDefault(Stat.TrapMineSkillNumOfAdditionalChains) : 0;
+        int Get(uint k) => k switch
+        {
+            Stat.NumberOfAdditionalProjectiles => merged.GetValueOrDefault(k) + extraBeidatProjectiles,
+            Stat.NumberOfAdditionalChainsForProjectiles => ActorScale.Add(k, merged.GetValueOrDefault(k), extraPlacedChains),
+            _ => merged.GetValueOrDefault(k),
+        };
         int Player(uint k) => playerStats.GetValueOrDefault(k);
         int Own(uint k) => own.GetValueOrDefault(k);
         var definition = ResolveProjectileDefinition(gem.Effect) ?? (ArrowRain(SkillsFor(player).EffectId(gem.Effect)) ? GroundArrow : null)
@@ -583,11 +589,11 @@ public static partial class Game
             Spider = hitInputs is null ? null : CaptureSpiderDamage(player, hitInputs,
                 AddedEffectiveness(player, gem.Effect, gem.Level), context: false, local: local,
                 bow: !spell && WeaponProfileFor(player, activeSet: true).Bow, offHand: swingHand == AttackHand.Off,
-                required: trackTrajectoryDamage, extraIncreased: exertedIncreased),
+                required: trackTrajectoryDamage, extraIncreased: exertedIncreased, forMarkedTarget: true),
             SpiderArea = areaHitInputs is null ? null : CaptureSpiderDamage(player, areaHitInputs,
                 AddedEffectiveness(player, gem.Effect, gem.Level), context: false, local: local,
                 bow: !spell && WeaponProfileFor(player, activeSet: true).Bow, offHand: swingHand == AttackHand.Off,
-                required: trackTrajectoryDamage, extraIncreased: exertedIncreased),
+                required: trackTrajectoryDamage, extraIncreased: exertedIncreased, forMarkedTarget: true),
             MirageSource = totem is null && Own(Stat.SupportMirageArcherBaseDuration) > 0 ? SupportedSkill(player, skillId) : null,
             CriticalTrigger = spell ? null : CaptureCriticalTriggerSource(player, skillId),
             KineticFluxDriver = !spell && totem is null && from is null && sacrifice?.Triggered != true
@@ -736,6 +742,10 @@ public static partial class Game
         if (IsExplosiveArrow(SkillsFor(player).EffectId(gem.Effect)) && areaHitInputs is not null)
             use = use with { Payload = shot with { ExplosiveFuse = CaptureExplosiveFuse(context, areaHitInputs, playerStats, own, hand, local) } };
         use = definition.SpecializeRelease?.Invoke(context, use) ?? use;
+        if (ownerAttack && !rain && sacrifice?.Triggered != true && attackSource?.WieldingWand == true
+            && Get(Stat.SkillCanFireWandProjectiles) != 0 && Get(Stat.ProjectilesAreNotFired) == 0
+            && use.Payload is ProjectileOffense wandShot)
+            use = use with { Payload = wandShot with { FiresWandProjectiles = true } };
         if (use.Profile.SequentialDelay > 0 && use.CanEmit is null)
             use = use with
             {

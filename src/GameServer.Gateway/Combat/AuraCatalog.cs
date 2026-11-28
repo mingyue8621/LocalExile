@@ -30,6 +30,7 @@ public static class AuraCatalog
         public bool SelfOnly { get; init; }
         public int MoreEffectPct { get; init; }
         public bool FixedManaReservation { get; init; }
+        public bool FixedLifeReservation { get; init; }
     }
 
     // The source supplies the ground art; the received buff supplies the HUD icon and active-skill association.
@@ -112,6 +113,8 @@ public static class AuraCatalog
         ["BloodAndSand"] = FleshAndStoneBloodRow,
         ["ArcticArmour"] = 427,
         ["TempestShield"] = TempestShieldRow,
+        ["ManaInfusedStaff"] = 2792,
+        ["Spellslinger"] = 1527,
         ["HeraldOfAsh"] = 344,
         ["HeraldOfIce"] = 345,
         ["HeraldOfThunder"] = 346,
@@ -171,6 +174,9 @@ public static class AuraCatalog
     public static string Family(string effectId) => effectId switch
     {
         "GraceHardMode" => "Grace", "DeterminationHardMode" => "Determination",
+        "PrecisionRoyale" => "Precision", "VitalityRoyale" => "Vitality", "ClarityRoyale" => "Clarity",
+        "BloodAndSandRoyale" => StanceCatalog.BloodAndSand,
+        "ElementalWeaknessRoyale" or "VulnerabilityRoyale" or "DespairRoyale" => CurseCatalog.Family(effectId),
         "AspectOfTheCat" => "CatAspect", _ => effectId,
     };
 
@@ -258,13 +264,16 @@ public static class AuraCatalog
     {
         if (inTown) return [];
         var gems = available.Where(a => Supported(a.EffectId)).GroupBy(RestoreFamily)
-            .ToDictionary(g => g.Key, g => g.First());
+            .ToDictionary(g => g.Key, g => g.ToArray());
         var restored = new List<Aura>();
-        foreach (string effect in saved.Select(RestoreFamily).Distinct())
-            if (gems.TryGetValue(effect, out var aura))
-                if ((!IsAspect(aura.EffectId) || !restored.Any(a => IsAspect(a.EffectId)))
-                    && RequiredMana(pools, restored.Append(aura)) <= pools.Mana
-                    && RequiredLife(pools, restored.Append(aura)) < pools.Life) restored.Add(aura);
+        foreach (string effect in saved.DistinctBy(RestoreFamily))
+        {
+            if (!gems.TryGetValue(RestoreFamily(effect), out var candidates)) continue;
+            var aura = candidates.FirstOrDefault(a => a.EffectId == effect) ?? candidates[0];
+            if ((!IsAspect(aura.EffectId) || !restored.Any(a => IsAspect(a.EffectId)))
+                && RequiredMana(pools, restored.Append(aura)) <= pools.Mana
+                && RequiredLife(pools, restored.Append(aura)) < pools.Life) restored.Add(aura);
+        }
         return restored;
     }
 
@@ -294,7 +303,7 @@ public static class AuraCatalog
         double flat = 0, percent = 0;
         foreach (var aura in auras)
         {
-            double efficiency = !life && aura.FixedManaReservation ? 1
+            double efficiency = (life ? aura.FixedLifeReservation : aura.FixedManaReservation) ? 1
                 : Math.Max(-99L, (long)efficiencyPct + aura.ReservationEfficiencyPct) / 100.0 + 1;
             var (flatCost, percentCost) = life
                 ? ExplicitLife(aura) ? (aura.LifeFlat, aura.LifePercent) : (aura.ManaFlat, aura.ManaPercent)
@@ -449,7 +458,7 @@ public static class AuraCatalog
                     groupCommanderSpeed = Math.Max(groupCommanderSpeed, CommanderSpeed(aura, auraEffectPct));
                     commanderDamage = Math.Max(commanderDamage, aura.CommanderDamagePct);
                 }
-                switch (aura.EffectId)
+                switch (Family(aura.EffectId))
                 {
                     case "AvianMightShared":
                         Add(Stat.ChanceToDealDoubleDamagePct); Add(Stat.MinionChanceToDealDoubleDamagePct);

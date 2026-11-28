@@ -26,9 +26,11 @@
   实机：`/quest_flag a1q4-PlacedGlyphs` 之后 Tarkleigh 的「Glyph Reward」——六个女巫宝石，可领取，重复被拒。
 - Socketed gem kills emit incremental `0x00c3` XP when exact client math matches, falling back to `0x00bf` otherwise.
 - Icicle Mine variants release their radial or aimed volleys and scale with the detonation chain. Pyroclast
-  variants apply armed mine Fire Exposure, then release a nova and mortars. The Icicle critical aura is open.
+  variants apply armed mine Fire Exposure, then release a nova and mortars. Stormblast Mine applies its enemy
+  damage-taken aura while armed. The Icicle critical aura is open.
 - Trap and mine payloads support Arc chains, Contagion, corpse Offerings, Hexes and Marks, damage brands,
   Storm Call, Firestorm, Frost Bomb and Vortex. Offline checks exercise the paid placement and timed effects.
+  Chain Reaction queues nearby armed traps from the same owner on an accepted trigger.
 - Eye of Winter variants emit their travel and final shards. Creeping Frost and its Floes variant release
   chilling ground that follows enemies. The timings and ground motion were checked offline.
 - Ruthless gems use native primary/companion effect alternatives, requirements and skill rows.

@@ -390,6 +390,20 @@ public static partial class Game
             player.RecentEvents.RecordAmount(StatConditions.UsedWarcry, now);
             TriggerEarthshatterSpikesLocked(player, at, radius, now);
             stats = AreaPlayerStats(player);
+            GainValourLocked(player, stats, stats.GetValueOrDefault(Stat.BannerGainXResourcesOnWarcry));
+            int ashMs = stats.GetValueOrDefault(Stat.WarcriesApplyCoverInAshForXMs);
+            bool debilitate = stats.GetValueOrDefault(Stat.WarcriesDebilitateEnemiesFor1Second) != 0;
+            if (ashMs > 0 || debilitate)
+                foreach (var (id, enemy) in player.Area.MonstersNear(at, radius))
+                {
+                    if (!enemy.Hostile || enemy.Dead || enemy.Life == 0 || enemy.Invulnerable
+                        || Dist(enemy.Walk.Position(now), at) > radius) continue;
+                    if (debilitate) ApplyDebilitateLocked(player, id, enemy, now, 1);
+                    double until = now + ashMs / 1000d;
+                    if (ashMs <= 0 || enemy.CoveredInAshUntil >= until) continue;
+                    enemy.CoveredInAshUntil = until;
+                    enemy.PresentationChanged?.Invoke();
+                }
             if (stats.GetValueOrDefault(Stat.WarcryPhysicalDamageReductionRatingPlusPctPer5PowerFor8Seconds) is int armour and > 0)
             {
                 int allies = effectId == "RallyingCry" ? (player.Instance?.PlayersExcept(player.Id) ?? [])
@@ -468,11 +482,15 @@ public static partial class Game
     // The explosion's hit before the target's mitigation: the corpse's maximum Life x percent as physical damage, with the
     // owner's global increases and more multipliers, then his global conversion and gain as extra (poewiki Explode: global,
     // not attack or spell, stats apply). Increases apply before conversion, as for every hit on the server.
-    public static DamagePacket CorpseExplosionHit(uint corpseMaxLife, int percent, Func<uint, int> get, DamageConversion conversion)
+    public static DamagePacket CorpseExplosionHit(uint corpseMaxLife, int percent, Func<uint, int> get, DamageConversion conversion) =>
+        CorpseExplosionHit(corpseMaxLife, percent, get, conversion, default);
+
+    static DamagePacket CorpseExplosionHit(uint corpseMaxLife, int percent, Func<uint, int> get, DamageConversion conversion,
+        DamageRange addedPhysical)
     {
         double damage = corpseMaxLife * (double)percent / 100;
         long increased = (long)get(Stat.DamagePlusPct) + get(Stat.PhysicalDamagePlusPct) + get(Stat.AreaDamagePlusPct);
-        return DamagePacket.Of(DamageType.Physical, damage, damage)
+        return DamagePacket.Of(DamageType.Physical, new DamageRange(damage, damage).Add(addedPhysical))
             .Scale(Math.Max(0, 1 + increased / 100.0) * ChargeEffects.DamageMore(get)).Convert(conversion);
     }
 
@@ -509,7 +527,9 @@ public static partial class Game
                     && Dist(e.Value.Walk.Position(now), centre) <= blast).ToList())
                 {
                     var rng = AreaRng(player);
-                    var resisted = MitigateMonsterHit(m, hit.Roll(rng), now, penetration, cannotPenetrate, lowestElemental);
+                    var added = PoachersAddedPhysical(m, now);
+                    var contact = added.IsZero ? hit : CorpseExplosionHit(corpse.MaxLife, percent, Get, conversion, added);
+                    var resisted = MitigateMonsterHit(m, contact.Roll(rng), now, penetration, cannotPenetrate, lowestElemental);
                     int witheredElemental = WitheredElementalHitTaken(m, player.Id, now, witherElementalPerStack);
                     int damage = MonsterTakesMitigated(m, resisted, false, now, random: rng, additionalElementalTakenPct: witheredElemental);
                     int chaosDamage = MonsterHitChaosDamage(m, resisted, false, now, damage,

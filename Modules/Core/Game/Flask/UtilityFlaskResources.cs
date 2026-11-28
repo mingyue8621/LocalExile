@@ -26,7 +26,7 @@ public static partial class Game
         if (local.GetValueOrDefault(Stat.LocalFlaskGainChargesConsumedAsVaalSoulsOnUse) == 0
             || player.VaalSoulsRetired || player.VaalPreventionUntil > VaalResourceTime(player)
             || VaalImmortalCallActive(player, now)
-            || CharacterPlayerStats(player).GetValueOrDefault(Stat.HasSoulGainPrevention) != 0) return false;
+            || SoulGainPreventedByStats(CharacterPlayerStats(player))) return false;
         RefreshVaalSouls(player);
         int gained = 0;
         while (gained < spent && player.VaalSouls.Gain()) gained++;
@@ -45,7 +45,7 @@ public static partial class Game
         // Equal flask effects overlap at their strongest rate. Every start and expiry splits the elapsed interval.
         while (from < now)
         {
-            int rate = 0;
+            int percentRate = 0, flatRate = 0;
             double next = now;
             foreach (var effect in active)
             {
@@ -54,10 +54,12 @@ public static partial class Game
                 else
                 {
                     next = Math.Min(next, effect.Ends);
-                    rate = Math.Max(rate, effect.SelfChaosDamageLifePctPerMinute);
+                    percentRate = Math.Max(percentRate, effect.SelfChaosDamageLifePctPerMinute);
+                    flatRate = Math.Max(flatRate, effect.SelfChaosDamageFlatPerMinute);
                 }
             }
-            progress.Pending += player.PlayerMaxLife * (double)rate / 6000 * (next - from);
+            double perSecond = player.PlayerMaxLife * (double)percentRate / 6000 + flatRate / 60d;
+            progress.Pending += perSecond * (next - from);
             from = next;
         }
     }

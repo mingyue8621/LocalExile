@@ -375,13 +375,13 @@ public static class VaalOversoul
                 var exposure = Exposures.GetValue(p, _ => new());
                 double dps = inside && !PlayerImmunities(p).Contains(DamageType.Cold)
                     ? Stat(p, Cold, boss.Level, global::Stat.BaseColdDamageToDealPerMinute) / 60d * (1 - Math.Min(MaxResistance(p, DamageType.Cold), Resistance(p, DamageType.Cold)) / 100d) : 0;
-                p.Degens[exposure] = dps; exposure.Dps = dps;
+                p.Degens.Set(exposure, dps, dps); exposure.Dps = dps;
                 if (inside)
                 {
                     var stats = CharacterPlayerStats(p);
-                    int Get(uint k) => stats.GetValueOrDefault(k);
+                    var defences = PlayerElementalDefencesAt(p, now, stats.GetValueOrDefault);
                     ApplyPlayerAilmentsLocked(p, now, ailments =>
-                        ailments.Inflict(PlayerElementalAilments.Kind.Chill, 30, .5, now, Get, p.IncomingHitRandom));
+                        ailments.Inflict(PlayerElementalAilments.Kind.Chill, 30, .5, now, defences, p.IncomingHitRandom));
                 }
                 VaalGroundMinionsLocked(p, now, Stat(p, Cold, boss.Level, global::Stat.BaseColdDamageToDealPerMinute) / 60d,
                     at => cold.Any(patch => Distance(patch.At, at) <= 7.5), minionDotCarry);

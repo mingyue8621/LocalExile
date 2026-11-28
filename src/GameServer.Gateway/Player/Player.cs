@@ -186,6 +186,7 @@ public sealed record MonsterAttack(ushort SkillId, double Seconds, double Range,
     public PlayerElementalAilments.HitSettings Ailments { get; init; }
     /// <summary>The skill's own poison chance (%) and duration (seconds), applied on an unblocked hit beside the monster's
     /// mods (an essence boulder whose skill carries 100% poison). Zero: the skill adds none.</summary>
+    public bool AlwaysBleedsOnHit { get; init; }
     public int PoisonChance { get; init; }
     public double PoisonSeconds { get; init; }
     public CorruptedBloodOnHit? CorruptedBlood { get; init; }
@@ -605,6 +606,7 @@ public sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange
     public double Burn;
     // Life regeneration not yet applied (fractions of a point between ticks; RegenerateMonsters).
     public double Regen;
+    public double? PeriodicLifeRegenStarted;
     // When the player last hit it (Clock seconds): "enemies you've Hit Recently". Reset at the player's death.
     public double PlayerHitAt = double.NegativeInfinity;
     // When its attack last hit the player (Clock seconds; evaded and blocked attacks do not hit): "enemies that have Hit
@@ -756,6 +758,13 @@ public sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange
     {
         foreach (var ((source, k), until) in sourceMarks) if (k == key) yield return (source, until);
     }
+    /// <summary>Changes the remaining time of each source's active mark when its clock rate changes.</summary>
+    public void RetimeSourceMarks(string key, double now, double oldRate, double newRate)
+    {
+        foreach (var (source, until) in SourceMarks(key).ToArray())
+            if (until > now)
+                sourceMarks[(source, key)] = RecipientEffectTime.RetimedDeadline(until, now, oldRate, newRate);
+    }
     /// <summary>Removes every value and mark <paramref name="source"/> keeps on it (the source left the instance).</summary>
     public void ForgetSource(uint source)
     {
@@ -783,6 +792,7 @@ public sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange
     /// <summary>Its life; a change goes to every client at the frame's end (AreaLife).</summary>
     public uint Life { get; set { if (field == value) return; field = value; LifeChanged?.Invoke(); } } = maxLife;
     internal Action? LifeChanged;
+    public double? LastLifeEndedAt { get; internal set; }
     // Until when its last flinch plays (Clock seconds; HitReaction): no new action or flinch before.
     // Owned by the area's frame.
     public double FlinchUntil = double.NegativeInfinity;
@@ -811,6 +821,8 @@ public sealed class SpawnedMonster(string label, PlayerWalk walk, int aggroRange
     public bool CorpseConsumed;
     public int HitFireExplosionPercent;
     public bool CursedAtDeath;
+    public bool? ShockedAtDeath, FrozenAtDeath;
+    public IReadOnlyList<uint>? BleedSourcesAtDeath;
     public bool TauntedAtDeath;
     public int WitherStacksAtDeath;
     public double NonAuraHexUntilAtDeath;
@@ -1644,6 +1656,7 @@ public sealed partial class Player(AreaLayout layout, uint ticket, uint seed) : 
     /// <summary>Life the client predicted was not written (AreaLife.LifePredicted): the last written value is behind.</summary>
     public bool LifeAheadOfWire;
     uint playerLife;
+    public double? LastLifeEndedAt { get; private set; }
     public uint PlayerLife
     {
         get => playerLife;
@@ -1652,6 +1665,7 @@ public sealed partial class Player(AreaLayout layout, uint ticket, uint seed) : 
             // Resource loss belongs to the actual death transition, never a delayed death notification.
             if (playerLife > 0 && value == 0)
             {
+                LastLifeEndedAt = Frames.Now(this);
                 // Vaal souls are kept on death (poewiki "Vaal skill"); only the use in flight and prevention end.
                 VaalPreventionUntil = 0; VaalUseState = null;
                 MoltenStrikeAttackCounts.Clear(); MoltenStrikeFifthBuffs.Clear();

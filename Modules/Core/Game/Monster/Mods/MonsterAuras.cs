@@ -275,6 +275,7 @@ public static partial class Game
             if (hinderCaster == 0 && temporalCaster == 0 && siphonSource is null && !PlayerMonsterAuraExposures.TryGetValue(player, out _))
                 continue;
             var exp = PlayerMonsterAuraExposures.GetValue(player, _ => new PlayerAuraExposure());
+            if (FlaskMovementImmune(player, HinderedBuffRow, AreaTime(player))) hinderCaster = 0;
             if (hinderCaster != 0 && !exp.Hindered)
             {
                 exp.Hindered = true;
@@ -368,11 +369,11 @@ public static partial class Game
         // Lightning degeneration routed through Player.Degens so recovery, ES, Petrified Blood and PlayerDied all apply.
         double baseDps = (Monsters.BaseDamage(source.Level) ?? 10) * 1.5;
         double mitigated = baseDps * DamageModel.Mitigate(1.0, Resistance(player, DamageType.Lightning), MaxResistance(player, DamageType.Lightning))
-            * player.ElementalAilments.DamageTakenFactor(now, 0);
+            * PlayerAilmentDamageTakenFactor(player, now, 0);
         if (mitigated != exp.SiphonDps)
         {
             exp.SiphonDps = mitigated;
-            player.Degens[exp] = mitigated;
+            player.Degens.Set(exp, mitigated, mitigated);
         }
     }
 

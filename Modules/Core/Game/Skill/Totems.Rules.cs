@@ -10,6 +10,9 @@ using DamageModel = GameServer.Core.World.DamageModel;
 
 public static partial class Game
 {
+    const string TotemPlacementCriticalEvent = "totem_placement_critical";
+    const int TotemPlacementCriticalIncrease = 40;
+
     /// <summary>Fills this type's game data at startup (the world loader, before the Gateway listens).</summary>
     public static void LoadTotemsRulesData()
     {
@@ -450,6 +453,7 @@ public static partial class Game
                 // Totem) executes its effect too: its own spray is released from the totem's cell, and only the adopted
                 // projectile spells and the nova/meal/taunt totems are ticked by TickTotemUsesLocked.
                 Effect = spellTotem ? effect : -1, SourceGem = sourceGem,
+                PhysicalDamageReductionPct = Get(Stat.TotemAdditionalPhysicalDamageReductionPct),
                 SourceHost = SupportedSkill(player, skillId).Host, SourceItem = SupportedSkill(player, skillId).SourceGem,
                 // Upstream's Decoy Totem keeps its own taunt radius on the placed totem, and every totem a body's size.
                 DecoyRadius = decoy && grantedId != 0 ? TotemTargetRange(player, skillId) : 0, BodySize = Math.Max(0, bodySize),
@@ -623,7 +627,13 @@ public static partial class Game
         IReadOnlyDictionary<uint, int> stats)
     {
         player.RecentEvents.Record(StatConditions.SummonedTotem, now);
-        if (stats.GetValueOrDefault(Stat.AttackAndCastSpeedPlusPctOnPlacingTotem) != 0)
+        int criticalDuration = stats.GetValueOrDefault(Stat.IncreasedCriticalStrikeChanceBuffForXMillisecondsOnPlacingATotem);
+        if (criticalDuration > 0)
+        {
+            player.RecentEvents.Record(TotemPlacementCriticalEvent, now, criticalDuration / 1000d);
+            EnsureConditionalItemPools(player);
+        }
+        if (criticalDuration > 0 || stats.GetValueOrDefault(Stat.AttackAndCastSpeedPlusPctOnPlacingTotem) != 0)
         {
             MarkPlayerStats(player, PlayerStatStep.Sources);
             PresentStats(player);
@@ -636,7 +646,8 @@ public static partial class Game
             foreach (var (_, enemy) in player.Area.MonstersNear(at, hinderRadius))
                 if (enemy.Hostile && !enemy.Dead && enemy.Life > 0 && !enemy.Invulnerable
                     && Dist(enemy.Walk.Position(now), at) <= hinderRadius)
-                    ApplyHinderLocked(enemy, now, fromTotem: true);
+                    ApplyHinderLocked(enemy, now, fromTotem: true,
+                        regeneration: stats.GetValueOrDefault(Stat.EnemiesYouHinderHaveLifeRegenerationRatePlusPct));
 
         return stats.GetValueOrDefault(Stat.HasOnslaughtIfTotemSummonedRecently) != 0
             && KillOnslaughtOf(player).Gain(now, RecentlySeconds) && Marked(player, PlayerStatStep.Onslaught);
@@ -969,18 +980,21 @@ public static partial class Game
         (int X, int Y) centre, double radius, ushort sequence, bool hitSummon = false, int? ringArt = null,
         Func<(int X, int Y), bool>? covers = null, double damageMore = 1, bool spellImpale = false, int extraCriticalIncrease = 0,
         int extraShockChance = 0, CascadePulse? cascade = null, long baseChaos = 0,
-        Func<uint, (int X, int Y), bool>? targetFilter = null, Action<uint>? onHit = null, SkillCriticalRoll? sharedCritical = null)
+        Func<uint, (int X, int Y), bool>? targetFilter = null, Action<uint>? onHit = null, SkillCriticalRoll? sharedCritical = null,
+        SupportedGem? capturedGem = null,
+        uint hexblastTarget = 0, double? ailmentDamageMore = null)
     {
-        var skill = SupportedSkill(player, totem.SkillId);
-        uint? sourceLife = SkillsFor(player).EffectId(skill.Effect) == BodyswapSacrificeEffect ? totem.MaxLife : null;
-        if (SupportedHitInputsFor(player, totem.SkillId, area: true, totem: true, projectileTotemLife: sourceLife) is not { } inputs) return;
+        var skill = capturedGem ?? SupportedSkill(player, totem.SkillId);
+        uint? sourceLife = SkillsFor(player).EffectId(skill.Effect) is CorpseBodyswapEffect or BodyswapSacrificeEffect ? totem.MaxLife : null;
+        if (SupportedHitInputsFor(player, totem.SkillId, area: true, totem: true,
+                capturedGem: capturedGem, projectileTotemLife: sourceLife) is not { } inputs) return;
         if (baseChaos > 0) inputs = inputs with { Raw = inputs.Raw.Add(GameServer.Core.World.DamageType.Chaos, new(baseChaos, baseChaos)) };
         var ownerStats = CharacterPlayerStats(player);
         var caster = TotemCasterStats(ownerStats);
         var blind = BlindHitInput.Capture(caster, skill.Stats);
         bool attack = SkillsFor(player).IsAttack(skill.Effect);
-        var hit = new SkillDamageContext(attack ? SkillHitKind.Attack : SkillHitKind.Spell, caster)
-            .Hit(SupportedHitFrom(inputs, suppress: false));
+        var damageContext = new SkillDamageContext(attack ? SkillHitKind.Attack : SkillHitKind.Spell, caster);
+        var hit = damageContext.Hit(SupportedHitFrom(inputs, suppress: false));
         if (damageMore != 1) hit = hit.Scale(damageMore);
         if (hit.IsZero) return;
         var accuracy = attack ? SupportedAccuracy(player, totem.SkillId) : default;
@@ -992,17 +1006,33 @@ public static partial class Game
         var ailmentSkillStats = attack ? WithWeaponAilmentStats(skill.Stats, weaponLocal) : skill.Stats;
         var hitRolls = HitRollsFor(caster).ForSkill(skill.Stats.GetValueOrDefault, spell: !attack)
             .ForWeapon(weaponLocal);
+        bool hexblast = hexblastTarget != 0;
+        bool splash = false;
+        bool specificAilments = hexblast || ailmentDamageMore.HasValue;
+        var ignite = specificAilments ? SupportedIgnite(player, totem.SkillId, spell: true, caster, capturedInputs: inputs) : default;
+        var poison = specificAilments ? SupportedPoison(player, totem.SkillId, spell: true, caster, capturedInputs: inputs) : default;
         void Contact(uint id, SpawnedMonster m)
         {
             double now = session.Runtime.Now / (double)ProjectileRuntime.QuantaPerSecond;
             var targetAt = m.Walk.Position(now);
             if (!TotemTargetable(m) || cascade is not null && m.WorldHidden || MonsterAsleep(player, id) || Dist(targetAt, centre) > radius
+                || hexblast && !SpellTotemTargetable(player, id, m)
                 || covers?.Invoke(targetAt) == false || targetFilter?.Invoke(id, targetAt) == false) return;
             if (attack && !accuracy.CannotBeEvaded && !m.AttackEvasion.Hits(
                 AttackHitChanceAt(player, id, m, now, accuracy, caster), now, player.AttackAccuracyRandom)) return;
-            if (MonsterBlocks(m, AreaRng(player), spell: !attack)) return;
+            if (MonsterBlocks(m, AreaRng(player), spell: !attack, now: 0, skill: null, attacker: caster)) return;
+            var addedPhysical = PoachersAddedPhysical(m, now);
+            var contactHit = hit;
+            if (!addedPhysical.IsZero)
+            {
+                contactHit = damageContext.Hit(SupportedHitFrom(inputs, suppress: false, addedPhysical: addedPhysical));
+                if (damageMore != 1) contactHit = contactHit.Scale(damageMore);
+            }
             var rolled = WithConditionalSupportDamageLocked(player, skill.Stats, attack, m,
-                GameEvents.WithOutgoingDamage(player, caster, m, hit.Roll(AreaRng(player))), now);
+                GameEvents.WithOutgoingDamage(player, caster, m, contactHit.Roll(AreaRng(player))), now);
+            var hex = hexblast ? HexblastHex(m, now) : null;
+            if (hex is not null)
+                rolled = rolled.Scale(Math.Max(0, 1 + skill.Stats.GetValueOrDefault(Stat.HexblastHitDamagePlusPctFinalIfHexed) / 100d));
             int chance = CriticalChanceOn(player, id,
                 SupportedCriticalChanceFor(player, totem.SkillId, release: false, extraIncrease: extraCriticalIncrease),
                 SupportedCriticalChanceVsBlinded(player, totem.SkillId, false), SupportedCriticalChanceVsGround(player, totem.SkillId, false));
@@ -1016,23 +1046,38 @@ public static partial class Game
             int directDamage = damage;
             if (spellImpale)
             {
-                var settings = ImpaleStats.From(caster, Stats, attack: false, skill.Stats, critical: crit);
+                var settings = WithRingImpaleDuration(ImpaleStats.From(caster, Stats, attack: false, skill.Stats, critical: crit), caster);
                 damage = WithImpaleHitLocked(player, m, damage, rolled, crit,
                     sourceMultiplier + FullLifeCriticalMultiplier(m, caster, skill.Stats), settings).Damage;
             }
             if (ApplyTypedMonsterHitLocked(player, m, damage, chaosDamage, allyAt: totem.At) is not { } accepted) return;
             onHit?.Invoke(id);
             if (!attack) ArcaneSurgeOnSpellHitLocked(player, ownerStats, m);
-            LeechFromTotemHitLocked(player, m, directDamage, now, ownerStats);
+            if (skill.Stats.GetValueOrDefault(Stat.DamageCannotBeReflectedOrLeechIfUsedByOtherObject) == 0)
+                LeechFromTotemHitLocked(player, m, directDamage, now, ownerStats);
             if (accepted.StageStarts) { CommitProjectileBossStage(session, id, m, session.Runtime.Now); accepted = accepted with { StageStarts = false }; }
             if (hitSummon)
                 HitSummonsOnHitLocked(player, m, skill.Stats, totem.SkillId, now, AreaRng(player), playerConsumesCorpse: false);
+            double ailmentMore = ailmentDamageMore ?? (hex is null ? 1
+                : Math.Max(0, 1 + skill.Stats.GetValueOrDefault(Stat.HexblastAilmentDamagePlusPctFinalIfHexed) / 100d));
             if (!m.Dead && damage > 0)
+            {
                 AilmentsOnHitLocked(player, id, m, mitigated, !attack, crit, 100, caster, ailmentSkillStats, now, AreaRng(player),
                     attackGains: default, projectileDamage: false, projectileFreezeChance: 0,
                     sourceEffect: skill.Effect, blind: blind, hitOrigin: cascade?.HitOrigin(targetAt, totem.At) ?? totem.At,
                     playerHit: false, attackerSize: totem.BodySize, attackerHasReversedStat: false,
+                    poison: specificAilments ? RepeatAilment(poison, ailmentMore) : default,
                     extraShockChance: extraShockChance, cascadeBurst: cascade?.Burst ?? CascadeBurst.None);
+                if (specificAilments && (crit ? ignite.CriticalMax : ignite.Max) > 0)
+                    foreach (var packet in IgniteOnHitLocked(player, id, m, RepeatAilment(ignite, ailmentMore),
+                        crit, now, playerIgnite: false) ?? [])
+                        session.World(id, packet);
+            }
+            if (hex is not null)
+            {
+                if (id == hexblastTarget) splash = true;
+                TryConsumeHexblastHex(player, id, m, hex, skill.Stats.GetValueOrDefault(Stat.HexblastPctChanceToNotConsumeHex));
+            }
             byte hitCode = HitCode(mitigated, damage, m.MaxLife, crit || accepted.Life == 0);
             ushort hitFlags = (ushort)(0x4200 | HitTypeFlag(hitCode) | (crit ? 0x0020 : 0));
             byte hitKind = 3, hitAngle = HitAngle(targetAt.X - totem.At.X, targetAt.Y - totem.At.Y);
@@ -1045,8 +1090,15 @@ public static partial class Game
         long release = session.Runtime.Now;
         double releasedAt = release / (double)ProjectileRuntime.QuantaPerSecond;
         var lifetime = CombatLifetime;
+        if (hexblast)
+        {
+            if (!player.Area.Monsters.TryGetValue(hexblastTarget, out var primary)) return;
+            Contact(hexblastTarget, primary);
+            if (!splash) return;
+        }
         foreach (var (id, target) in player.Area.MonstersNear(centre, radius).ToArray())
         {
+            if (id == hexblastTarget) continue;
             if (ringArt is not int variation) { Contact(id, target); continue; }
             double distance = Dist(target.Walk.Position(releasedAt), centre);
             if (!TotemTargetable(target) || distance > radius) continue;

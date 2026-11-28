@@ -18,6 +18,8 @@ public static partial class Game
             && player.LockstepSkill.Channel == player.ChannelSkillSequence
             && (player.ChannelMovement.Skill != 0 && player.ChannelMovement.Skill == player.ChannelSkill
                 || CurrentChargedDash(player) is not null
+                || CurrentDivineIre(player) is not null
+                || CurrentStormbind(player) is not null
                 || ActiveWitherChannel(player) is not null
                 || ActiveAimedPulseChannel(player) is not null
                 || IsBladeFlurryChannelling(player, player.ChannelSkill, player.ChannelGeneration, player.ActionCount));
@@ -325,6 +327,8 @@ public static partial class Game
                 {
                     AimChargedDash(player, channelAimAtRelease, at);
                     AimBladeFlurry(player, channelAimAtRelease);
+                    AimDivineIre(player, channelAimAtRelease);
+                    AimStormbind(player, channelAimAtRelease);
                     AimPulseChannel(player, channelAimAtRelease);
                 }
                 ended = channel;
@@ -388,7 +392,8 @@ public static partial class Game
                 // Only the skill's own readiness reaches the target and pending-request clean-up below: a Move taken
                 // inside a totem placement's hold does not touch the held skill's request.
                 if (skillFree && player.LockstepSkill.Target is { } aimedAt && aimedAt != player.Id
-                    && !(player.Area.Monsters.TryGetValue(aimedAt, out var m) && !m.Dead && m.Life > 0))
+                    && !(player.Area.Monsters.TryGetValue(aimedAt, out var m) && !m.Dead && m.Life > 0)
+                    && LivePlayerLinkTarget(player, aimedAt, player.LockstepSkill.Skill) is null)
                     player.LockstepSkill.LoseTarget();
                 // Actor's gate (0x141e941a0 -> 0x141e9479e / 0x141e947aa) lets only Move (0x2909 / 0xc266) cut in after
                 // an attack's contact or while its cancelled backswing lockout (+0x2a0) runs; non-Move uses (object
@@ -890,9 +895,8 @@ public static partial class Game
             if (placed.Trap || placed.Mine)
             {
                 var stats = CharacterPlayerStats(player);
-                return Math.Max(TickSeconds, PlacedThrowSeconds(
-                    n => GolemStat(supported.Stats, n) + GolemStat(stats, n),
-                    placed.Mine, ChargesOf(player).Effective(ChargeType.Frenzy)) / PlayerActionFactor(player));
+                return PlacedThrowActionSeconds(player, supported.Effect,
+                    n => GolemStat(supported.Stats, n) + GolemStat(stats, n), placed.Mine);
             }
             if (IsTotemSkill(player, skill))
                 return Math.Max(TickSeconds, TotemPlacementSeconds(player, skill, gem.Effect));

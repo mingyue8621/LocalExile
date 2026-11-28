@@ -118,10 +118,10 @@ public static partial class Game
         var stats = MergeSkillStats(playerStats, skill.Stats);
         int Get(uint n) => GolemStat(stats, n);
         var raw = SkillsFor(player).SecondaryHitDamage(aura.Effect, aura.Level, aura.Quality);
+        double effectiveness = AddedEffectiveness(player, aura.Effect, aura.Level);
         foreach (var type in DamageTypes.ConversionOrder)
         {
             string slug = type.ToString().ToLowerInvariant();
-            double effectiveness = AddedEffectiveness(player, aura.Effect, aura.Level);
             raw = raw.Add(type, new(Get(Stat.Of($"global_minimum_added_{slug}_damage")) * effectiveness,
                 Get(Stat.Of($"global_maximum_added_{slug}_damage")) * effectiveness));
         }
@@ -136,8 +136,10 @@ public static partial class Game
             int HitStat(uint name) => TargetHitStat(name, TargetStat(name), contact);
             var target = TargetModifiers(Get, lowLife, contact: contact);
             increased += herald + SpiderDamageIncrease(Get, webs);
-            var woven = SpiderRawDamage(raw, Get, webs, AddedEffectiveness(player, aura.Effect, aura.Level));
-            var hit = PlayerHitDamage.Resolve(woven, HitStat, conversion,
+            var woven = SpiderRawDamage(raw, Get, webs, effectiveness);
+            var hitRaw = contact.AddedPhysical.IsZero ? woven
+                : woven.Add(DamageType.Physical, contact.AddedPhysical.Scale(effectiveness));
+            var hit = PlayerHitDamage.Resolve(hitRaw, HitStat, conversion,
                 spell: false, area: aura.EffectId != "HeraldOfThunder", secondary: true,
                 supportModifiers: modifiers, skillTypes: types, additionalIncreased: increased + target.HitIncrease);
             var rows = AilmentPanelStats.Compute(new("secondary", Spell: false), woven, conversion, TargetStat,
@@ -205,10 +207,12 @@ public static partial class Game
                     capturedInputs: inputs));
             normalProfile = Profile(0);
             blindedProfile = additionalIncreased == 0 ? normalProfile : Profile(additionalIncreased);
-            var spider = CaptureSpiderDamage(player, inputs, AddedEffectiveness(player, aura.Effect, aura.Level), context: true);
+            var spider = CaptureSpiderDamage(player, inputs, AddedEffectiveness(player, aura.Effect, aura.Level),
+                context: true, local: null, bow: false, offHand: false, forMarkedTarget: true);
             targetProfile = (increase, webs, ignited, bleeding, lowLife, contact) =>
             {
-                if (spider is null) return increase == 0 ? normalProfile : blindedProfile;
+                if (spider is null || !spider.HasTargetConditions && contact.AddedPhysical.IsZero)
+                    return increase == 0 ? normalProfile : blindedProfile;
                 var woven = SpiderDamageProfile(spider, webs, increase != 0, ignited, bleeding, lowLife,
                     maimed: false, contact: contact);
                 return new(woven.Hit, woven.Ignite, woven.Bleed, woven.Poison);
@@ -270,6 +274,7 @@ public static partial class Game
         }
 
         bool spell = tempest;
+        bool herald = IsHeraldAura(aura.EffectId);
         int Player(uint n) => GolemStat(playerStats, n);
         int Own(uint n) => GolemStat(skill.Stats, n);
         var hitRolls = HitRollsFor(playerStats).ForSkill(Own, spell);
@@ -283,14 +288,17 @@ public static partial class Game
                     || !player.Area.Monsters.TryGetValue(id, out var current) || !ReferenceEquals(current, m)) continue;
                 // Select the target profile before any RNG, outgoing effects, or this contact's own Blind.
                 bool targetWasBlinded = Blinded(player, id, now);
+                var contact = contactDamage ? ContactDamage(player, m, now, playerStats) : default;
+                contact = contact with { AddedPhysical = PoachersAddedPhysical(m, now) };
                 var profile = targetProfile(targetWasBlinded ? additionalIncreased : 0, m.SpiderWebs.Count(now),
-                    m.Ignites.IgnitedAt(now), m.Bleeds.IgnitedAt(now), EnemyOnLowLife(m), contactDamage ? ContactDamage(player, m, now, playerStats) : default);
+                    m.Ignites.IgnitedAt(now), m.Bleeds.IgnitedAt(now), EnemyOnLowLife(m), contact);
                 var targetPacket = profile.Hit;
                 List<byte[]>? ignited = null;
                 string? igniteLog = null;
                 int criticalChance = spell ? SupportedCriticalChance(player, aura.SkillId)
                     : Player(Stat.GlobalCannotCrit) != 0 || Own(Stat.GlobalCannotCrit) != 0 ? 0
-                    : CriticalChanceFinal.Project((long)Player(AddedBaseCriticalStrike.Generic) + Own(AddedBaseCriticalStrike.Generic),
+                    : CriticalChanceFinal.Project((long)Player(AddedBaseCriticalStrike.Generic) + Own(AddedBaseCriticalStrike.Generic)
+                        + (herald ? Player(Stat.AdditionalCriticalStrikeChancePermyriadWithHeraldSkills) : 0),
                         (long)Player(Stat.CriticalStrikeChancePlusPct) + Own(Stat.CriticalStrikeChancePlusPct), Player, Own);
                 bool critical = RandomRolls.Chance(criticalChance + BrittleCriticalChance(m, now), 10000, AreaRng(player));
                 int multiplier = spell ? SupportedCriticalMultiplier(player, aura.SkillId)
@@ -308,6 +316,7 @@ public static partial class Game
                 int chaosDamage = MonsterHitChaosDamage(m, mitigated, spell, now, damage,
                     new HitTakenRules(0, witheredElemental, false));
                 if (ApplyTypedMonsterHitLocked(player, m, damage, chaosDamage) is not { } hit) continue;
+                if (critical && herald) player.RecentEvents.Record(StatConditions.CritWithHerald, now);
                 if (hit.StageStarts)
                 { CommitBossStage(player, id, m, now); hit = hit with { StageStarts = false }; }
                 {
@@ -351,7 +360,7 @@ public static partial class Game
         // Overkill is already final hit damage. Only burning/DoT (including typed DoT multipliers) scales this burn.
         double dps = overkill * ReservationStat(player, aura, Stat.HeraldOfAshBurningPctOverkillDamagePerMinute) / 6000.0
             * Math.Max(0, 1 + (Get(Stat.BurnDamagePlusPct) + Get(Stat.DamageOverTimePlusPct)
-                + Get(Stat.DamagePlusPctWithHeraldSkills)) / 100.0)
+                + Get(Stat.DamagePlusPctWithHeraldSkills) + Get(Stat.DamageOverTimePlusPctWithHeraldSkills)) / 100.0)
             * Math.Max(0, 1 + (Get(Stat.DotMultiplierPlus) + Get(Stat.FireDotMultiplierPlus)) / 100.0)
             * Math.Max(0, 1 + ReservationStat(player, aura, Stat.HeraldOfAshBurningDamagePlusPctFinal) / 100.0)
             * DamageStats.ElementalMore(Get(Stat.CombinedElementalDamagePlusPctFinal))

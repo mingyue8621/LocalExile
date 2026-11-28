@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Net.Sockets;
 using GameServer.Core.Projectiles;
 using GameServer.Core.Protocol.Instance;
@@ -6,6 +7,8 @@ using GameServer.Core.World;
 
 public static partial class Game
 {
+    static readonly FrozenSet<int> OrdinaryRangedSkillTypes = new[] { 0, 2 }.ToFrozenSet();
+
     // WandProjectile's own rig plays its impact (index 0, 500 ms) with the WandTrailImpact sound and wand_impact particles.
     public static readonly ProjectilePresentation OrdinaryWandPresentation = new()
     {
@@ -94,24 +97,24 @@ public static partial class Game
             captured.CriticalMultiplier, wand ? "ordinary wand" : "ordinary bow")
         {
             WeaponAttack = true,
+            WeaponClass = sourceWeapon.ItemClass,
             DirectAttackContact = true,
             TinctureKill = TinctureKillBonusFor(player, character, hand),
             NoExtraCriticalDamage = CriticalHitsDealNoExtraDamage(character),
             TargetCritical = TargetCriticalBonuses.From(character, null),
             DamageIncreasePerChain = damagePerChain,
             DamageIncreasePerPierce = damagePerPierce,
-            Spider = damagePerChain == 0 && damagePerPierce == 0
-                && !HasSpiderDamage(Get) && !HasLowLifeDamage(Get) && !HasTypedTargetDamage(Get)
-                && !HasContactDamage(Get) && !HasLocalTargetDamage(sourceWeapon.LocalSources)
-                && Get(Stat.AttackDamagePlusPctVsMaimedEnemies) == 0 ? null
-                : new(raw, conversion, new Dictionary<uint, int>(character),
-                new Dictionary<uint, int>(character), true, false, false, true, [], new HashSet<int> { 0, 2 }, 1,
+            Spider = new(raw, conversion, character, character, true, false, false, true, [], OrdinaryRangedSkillTypes, 1,
                 WieldingWand: sourceWeapon.WieldingWand, Volatile: false,
-                Local: sourceWeapon.LocalSources is null ? null : new Dictionary<uint, int>(sourceWeapon.LocalSources),
+                Local: sourceWeapon.LocalSources,
                 Bow: !wand, WeaponIncreased: SupportedAttackDamage.WeaponIncrease(sourceWeapon, Get),
                 WeaponTypedIncreases: WeaponTypeDamage.Of(sourceWeapon, Get))
             {
                 Armed = WeaponAttributeDamage.Armed(sourceWeapon), OffHand = hand == AttackHand.Off,
+                HasTargetConditions = damagePerChain != 0 || damagePerPierce != 0
+                    || HasSpiderDamage(Get) || HasLowLifeDamage(Get) || HasTypedTargetDamage(Get)
+                    || HasContactDamage(Get) || HasLocalTargetDamage(sourceWeapon.LocalSources)
+                    || Get(Stat.AttackDamagePlusPctVsMaimedEnemies) != 0,
                 ProjectileAttackHitIncrease = (long)SupportedAttackDamage.HitModifiers(sourceWeapon, Get, handAccuracy)(Stat.ProjectileDamagePlusPct)
                     - Get(Stat.ProjectileDamagePlusPct),
             },
@@ -142,7 +145,8 @@ public static partial class Game
             // The object flies at the height the clip releases it (the bow's nock, the wand's tip).
             Presentation = (wand ? OrdinaryWandPresentation : OrdinaryArrowPresentation) with { LaunchHeight = release?.HeightSteps },
             // The target's blood and particles on contact, matched to this shot's action (0x1af, kind 3).
-            HitPacket = true, ActionSequence = sequence, ClientPredicted = clientDrawn
+            HitPacket = true, ActionSequence = sequence, ClientPredicted = clientDrawn,
+            FiresWandProjectiles = wand && Get(Stat.ProjectilesAreNotFired) == 0
         };
         var origin = ProjectileSession.Vector(player.Walk.Position(session.Runtime.Now / (double)ProjectileRuntime.QuantaPerSecond));
         var target = ProjectileSession.Vector(aim);
@@ -199,8 +203,27 @@ public static partial class Game
         IReadOnlyDictionary<uint, int> character)
     {
         var counts = OrdinaryRangedCountStats(player, character);
-        var keys = counts.Select(s => s.Item1).ToHashSet();
-        var skills = SkillsFor(player).PlayerDefaults([.. stats.Where(s => !keys.Contains(s.Item1)), .. counts]);
+        var overrides = counts.ToDictionary(s => s.Item1, s => s.Item2);
+        if (character.GetValueOrDefault(Stat.ModifiersToClawAttackSpeedAlsoAffectUnarmedMeleeAttackSpeed) != 0
+            || character.GetValueOrDefault(Stat.UniqueBodyArmourUnarmedMeleeAttackSpeedPlusPctFinal) != 0)
+        {
+            var weapon = WeaponFor(player);
+            int speed = weapon.IncreasedAttackSpeed(character);
+            foreach (var (key, value) in stats)
+                if (key == Stat.MainHandAttackSpeedPlusPct) speed = value;
+            int defaultSpeed = DefaultMainHandAttackSpeed(player.Pools, weapon, character, speed);
+            if (defaultSpeed != speed)
+            {
+                // This projection is for the default attack record. Gem skills start with the shared character speed
+                // and apply their own melee and weapon conditions.
+                var defaultStats = new Dictionary<uint, int>(character) { [Stat.MainHandAttackSpeedPlusPct] = defaultSpeed };
+                foreach (var (key, value) in WeaponStats(player, weapon, defaultStats))
+                    if (key is Stat.MainHandAttackSpeedPlusPct or Stat.HundredTimesAttacksPerSecond or Stat.HundredTimesDamagePerSecond)
+                        overrides[key] = value;
+            }
+        }
+        var skills = SkillsFor(player).PlayerDefaults([.. stats.Where(s => !overrides.ContainsKey(s.Item1)),
+            .. overrides.Select(s => (s.Key, s.Value))]);
         player.Connection.DefaultAttackRecordLockstep = player.Connection.LockstepClient;
         player.Connection.ClientDrawnShot = counts.Count > 0 && skills.Count > 0
             ? OrdinaryRangedAttack.ProjectileId(WeaponProfileFor(player, activeSet: true)) : null;

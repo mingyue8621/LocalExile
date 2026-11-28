@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using GameServer.Core.Protocol.Instance;
 using GameServer.Core.Protocol.Login;
 using GameServer.Core.Diagnostics;
+using DamageConversion = GameServer.Core.World.DamageConversion;
 using DamagePacket = GameServer.Core.World.DamagePacket;
 using DamageType = GameServer.Core.World.DamageType;
 
@@ -61,7 +62,9 @@ public static partial class Game
 
     public readonly record struct KillEquipmentSnapshot(int CursedCorpsePhysicalPct, int PrideChance, int CursedVictimChaosChance)
     {
-        public bool Any => CursedCorpsePhysicalPct > 0 || PrideChance > 0 || CursedVictimChaosChance > 0;
+        public int BannerPhysicalChance { get; init; }
+        public bool Any => CursedCorpsePhysicalPct > 0 || PrideChance > 0 || CursedVictimChaosChance > 0
+            || BannerPhysicalChance > 0;
     }
 
     static KillEquipmentSnapshot CaptureKillEquipment(Player player, SpawnedMonster victim, (int X, int Y) at, double now,
@@ -73,8 +76,14 @@ public static partial class Game
             corpsePercent = 0;
         int prideChance = stats.GetValueOrDefault(Stat.ExplodeEnemiesFor10PctLifeAsPhysicalOnKillChancePctWhileUsingPride);
         if (prideChance != 0 && ReservationAura(player, "Pride") is null) prideChance = 0;
+        int bannerChance = stats.GetValueOrDefault(Stat.BannerAffectedEnemiesExplodeFor10PctLifeAsPhysicalOnKillChancePct);
+        if (bannerChance > 0 && (!Banners.TryGetValue(player, out var owner) || owner.Active is not { } banner
+            || player.Instance is not { } instance || !AreaBanners.TryGetValue(instance, out var placed)
+            || !placed.ContainsKey(banner.Object) || now >= banner.Until || Dist(at, banner.At) > banner.Radius))
+            bannerChance = 0;
         return new(corpsePercent, prideChance,
-            victim.CursedAtDeath ? stats.GetValueOrDefault(Stat.ExplodeCursedEnemiesFor25PctLifeAsChaosOnKillChancePct) : 0);
+            victim.CursedAtDeath ? stats.GetValueOrDefault(Stat.ExplodeCursedEnemiesFor25PctLifeAsChaosOnKillChancePct) : 0)
+            { BannerPhysicalChance = bannerChance };
     }
 
     static void CaptureEquippedHitExplosionLocked(SpawnedMonster target, IReadOnlyDictionary<uint, int> playerStats)
@@ -83,14 +92,16 @@ public static partial class Game
             target.HitFireExplosionPercent = percent;
     }
 
-    sealed record AttackKillExplosion(int Chance);
+    sealed record AttackKillExplosion(int PhysicalChance, int WandChaosChance);
     static readonly RuleTable<SpawnedMonster, AttackKillExplosion> AttackKillExplosions = new();
 
-    static void CaptureAttackKillExplosionLocked(SpawnedMonster victim, IReadOnlyDictionary<uint, int> stats)
+    static void CaptureAttackKillExplosionLocked(SpawnedMonster victim, IReadOnlyDictionary<uint, int> stats, bool wand = false)
     {
-        if (victim.Life == 0 && victim.Hostile
-            && stats.GetValueOrDefault(Stat.EnemiesExplodeOnDeathByAttackFor10PctLifeAsPhysicalDamage) is > 0 and var chance)
-            AttackKillExplosions.AddOrUpdate(victim, new(chance));
+        if (victim.Life != 0 || !victim.Hostile) return;
+        int physical = stats.GetValueOrDefault(Stat.EnemiesExplodeOnDeathByAttackFor10PctLifeAsPhysicalDamage);
+        int chaos = wand ? stats.GetValueOrDefault(Stat.EnemiesExplodeOnDeathByWandHitFor25PctLifeAsChaosDamagePctChance) : 0;
+        if (physical > 0 || chaos > 0)
+            AttackKillExplosions.AddOrUpdate(victim, new(Math.Max(0, physical), Math.Max(0, chaos)));
     }
 
     // Oriath's End is secondary damage: global/elemental/area modifiers and conversion apply, but attack/spell
@@ -108,8 +119,8 @@ public static partial class Game
     }
 
     static void ReleaseSkillCorpseExplosion(ProjectileSession session, uint corpseId, SpawnedMonster corpse,
-        (int X, int Y) at, double now, int radius, DamagePacket packet, Penetration.PerType penetration, int cannotPenetrate,
-        string skill)
+        (int X, int Y) at, double now, int radius, DamagePacket basis, Func<DamagePacket, DamagePacket> resolveHit,
+        Penetration.PerType penetration, int cannotPenetrate, string skill)
     {
         var player = session.Player;
         if (!corpse.CorpseConsumed)
@@ -119,11 +130,15 @@ public static partial class Game
             session.WorldRecords(corpseId, () => [InstanceProtocol.RemoveObject(corpseId)],
                 $"{skill} consumes corpse", remove: true);
         }
+        var packet = resolveHit(basis);
+        var rng = AreaRng(player);
         foreach (var (id, enemy) in player.Area.MonstersNear(at, radius))
         {
             if (!enemy.Hostile || enemy.Dead || enemy.Life == 0 || Dist(at, enemy.Walk.Position(now)) > radius)
                 continue;
-            var resisted = MitigateMonsterHit(enemy, packet, now, penetration, cannotPenetrate);
+            var added = PoachersAddedPhysical(enemy, now);
+            var contact = added.IsZero ? packet : resolveHit(basis.Add(DamageType.Physical, added)).Roll(rng);
+            var resisted = MitigateMonsterHit(enemy, contact, now, penetration, cannotPenetrate);
             int damage = MonsterTakesMitigated(enemy, resisted, false, now);
             if (ApplyTypedMonsterHitLocked(player, enemy, damage,
                 MonsterHitChaosDamage(enemy, resisted, spell: false, now, damage), allyAt: at) is not { } hit)
@@ -188,6 +203,7 @@ public static partial class Game
         if (equipment is not null) return false;
         return stats.GetValueOrDefault(CursedCorpseBlast) > 0
             || stats.GetValueOrDefault(Stat.ExplodeEnemiesFor10PctLifeAsPhysicalOnKillChancePctWhileUsingPride) > 0
+            || stats.GetValueOrDefault(Stat.BannerAffectedEnemiesExplodeFor10PctLifeAsPhysicalOnKillChancePct) > 0
             || stats.GetValueOrDefault(Stat.ExplodeCursedEnemiesFor25PctLifeAsChaosOnKillChancePct) > 0;
     }
 
@@ -205,15 +221,17 @@ public static partial class Game
         // are separate sources on the same kill).
         var captured = equipment ?? CaptureKillEquipment(player, corpse, at, AreaTime(player), playerStats);
         long percent = (long)generic + (bleeding ? bleedingPercent : 0) + captured.CursedCorpsePhysicalPct;
-        long physicalChance = (long)Get(Stat.ExplodeEnemiesFor10PctLifeAsPhysicalOnKillChancePct) + captured.PrideChance;
+        long physicalChance = (long)Get(Stat.ExplodeEnemiesFor10PctLifeAsPhysicalOnKillChancePct)
+            + captured.PrideChance + captured.BannerPhysicalChance;
+        long chaosChance = (long)Get(Stat.ExplodeEnemiesFor25PctLifeAsChaosOnKillChancePct) + captured.CursedVictimChaosChance;
         if (AttackKillExplosions.TryGetValue(corpse, out var attack))
         {
-            physicalChance += attack.Chance;
+            physicalChance += attack.PhysicalChance;
+            chaosChance += attack.WandChaosChance;
             AttackKillExplosions.Remove(corpse);
         }
         if (physicalChance > 0 && AreaRng(player).Next(100) < physicalChance) percent += 10;
-        // The same quarter-life chaos explosion can come from a general or a cursed-enemy source.
-        long chaosChance = (long)Get(Stat.ExplodeEnemiesFor25PctLifeAsChaosOnKillChancePct) + captured.CursedVictimChaosChance;
+        // Quarter-life chaos sources share the same roll and damage.
         int chaosPercent = chaosChance > 0 && AreaRng(player).Next(100) < chaosChance ? 25 : 0;
         // Oriath's End: "(20-30)% chance for Enemies you Kill during Effect to Explode, dealing 10% of their maximum
         // Life as Damage of a Random Element" (the flask's local stat becomes this one while it runs, UtilityFlasks).
@@ -248,21 +266,43 @@ public static partial class Game
         bool removeCorpse;
         if (player.Closed || player.LeavingArea || player.PlayerLife == 0) return false;
         double now = AreaTime(player);
+        var rng = AreaRng(player);
+        DamageConversion? elementalConversion = null;
         foreach (var (id, m) in player.Area.Monsters.ToArray())
         {
             if (!m.Hostile || m.Dead || m.Life == 0 || ReferenceEquals(m, corpse)) continue;
             if (Dist(m.Walk.Position(now), at) > radius) continue;
-            var resisted = GameServer.Core.World.DamageModel.Mitigate(packet, t => MonsterHitResistance(m, t, default, now));
+            var added = PoachersAddedPhysical(m, now);
+            var legacyContact = packet;
+            var elementalContact = elementalPacket;
+            if (!added.IsZero)
+            {
+                if (physical > 0 || chaos > 0)
+                {
+                    int rolled = added.Roll(rng);
+                    legacyContact = packet.Add(DamageType.Physical, new(rolled, rolled));
+                }
+                else
+                {
+                    elementalConversion ??= DamageStats.Conversion(playerStats, Stats, attack: null);
+                    var addedPacket = PlayerHitDamage.Resolve(DamagePacket.Of(DamageType.Physical, added), Get,
+                        elementalConversion, spell: false, area: true, secondary: true);
+                    elementalContact = elementalPacket.Add(addedPacket.Roll(rng));
+                }
+            }
+            var resisted = GameServer.Core.World.DamageModel.Mitigate(legacyContact, t => MonsterHitResistance(m, t, default, now));
             int damage = MonsterTakesMitigated(m, resisted, false, now);
             int bypass = MonsterHitChaosDamage(m, resisted, false, now, damage);
-            if (!elementalPacket.IsZero)
+            if (!elementalContact.IsZero)
             {
-                var mitigated = MitigateMonsterHit(m, elementalPacket, now, elementalPenetration,
+                var mitigated = MitigateMonsterHit(m, elementalContact, now, elementalPenetration,
                     playerStats.GetValueOrDefault(Stat.CannotPenetrateOrIgnoreElementalResistances),
                     playerStats.GetValueOrDefault(Stat.ElementalDamageResistedByLowestElementalResistance) != 0);
                 int witheredElemental = WitheredElementalHitTaken(m, player.Id, now, playerStats);
-                damage = (int)Math.Min(int.MaxValue, (long)damage + MonsterTakesMitigated(m, mitigated, false, now,
-                    additionalElementalTakenPct: witheredElemental));
+                int elementalDamage = MonsterTakesMitigated(m, mitigated, false, now, additionalElementalTakenPct: witheredElemental);
+                damage = (int)Math.Min(int.MaxValue, (long)damage + elementalDamage);
+                if (!added.IsZero && physical == 0 && chaos == 0)
+                    bypass = MonsterHitChaosDamage(m, mitigated, false, now, elementalDamage, new HitTakenRules(0, witheredElemental, false));
             }
             if (ApplyTypedMonsterHitLocked(player, m, damage, bypass, allyAt: at) is not { } hit) continue;
             hits.Add((id, m, hit));
@@ -339,7 +379,8 @@ public static partial class Game
         if (!corpse.CursedAtDeath || !corpse.Hostile || player.Closed || player.LeavingArea || player.PlayerLife == 0
             || HardcoreProgressBlocked(player)) return;
         int chance = CharacterPlayerStats(player).GetValueOrDefault(Stat.ExplodeCursedEnemiesFor25PctLifeAsChaosOnKillChancePct);
-        if (!GameServer.Core.World.RandomRolls.Chance(chance, 100, AreaRng(player))) return;
+        var rng = AreaRng(player);
+        if (!GameServer.Core.World.RandomRolls.Chance(chance, 100, rng)) return;
 
         double factor = MinionAreaDamageFactor(source, DamageType.Chaos, skill);
         double radius = 22 * Math.Sqrt(Math.Max(0, 1 + source.Effects[Stat.BaseSkillAreaOfEffectPlusPct] / 100d));
@@ -355,22 +396,27 @@ public static partial class Game
             player.Minions.OutputQueue.Add(new([], "minion kill explosion removes corpse", WorldId: id, RemovesObject: true));
             if (player.Connection.Connected && TakeExplosionArt(player, now))
                 QueueExplosionEffect(player, at, ChaosExplosionAo, "minion chaos kill explosion");
-            if (factor <= 0) continue;
-            double raw = dead.MaxLife * .25 * factor;
+            double raw = factor <= 0 ? 0 : dead.MaxLife * .25 * factor;
             var packet = DamagePacket.Of(DamageType.Chaos, raw, raw);
             foreach (var (targetId, target) in player.Area.MonstersNear(at, radius))
             {
                 if (!target.Hostile || target.Dead || target.Life == 0 || target.Invulnerable
                     || Dist(target.Walk.Position(now), at) > radius) continue;
-                int damage = MonsterTakesRolled(target, packet, spell: false, now: now);
-                if (damage <= 0 || ApplyTypedMonsterHitLocked(player, target, damage, damage, allyAt: at) is not { } hit) continue;
+                var added = PoachersAddedPhysical(target, now);
+                int physical = added.IsZero ? 0 : added.Scale(MinionAreaDamageFactor(source, DamageType.Physical, skill)).Roll(rng);
+                var contact = packet.Add(DamageType.Physical, new(physical, physical));
+                if (contact.IsZero) continue;
+                var resisted = MitigateMonsterHit(target, contact, now);
+                int damage = MonsterTakesMitigated(target, resisted, spell: false, now);
+                int chaosDamage = MonsterHitChaosDamage(target, resisted, spell: false, now, damage);
+                if (damage <= 0 || ApplyTypedMonsterHitLocked(player, target, damage, chaosDamage, allyAt: at) is not { } hit) continue;
                 if (hit.StageStarts)
                 {
                     CommitBossStage(player, targetId, target, now);
                     hit = hit with { StageStarts = false };
                 }
                 CommitMinionHitLocked(player, targetId, target, hit, damage, now, "minion chaos kill explosion", secondary: true);
-                if (hit.Life == 0 && target.CursedAtDeath && GameServer.Core.World.RandomRolls.Chance(chance, 100, AreaRng(player)))
+                if (hit.Life == 0 && target.CursedAtDeath && GameServer.Core.World.RandomRolls.Chance(chance, 100, rng))
                     pending.Enqueue((targetId, target));
             }
         }

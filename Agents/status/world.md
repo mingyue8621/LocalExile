@@ -326,6 +326,8 @@
 - Lockstep is served whenever the client picks it (no server setting; the log notes Predictive is preferred). It
   handles pickup/attack recovery, corpse collision and ground melee/chest approach;
   crowd and predictive gaps remain ([07](../docs/protocol/07-latency-visibility-movement.md) §6).
+- The area driver stops when its last member leaves during frame catch-up.
+
 - Variable-length C→S 0x0130, 0x0138, 0x0279, 0x027f, 0x02a5 and the length-prefixed 0xF7E0 mod envelope are framed
   without dropping trailing messages; C→S 0x0E verifies its SipHash-2-4 digest against per-ticket `Data8`, and C→S 0x7d
   compares client tile hashes against server-generated `TileHash` (not yet checked live).
