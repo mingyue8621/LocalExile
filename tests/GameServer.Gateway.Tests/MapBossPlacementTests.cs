@@ -16,17 +16,18 @@ public sealed class MapBossPlacementTests
     {
         // A map, the seed the client generated it with, and the point its boss must take: number of unique spawns, and
         // either the pack name (the room point) or null for "the furthest cell, the arena bosses with no point at all".
-        (string Area, uint Seed, string? Point)[] cases =
+        // Roster: a Warbands room lists the camp's whole roster and upstream's fallback stands one leader per point.
+        (string Area, uint Seed, string? Point, bool Roster)[] cases =
         [
-            ("MapWorldsJungleValley", 2072690396, "mapboss"),
-            ("MapWorldsAcidLakes", 1, "mapbosswarbandchaos2"),
-            ("MapWorldsPrecinct", 1, "mapbossexilepack"),
-            ("MapWorldsGraveTrough", 1, "ritual_boss_spawn_override"),
-            ("MapWorldsShipyard", 1, "mapbosswarbandlightning"),
-            ("MapWorldsCourtyardUnique", 1, null),
+            ("MapWorldsJungleValley", 2072690396, "mapboss", false),
+            ("MapWorldsAcidLakes", 1, "mapbosswarbandchaos2", true),
+            ("MapWorldsPrecinct", 1, "mapbossexilepack", false),
+            ("MapWorldsGraveTrough", 1, "ritual_boss_spawn_override", false),
+            ("MapWorldsShipyard", 1, "mapbosswarbandlightning", true),
+            ("MapWorldsCourtyardUnique", 1, null, false),
         ];
         var catalog = new PackCatalog("data");
-        foreach (var (area, seed, point) in cases)
+        foreach (var (area, seed, point, roster) in cases)
         {
             var packs = Assert.IsType<PackCatalog.AreaPacks>(catalog.For(area));
             var level = Assert.IsType<ServerLevels.Level>(ServerLevels.For(area, seed));
@@ -44,19 +45,26 @@ public sealed class MapBossPlacementTests
                 AreaPopulation.PopulationSeed((ushort)0, seed), _ => true, notes,
                 unassignedAtArrival: ServerLevels.IsMapArea(area));
             var bosses = spawns.Where(s => s.Rarity == MonsterRarity.Unique).ToList();
-            Assert.Single(bosses);
-            var boss = bosses[0];
-            Assert.True(Math.Abs(boss.X - arrival.X) + Math.Abs(boss.Y - arrival.Y) > 300,
-                $"{area} seed {seed}: the boss stands at ({boss.X},{boss.Y}), {Math.Abs(boss.X - arrival.X) + Math.Abs(boss.Y - arrival.Y)} cells from the arrival ({arrival.X},{arrival.Y})");
-            if (point is not null) Assert.Equal(point, boss.Pack);
-            Assert.True(Walkable(boss.X, boss.Y), $"{area} seed {seed}: the boss at ({boss.X},{boss.Y}) is off the walkable grid");
+            if (roster) Assert.NotEmpty(bosses);
+            else Assert.Single(bosses);
+            foreach (var boss in bosses)
+            {
+                Assert.True(Math.Abs(boss.X - arrival.X) + Math.Abs(boss.Y - arrival.Y) > 300,
+                    $"{area} seed {seed}: the boss stands at ({boss.X},{boss.Y}), {Math.Abs(boss.X - arrival.X) + Math.Abs(boss.Y - arrival.Y)} cells from the arrival ({arrival.X},{arrival.Y})");
+                Assert.True(Walkable(boss.X, boss.Y), $"{area} seed {seed}: the boss at ({boss.X},{boss.Y}) is off the walkable grid");
+                if (roster) Assert.True(boss.Pack.StartsWith("mapbosswarband", StringComparison.OrdinalIgnoreCase),
+                    $"{area} seed {seed}: a roster leader stands on {boss.Pack}, not on a warband point");
+            }
+            if (point is not null) Assert.Contains(bosses, b => b.Pack == point);
         }
     }
 
-    /// <summary>A league point takes the roster's leader, not every candidate: Acid Lakes lists nine WbChaos leaders as
-    /// the map's bosses and one of them stands on the map.</summary>
+    /// <summary>A Warbands point stands the camp's roster on it instead of letting the leaders fall to the arrival: Acid
+    /// Lakes lists nine WbChaos leaders as the map's bosses and upstream's fallback places them on the camp's points (one
+    /// per point when the room marks several). Before, the whole roster was left unassigned and stood at the furthest
+    /// cell.</summary>
     [GameFilesFact]
-    public void A_league_leader_point_holds_one_leader_of_the_roster()
+    public void A_warband_roster_stands_on_its_boss_point_not_at_the_arrival()
     {
         var packs = Assert.IsType<PackCatalog.AreaPacks>(new PackCatalog("data").For("MapWorldsAcidLakes"));
         Assert.True(packs.Bosses.Count > 3);
@@ -68,7 +76,11 @@ public sealed class MapBossPlacementTests
         var spawns = AreaPopulation.Plan(packs, w, h, Walkable, (level.Start?.X ?? w / 2, level.Start?.Y ?? h / 2),
             [], [leaguePoint], AreaPopulation.PopulationSeed((ushort)0, 1), _ => true, [],
             unassignedAtArrival: true);
-        Assert.Single(spawns, s => s.Rarity == MonsterRarity.Unique);
+        var bosses = spawns.Where(s => s.Rarity == MonsterRarity.Unique).ToList();
+        Assert.NotEmpty(bosses);
+        Assert.All(bosses, b => Assert.Equal(leaguePoint.Name, b.Pack));
+        Assert.All(bosses, b => Assert.True(Math.Abs(b.X - leaguePoint.X) + Math.Abs(b.Y - leaguePoint.Y) <= 32,
+            $"a leader stands at ({b.X},{b.Y}), away from its warband point ({leaguePoint.X},{leaguePoint.Y})"));
     }
 
     /// <summary>The other boss rows of a map stand in the room its one boss point marks, not at the furthest cell: the

@@ -69,8 +69,14 @@ public static partial class Game
         }
         if (LockstepGroundMelee(player, request.Skill, request.Flags))
         {
-            _ = StartLockstepGroundMelee(player, request.Aim, request.Skill, sequence, request.Flags);
+            _ = RunGroundMelee();
             return;
+            async Task RunGroundMelee()
+            {
+                try { await StartLockstepGroundMelee(player, request.Aim, request.Skill, sequence, request.Flags); }
+                catch (Exception ex) when (ex is IOException or ObjectDisposedException) { }
+                finally { ReleaseIfRejected(); }
+            }
         }
         byte[] use = new LoginWriter().U16(InstanceProtocol.UseSkillAtLocationId).U32((uint)request.Aim.X).U32((uint)request.Aim.Y)
             .U16(request.Skill).U16(sequence).U16(request.Flags).ToArray();
@@ -85,11 +91,28 @@ public static partial class Game
         });
     }
 
+    static void RecordLockstepTrail(Player player, double frameStart)
+    {
+        if (player.Connection.LockstepTrailTeleportCount != player.Walk.TeleportCount)
+        {
+            player.Connection.LockstepTrail.Clear();
+            player.Connection.LockstepTrailTeleportCount = player.Walk.TeleportCount;
+        }
+        player.Connection.LockstepTrail.Enqueue((frameStart, player.Walk.Position(frameStart)));
+        if (player.Connection.LockstepTrail.Count > 150) player.Connection.LockstepTrail.Dequeue();
+    }
+
     // Differs from GGG: its server steps by frames and so can know the frame the client was on; a lockstep request carries
     // no frame here, so this estimates it. The client runs a round trip and about two frames behind the server (160 to
     // 220 ms at 100 ms, 66 to 100 ms on loopback), and its offsets are from the cell it had then. Called under conn.Monsters.
     public static (int X, int Y) LockstepClientCell(Player player, double now)
     {
+        if (player.Connection.LockstepTrailTeleportCount != player.Walk.TeleportCount)
+        {
+            player.Connection.LockstepTrail.Clear();
+            player.Connection.LockstepTrailTeleportCount = player.Walk.TeleportCount;
+            return player.Walk.Position(now);
+        }
         double lowest = player.Connection.LockstepLatency.Lowest;
         // A probe's round trip is read as latency, but it also carries whatever the client and the server were busy
         // with: a 290 ms message and a stalled client turned it into half a second on loopback (live 2026-11-23), and
