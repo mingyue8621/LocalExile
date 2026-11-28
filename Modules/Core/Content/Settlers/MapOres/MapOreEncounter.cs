@@ -272,7 +272,11 @@ public sealed class MapOreEncounter
                 node.TransitionId = instance.World.TakeObjectId();
             }
 
-            if (kind is not (MapOreSlotKind.LostShipment or MapOreSlotKind.StarfallCrater))
+            // MineralClaimedMarker is a 3.25 name that the 3.29 client no longer ships: its 0x02bb hash makes the client
+            // raise "Unknown object type serialized by server" (an Exception dialog) as the map loads, so the markers
+            // are only tracked — and sent — when the client's own object-types table has the type (live 2026-11-28).
+            if (kind is not (MapOreSlotKind.LostShipment or MapOreSlotKind.StarfallCrater)
+                && ObjectTypes.ClientShips(MapOreTables.ClaimedMarker))
             {
                 foreach (var (mx, my, mrot) in markerCells)
                     node.Markers.Add(new MarkerObj { Id = instance.World.TakeObjectId(), X = mx, Y = my, Rotation = mrot });
@@ -1386,6 +1390,13 @@ public sealed class MapOreEncounter
 
     static Task CreateSharedObject(Player player, uint id, string type, byte[] blob, string? log)
     {
+        // A type the client does not ship is answered with "Unknown object type serialized by server" and an Exception
+        // dialog while the area loads, so it is not sent at all (the client looks the 0x2bb hash up in its own register).
+        if (!ObjectTypes.ClientShips(type))
+        {
+            Console.WriteLine($"[settlers] {log ?? $"0x{id:x}"}: {type} is not in the client's object types, not created");
+            return Task.CompletedTask;
+        }
         uint typeHash = InstanceEntities.ObjectTypeHash(type);
         return Shared(player, member => SendWorldCreate(member, id, () => InstanceEntities.CreateObject(id, typeHash, blob), log, wake: true, awaitBirth: false));
     }

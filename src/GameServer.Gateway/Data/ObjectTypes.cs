@@ -145,6 +145,16 @@ public static class ObjectTypes
     public static IEnumerable<(string Type, ClientRow Row)> All() =>
         ClientTables.TableOrEmpty("object_types").Select(r => (r.Text("type")!, r));
 
+    /// <summary>
+    /// Whether the client's own object-types table ships this path — runtime <see cref="TypeOverlay"/> registrations do
+    /// not count, they only teach the server how to serialize a type. A name from an older patch has to be filtered
+    /// out before it is sent: 0x2bb carries just the hash, so the client looks it up in its own register and, when it
+    /// is not there, raises "Unknown object type serialized by server" in an Exception dialog as the area loads
+    /// (live 2026-11-28, MapWorldsPlaza: MineralClaimedMarker and BeginMemoryLineObject are gone from 3.29's data).
+    /// </summary>
+    public static bool ClientShips(string type) =>
+        ClientTables.TableOrEmpty("object_types").Any(r => string.Equals(r.Text("type"), type, StringComparison.Ordinal));
+
     sealed class Undo(Action undo) : IDisposable
     {
         Action? _undo = undo;

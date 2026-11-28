@@ -681,8 +681,10 @@ public static class MemoryTears
                 await SetLeagueQuestFlags(player, [LqfEagonWildSpotted]);
         }
 
-        // Spawn BeginMemoryLineObject (Memory Tear rift)
-        if (QuestObjectTypes.Find(BeginMemoryLineObjectPath) is { } tearInfo)
+        // Spawn BeginMemoryLineObject (Memory Tear rift). The 3.29 client no longer ships this type (it is not in its
+        // object_types table): the 0x02bb hash answers "Unknown object type serialized by server" with an Exception
+        // dialog as the map loads, so the rift is only created when the client knows the type (live 2026-11-28).
+        if (ObjectTypes.ClientShips(BeginMemoryLineObjectPath) && QuestObjectTypes.Find(BeginMemoryLineObjectPath) is { } tearInfo)
         {
             var tearSm = new StateMachineData([1, 1], 0, ["active", "targetable"]);
             if (QuestObject.CanSerialize(tearInfo.Components, haveStateMachine: true))
