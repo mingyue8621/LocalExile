@@ -326,6 +326,7 @@ public static class GeneralAdusBasiliskEncounters
 
             await EnsureNativeSkills(runner, bossId, boss, AdusEffects, boundBosses);
             SyncSavedPhases(runner.Instance, boss, "GeneralAdus", [65, 35]);
+            var phases = boss.LifePhases!;
 
             var pos = boss.Walk.Position(now);
             var target = NearestLivingTarget(runner, pos, now, maxRange: 130, awakeId: bossId);
@@ -350,6 +351,33 @@ public static class GeneralAdusBasiliskEncounters
             boss.Aggro = true;
             boss.EntranceGrace = false;
             MarkStarted(runner.Instance, "GeneralAdus");
+
+            // Life phase beats at 65% and 35%: discharge the arena conduits and re-supercharge Adus.
+            // LifePhaseGate clamps burst damage at the next pending threshold, so a boss that registers
+            // thresholds without ever calling Begin()/Finish() can never be taken below that floor.
+            if (phases.Completed < 2 && phases.Begin(boss.Life, boss.MaxLife))
+            {
+                int phase = phases.Completed;
+                nextConduitAt = now + 13.0;
+                superchargedUntil = now + 7.5;
+                boss.SetTemporaryStats("adus_supercharged", AdusSuperchargedStats);
+                boss.RebuildStats();
+                runner.Area.Buffs.Set(bossId, new(SuperchargedBuff, bossId, U68: Buff.Seconds(7.5)));
+                await SpawnTimedEffect(runner, effects, pos, AdusBeamArt, now + 2.5, scale: 1.35f);
+                var dischargeAt = conduitSpots.Count > 0
+                    ? conduitSpots.Take(4).ToArray()
+                    : Enumerable.Range(0, 3).Select(i => RingSpot(runner, pos, i * (Math.Tau / 3.0), 18)).ToArray();
+                var shockAtk = ElementalSpellAttack(boss, DamageType.Lightning, 1.0, radius: 11);
+                foreach (var cSpot in dischargeAt)
+                {
+                    await SpawnTimedEffect(runner, effects, cSpot, AdusBeamArt, now + 2.2, scale: 1.2f);
+                    bursts.Add(new(now + 1.4, boss.ActionGeneration, bossId, boss, shockAtk, cSpot, 11, ShockNovaArt));
+                }
+                Console.WriteLine($"[gateway] General Adus phase {phase + 1} ({(phase == 0 ? 65 : 35)}% life): conduits discharged");
+                MarkPhaseCompleted(runner.Instance, "GeneralAdus", phase);
+                phases.Finish();
+                return;
+            }
 
             if (!adusInitialized)
             {
